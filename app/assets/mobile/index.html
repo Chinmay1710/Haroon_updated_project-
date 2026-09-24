@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Worker Portal - Haroon Tailor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="manifest" href="/static/manifest.json">
+    <style>
+        body { font-family: 'Public Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-hidden flex flex-col">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 bg-white overflow-y-auto">
+        <div class="w-20 h-20 bg-slate-900 rounded-2xl flex items-center justify-center mb-6 shadow-lg shrink-0">
+            <span class="material-symbols-outlined text-white text-4xl">content_cut</span>
+        </div>
+        <h1 class="text-2xl font-bold mb-2">Worker Portal</h1>
+        <p class="text-slate-500 mb-8 text-center">Log in to submit work and track earnings.</p>
+        
+        <div class="w-full max-w-sm space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Your Name</label>
+                <input type="text" id="login-name" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20 transition-all outline-none" placeholder="e.g. Rahul">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">4-Digit PIN</label>
+                <input type="tel" id="login-pin" maxlength="4" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20 transition-all outline-none text-center font-mono text-2xl tracking-[0.5em]" placeholder="••••">
+            </div>
+            <button onclick="login()" id="login-btn" class="w-full bg-slate-900 text-white font-semibold py-3.5 rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-all mt-4">Login</button>
+        </div>
+        <p id="login-error" class="text-red-500 text-sm mt-4 hidden">Invalid name or PIN.</p>
+    </div>
+
+    <!-- MAIN PORTAL WRAPPER -->
+    <div id="portal-screen" class="hidden flex-col h-full">
+        <!-- HEADER -->
+        <header class="bg-slate-900 text-white p-5 pb-6 rounded-b-[1.5rem] shadow-md shrink-0 relative z-20">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-0.5">Welcome back</p>
+                    <h2 id="worker-name-display" class="text-xl font-bold">Worker</h2>
+                    <span id="worker-type-badge" class="inline-block mt-1 px-2 py-0.5 bg-slate-800 text-slate-300 text-[10px] rounded font-semibold uppercase tracking-wider">Type</span>
+                </div>
+                <button onclick="logout()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center text-slate-300">
+                    <span class="material-symbols-outlined text-sm">logout</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTENT AREA -->
+        <main class="flex-1 overflow-y-auto no-scrollbar relative z-10 -mt-2 pt-6 px-4 pb-32" id="main-content">
+            
+            <!-- TAB 1: SUBMIT WORK (PIECE RATE & DAILY SALARY) -->
+            <div id="tab-submit" class="tab-content active">
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-blue-500">add_task</span>
+                        Submit Work
+                    </h3>
+                    
+                    <form id="work-form" class="space-y-4" onsubmit="submitWork(event)">
+                        
+                        <!-- Piece Rate Fields -->
+                        <div id="piece-rate-fields" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Garment Type <span class="text-red-500">*</span></label>
+                                <select id="garment-type" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/20 bg-slate-50 outline-none">
+                                    <option value="">Select Garment</option>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="flex gap-4">
+                                <div class="flex-1">
+                                    <label class="block text-sm font-medium text-slate-700 mb-1">Quantity <span class="text-red-500">*</span></label>
+                                    <input type="number" id="quantity" min="1" value="1" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-sm font-medium text-slate-700 mb-1">Bill/Order #</label>
+                                    <input type="text" id="bill-number" placeholder="Optional" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Daily Salary Note -->
+                        <div id="daily-salary-fields" class="hidden bg-blue-50 text-blue-800 p-4 rounded-xl text-sm mb-4">
+                            <p class="font-semibold flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[16px]">info</span> Daily Work Log</p>
+                            <label class="flex items-center gap-3 cursor-pointer bg-white/50 p-3 rounded-lg border border-blue-100">
+                                <input type="checkbox" id="is-present" class="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500">
+                                <div>
+                                    <span class="font-bold block">Mark as Present Today</span>
+                                    <span class="text-xs opacity-80">This will log your daily wage</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="h-px bg-slate-100 my-4"></div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Extra Work Description</label>
+                            <textarea id="extra-desc" rows="2" placeholder="Alterations, repairs, etc. (Optional)" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none resize-none"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Extra Amount (₹)</label>
+                            <input type="number" id="extra-amount" min="0" value="0" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none">
+                        </div>
+
+                        <!-- Messages & Submit -->
+                        <div class="pb-16">
+                            <p id="submit-msg" class="text-sm text-center font-medium mb-3 hidden"></p>
+                            <button type="submit" id="submit-btn" class="w-full bg-slate-900 text-white font-semibold py-3.5 rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg">
+                                <span class="material-symbols-outlined">send</span> Submit Entry
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- TAB 2: LEDGER (EARNINGS) -->
+            <div id="tab-ledger" class="tab-content space-y-4">
+                
+                <!-- Ledger Summary -->
+                <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 shadow-lg text-white">
+                    <p class="text-slate-400 text-sm font-medium uppercase tracking-wide mb-4">Earnings Balance</p>
+                    
+                    <div class="flex justify-between items-end mb-6">
+                        <div>
+                            <p class="text-[11px] text-slate-400 uppercase tracking-widest font-semibold">Remaining</p>
+                            <h3 class="text-4xl font-bold" id="lbl-remaining">₹0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-2xl">account_balance_wallet</span>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 border-t border-white/10 pt-4">
+                        <div>
+                            <p class="text-xs text-slate-400">Total Earned</p>
+                            <p class="font-semibold text-lg" id="lbl-earned">₹0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400">Advance Given</p>
+                            <p class="font-semibold text-lg text-orange-300" id="lbl-advance">₹0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History -->
+                <h3 class="font-bold text-slate-800 mt-6 mb-2 px-1">Recent Work</h3>
+                <div id="history-container" class="space-y-3">
+                    <!-- History cards injected here -->
+                </div>
+
+            </div>
+
+            <!-- TAB 3: SCAN ORDER -->
+            <div id="tab-scan" class="tab-content">
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-500">qr_code_scanner</span>
+                        Update Order
+                    </h3>
+                    
+                    <div id="qr-reader" class="w-full mb-4 overflow-hidden rounded-xl border-2 border-slate-200"></div>
+                    <button id="start-scan-btn" onclick="startScanner()" class="w-full bg-slate-900 text-white font-semibold py-3.5 rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 mb-4">
+                        <span class="material-symbols-outlined">qr_code_scanner</span> Open Camera
+                    </button>
+                    
+                    <div id="scan-result" class="hidden flex-col">
+                        <div class="bg-purple-50 border border-purple-100 rounded-xl p-4 shadow-sm mb-4">
+                            <p class="text-xs text-purple-600 font-semibold uppercase tracking-wider mb-1">Scanned Order</p>
+                            <p class="text-xl font-bold text-slate-800 mb-1" id="scan-order-num">Loading...</p>
+                            <p class="text-slate-600 text-sm mb-2" id="scan-customer-name"></p>
+                            <p class="text-xs font-semibold text-slate-700">Status: <span id="scan-order-status" class="bg-white px-2 py-0.5 rounded border"></span></p>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <button onclick="submitOrderStage('CUTTING')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-sm active:scale-95 transition-transform flex flex-col items-center justify-center">
+                                <span class="text-xl mb-1">✂️</span>
+                                <span class="text-sm">Cut Done</span>
+                            </button>
+                            <button onclick="submitOrderStage('STITCHING_AND_PRESSING')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-sm active:scale-95 transition-transform flex flex-col items-center justify-center">
+                                <span class="text-xl mb-1">🧵</span>
+                                <span class="text-sm">Stitched</span>
+                            </button>
+                        </div>
+                        
+                        <button id="btn-record-advance" onclick="showPaymentModal()" class="w-full mb-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-sm">payments</span> Request Advance
+                        </button>
+
+                        <p id="scan-msg" class="text-sm text-center font-medium mt-2 hidden"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: ADMIN DASHBOARD -->
+            <div id="tab-admin" class="tab-content">
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-rose-500">admin_panel_settings</span>
+                        Admin Dashboard
+                    </h3>
+
+                    
+                    <div class="mb-6">
+                        <div class="flex justify-between items-end mb-1">
+                            <label class="block text-sm font-medium text-slate-700">Customer Details</label>
+                            <button type="button" onclick="clearSelectedCustomer()" id="btn-clear-cust" class="hidden text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-1 rounded-lg">Clear Selection</button>
+                        </div>
+                        
+                        <div class="relative mb-4">
+                            <div class="relative">
+                                <span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400">search</span>
+                                <input type="text" id="admin-cust-search" placeholder="Search Old Customer by Name or Phone..." class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white outline-none" oninput="searchMobileCustomers(this.value)">
+                            </div>
+                            <div id="admin-cust-dropdown" class="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 hidden max-h-48 overflow-y-auto"></div>
+                        </div>
+
+                        <div class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4">
+                            <input type="text" id="admin-cust-name" placeholder="Full Name *" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-white outline-none disabled:bg-slate-100 disabled:text-slate-500">
+                            <input type="tel" id="admin-cust-phone" placeholder="10-digit Mobile Number" maxlength="10" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-white outline-none disabled:bg-slate-100 disabled:text-slate-500" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                            <input type="text" id="admin-cust-address" placeholder="Address" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-white outline-none disabled:bg-slate-100 disabled:text-slate-500">
+                        </div>
+                    </div>
+
+                    <div id="admin-order-form" class="space-y-4">
+                        <h4 class="font-bold text-slate-800 border-b border-slate-100 pb-2">Create New Order</h4>
+                        
+                        <div class="flex gap-4">
+                            <div class="flex-[2]">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Garment Type *</label>
+                                <select id="admin-garment-type" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none" onchange="handleGarmentChange(this.value)">
+                                    <option value="">-- Select Garment --</option>
+                                    <option value="Shirt">Shirt</option>
+                                    <option value="Pant">Pant</option>
+                                    <option value="Kurta">Kurta</option>
+                                    <option value="Blouse">Blouse</option>
+                                    <option value="Suit">Suit</option>
+                                    <option value="Custom">Custom</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Qty *</label>
+                                <input type="number" id="admin-quantity" min="1" value="1" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Price per item (₹) *</label>
+                            <input type="number" id="admin-price" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-end mb-1">
+                                <label class="block text-sm font-medium text-slate-700">Measurements</label>
+                                <label class="flex items-center gap-1 text-xs font-medium text-slate-600 cursor-pointer">
+                                    <input type="checkbox" id="admin-save-profile" checked class="rounded border-slate-300 text-slate-900 focus:ring-slate-900">
+                                    Save as profile
+                                </label>
+                            </div>
+                            <div id="admin-measurements-grid" class="grid grid-cols-2 gap-3 mb-2">
+                                <!-- Dynamic measurements will be injected here -->
+                            </div>
+                            <div class="flex justify-end">
+                                <button type="button" onclick="addCustomMeasurementMobile()" class="text-blue-600 hover:text-blue-700 font-medium text-xs flex items-center gap-1 bg-blue-50 px-2 py-1.5 rounded-lg border border-blue-100 transition-colors">
+                                    <span class="material-symbols-outlined text-[16px]">add</span> Add Measurement
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-end mb-1">
+                                <label class="block text-sm font-medium text-slate-700">Item Instructions</label>
+                                <button type="button" onclick="startSpeechRecognition('admin-instructions')" class="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-xs font-semibold px-2 py-1 bg-blue-50 rounded-lg transition-colors">
+                                    <span class="material-symbols-outlined text-[16px]">mic</span> Dictate
+                                </button>
+                            </div>
+                            <textarea id="admin-instructions" rows="2" placeholder="Design notes, pockets, etc." class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none resize-none transition-all"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Attach Photo(s)</label>
+                            <label class="w-full border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center justify-center text-slate-500 hover:border-slate-400 hover:bg-slate-50 cursor-pointer transition-colors">
+                                <span class="material-symbols-outlined mb-1 text-2xl">add_a_photo</span>
+                                <span class="text-sm font-medium">Attach Photo(s)</span>
+                                <input type="file" id="admin-photo-input" accept="image/*" capture="environment" multiple class="hidden" onchange="handleMobilePhotoSelect(event)">
+                            </label>
+                            <div id="admin-photo-preview" class="flex flex-wrap gap-2 mt-3 empty:hidden justify-center"></div>
+                        </div>
+
+                        <button type="button" onclick="addAdminOrderItem()" class="w-full border border-dashed border-slate-400 text-slate-700 font-semibold py-3 rounded-xl hover:bg-slate-50 transition-all mb-4 mt-2 flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined">add</span> Add Item
+                        </button>
+                        
+                        <div class="h-px bg-slate-200 my-4"></div>
+
+                        <div id="admin-items-list" class="space-y-3 mb-6 empty:hidden"></div>
+
+                        <!-- Order Level Details -->
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Delivery Date</label>
+                                <input type="date" id="admin-delivery-date" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none text-sm font-semibold text-slate-700">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Advance Received (₹)</label>
+                                <input type="number" id="admin-advance" value="0" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 focus:ring-2 bg-slate-50 outline-none text-sm font-semibold text-slate-700">
+                            </div>
+                        </div>
+
+                        <!-- Grand Total -->
+                        <div class="flex justify-between items-center bg-slate-100 p-4 rounded-xl mb-4 hidden" id="admin-total-container">
+                            <span class="text-slate-600 font-semibold">Grand Total</span>
+                            <span class="text-xl font-bold text-slate-900">₹<span id="admin-grand-total">0</span></span>
+                        </div>
+
+                        <!-- WhatsApp Option -->
+                        <div class="flex items-center gap-2 mb-4">
+                            <input type="checkbox" id="admin-send-whatsapp" class="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" checked>
+                            <label for="admin-send-whatsapp" class="text-sm font-medium text-slate-700">Send WhatsApp Message to Customer</label>
+                        </div>
+
+                        <button onclick="submitAdminOrder()" id="admin-submit-btn" class="w-full bg-slate-900 text-white font-semibold py-3.5 rounded-xl hover:bg-slate-800 transition-all mt-4 flex items-center justify-center gap-2 shadow-lg">
+                            <span class="material-symbols-outlined">add_circle</span> Submit Order
+                        </button>
+                        <p id="admin-submit-msg" class="text-sm text-center font-medium mt-2 hidden"></p>
+                    </div>
+
+
+                </div>
+            </div>
+
+        </main>
+
+        <!-- BOTTOM NAVIGATION -->
+        <nav id="bottom-nav" class="bg-white border-t border-slate-200 fixed bottom-0 w-full pb-safe flex justify-around px-2 pt-2 pb-3 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+            <button onclick="switchTab('submit')" id="nav-submit" class="nav-btn flex-1 flex flex-col items-center gap-1 p-2 text-slate-900 transition-colors">
+                <div class="nav-indicator px-4 py-1 rounded-full bg-blue-100 transition-all">
+                    <span class="material-symbols-outlined text-blue-700" style="font-variation-settings: 'FILL' 1;">add_circle</span>
+                </div>
+                <span class="text-[11px] font-semibold text-slate-900">Submit Work</span>
+            </button>
+            
+            <button onclick="switchTab('scan')" id="nav-scan" class="nav-btn flex-1 flex flex-col items-center gap-1 p-2 text-slate-400 transition-colors">
+                <div class="nav-indicator px-4 py-1 rounded-full transition-all">
+                    <span class="material-symbols-outlined">qr_code_scanner</span>
+                </div>
+                <span class="text-[11px] font-semibold">Scan QR</span>
+            </button>
+            
+            <button onclick="switchTab('ledger')" id="nav-ledger" class="nav-btn flex-1 flex flex-col items-center gap-1 p-2 text-slate-400 transition-colors">
+                <div class="nav-indicator px-4 py-1 rounded-full transition-all">
+                    <span class="material-symbols-outlined">payments</span>
+                </div>
+                <span class="text-[11px] font-semibold">Earnings</span>
+            </button>
+            
+            <button onclick="switchTab('admin')" id="nav-admin" class="nav-btn flex-1 flex-col items-center gap-1 p-2 text-slate-400 transition-colors hidden">
+                <div class="nav-indicator px-4 py-1 rounded-full transition-all">
+                    <span class="material-symbols-outlined">admin_panel_settings</span>
+                </div>
+                <span class="text-[11px] font-semibold">Admin</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- PAYMENT MODAL -->
+    <div id="payment-modal" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 transition-opacity duration-300 opacity-0">
+        <div id="payment-modal-content" class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl transform transition-transform duration-300 scale-95 flex flex-col">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-600">payments</span>
+                    Request Advance
+                </h3>
+                <button onclick="hidePaymentModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200 transition-colors">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Advance Amount (₹) *</label>
+                    <input type="number" id="payment-amount" min="1" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none text-lg font-semibold text-slate-800">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                    <select id="payment-method" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none bg-white">
+                        <option value="Cash">Cash</option>
+                        <option value="UPI">UPI / GPay</option>
+                        <option value="Card">Card</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Note (Optional)</label>
+                    <input type="text" id="payment-note" placeholder="e.g. advance for Order" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none text-sm">
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                <button onclick="hidePaymentModal()" class="flex-1 bg-white border border-slate-200 text-slate-700 font-medium py-3 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+                <button onclick="submitPayment()" id="submit-payment-btn" class="flex-1 bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center gap-2">
+                    <span class="material-symbols-outlined text-[20px]">check_circle</span> Save
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Patch fetch to automatically bypass the localtunnel warning screen for API requests
+        const originalFetch = window.fetch;
+        window.fetch = function() {
+            let [resource, config] = arguments;
+            if(config === undefined) {
+                config = {};
+            }
+            if(config.headers === undefined) {
+                config.headers = {};
+            }
+            config.headers['bypass-tunnel-reminder'] = 'true';
+            return originalFetch(resource, config);
+        };
+
+        let currentWorker = null;
+        let garmentRates = [];
+        let stockItems = [];
+        let html5QrcodeScanner = null;
+        let scannedOrderId = null;
+
+        // Initialization
+        window.onload = () => {
+            fetchGarmentRates();
+            
+            // Check local storage for session
+            const savedWorker = localStorage.getItem('worker_session');
+            if(savedWorker) {
+                currentWorker = JSON.parse(savedWorker);
+                if (!currentWorker.pin) {
+                    logout();
+                    return;
+                }
+                showPortal();
+            }
+        };
+
+        async function fetchGarmentRates() {
+            try {
+                const res = await fetch('/api/garment-rates');
+                const data = await res.json();
+                garmentRates = data.rates;
+                
+                const select = document.getElementById('garment-type');
+                if (select) {
+                    select.innerHTML = '<option value="">Select Garment</option>';
+                    garmentRates.forEach(r => {
+                        select.innerHTML += `<option value="${r.garment_type}">${r.garment_type} (₹${r.rate})</option>`;
+                    });
+                }
+
+            } catch(e) {
+                console.error("Failed to load rates", e);
+            }
+        }
+
+
+        async function login() {
+            const name = document.getElementById('login-name').value.trim();
+            const pin = document.getElementById('login-pin').value.trim();
+            const btn = document.getElementById('login-btn');
+            const error = document.getElementById('login-error');
+            
+            if (!name || pin.length !== 4) return;
+            
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span>';
+            error.classList.add('hidden');
+            
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, pin})
+                });
+                
+                if (!res.ok) throw new Error();
+                
+                const data = await res.json();
+                currentWorker = data.worker;
+                localStorage.setItem('worker_session', JSON.stringify(currentWorker));
+                
+                showPortal();
+            } catch(e) {
+                error.classList.remove('hidden');
+            } finally {
+                btn.innerHTML = 'Login';
+            }
+        }
+
+        function logout() {
+            currentWorker = null;
+            localStorage.removeItem('worker_session');
+            document.getElementById('login-name').value = '';
+            document.getElementById('login-pin').value = '';
+            document.getElementById('portal-screen').classList.replace('flex', 'hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+        }
+
+        function showPortal() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('portal-screen').classList.replace('hidden', 'flex');
+            
+            document.getElementById('worker-name-display').textContent = currentWorker.name;
+            
+            const isDaily = currentWorker.worker_type === 'DAILY_SALARY';
+            document.getElementById('worker-type-badge').textContent = isDaily ? 'Daily Salary' : 'Piece Rate';
+            
+            if(isDaily) {
+                document.getElementById('piece-rate-fields').classList.add('hidden');
+                document.getElementById('daily-salary-fields').classList.remove('hidden');
+                document.getElementById('garment-type').required = false;
+                document.getElementById('quantity').required = false;
+            } else {
+                document.getElementById('piece-rate-fields').classList.remove('hidden');
+                document.getElementById('daily-salary-fields').classList.add('hidden');
+                document.getElementById('garment-type').required = true;
+                document.getElementById('quantity').required = true;
+            }
+
+            const isAdmin = currentWorker.worker_role === 'ADMIN';
+            const adminNav = document.getElementById('nav-admin');
+            const bottomNav = document.getElementById('bottom-nav');
+            const mainContent = document.getElementById('main-content');
+            
+            if (isAdmin) {
+                if (bottomNav) bottomNav.classList.add('hidden');
+                if (mainContent) {
+                    mainContent.classList.remove('pb-32');
+                    mainContent.classList.add('pb-24'); // Fixed scroll padding for admin
+                }
+            } else {
+                if (bottomNav) bottomNav.classList.remove('hidden');
+                if (mainContent) {
+                    mainContent.classList.add('pb-32');
+                    mainContent.classList.remove('pb-6');
+                }
+                if (adminNav) {
+                    adminNav.classList.add('hidden');
+                    adminNav.classList.remove('flex');
+                }
+                // We deliberately keep nav-submit visible for regular workers
+                const submitNav = document.getElementById('nav-submit');
+                if (submitNav) {
+                    submitNav.classList.remove('hidden');
+                    submitNav.classList.add('flex');
+                }
+            }
+
+            switchTab(isAdmin ? 'admin' : 'submit');
+        }
+
+        function switchTab(tabId) {
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            
+            // Update Nav UI
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.replace('text-slate-900', 'text-slate-400');
+                btn.querySelector('.nav-indicator').classList.remove('bg-blue-100');
+                btn.querySelector('.material-symbols-outlined').style.fontVariationSettings = "'FILL' 0";
+                btn.querySelector('.material-symbols-outlined').classList.replace('text-blue-700', 'text-inherit');
+            });
+
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.classList.replace('text-slate-400', 'text-slate-900');
+            activeBtn.querySelector('.nav-indicator').classList.add('bg-blue-100');
+            activeBtn.querySelector('.material-symbols-outlined').style.fontVariationSettings = "'FILL' 1";
+            activeBtn.querySelector('.material-symbols-outlined').classList.add('text-blue-700');
+
+            if(tabId === 'ledger') {
+                loadLedger();
+                loadHistory();
+            }
+        }
+
+        async function submitWork(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const msg = document.getElementById('submit-msg');
+            
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Submitting...';
+            btn.disabled = true;
+            const isDaily = currentWorker.worker_type === 'DAILY_SALARY';
+            
+            const payload = {
+                garment_type: document.getElementById('garment-type').value || null,
+                quantity: parseInt(document.getElementById('quantity').value) || 0,
+                bill_number: document.getElementById('bill-number').value || null,
+                extra_work_description: document.getElementById('extra-desc').value || null,
+                extra_amount: parseFloat(document.getElementById('extra-amount').value) || 0.0,
+                is_present: isDaily ? document.getElementById('is-present').checked : false
+            };
+
+            try {
+                const res = await fetch(`/api/worker/${currentWorker.id}/work-entry`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                if(res.ok) {
+                    msg.textContent = "Work submitted successfully!";
+                    msg.classList.remove('hidden', 'text-red-500');
+                    msg.classList.add('text-green-500');
+                    e.target.reset(); // Clear form
+                    
+                    // Keep type intact for piece rate
+                    document.getElementById('quantity').value = "1";
+                    document.getElementById('extra-amount').value = "0";
+                    document.getElementById('is-present').checked = false;
+                    
+                    loadLedger();
+                    
+                    // Switch to the Earnings (ledger) tab
+                    switchTab('ledger');
+                    
+                    // Reset the submit button text back to normal
+                    btn.innerHTML = '<span class="material-symbols-outlined">send</span> Submit Entry';
+                    btn.disabled = false;
+                    msg.classList.add('hidden');
+                } else {
+                    throw new Error("Failed to submit");
+                }
+            } catch(err) {
+                msg.textContent = "Error submitting work. Try again.";
+                msg.classList.remove('hidden', 'text-green-500');
+                msg.classList.add('text-red-500');
+            } finally {
+                btn.innerHTML = '<span class="material-symbols-outlined">send</span> Submit Entry';
+                btn.disabled = false;
+            }
+        }
+
+        async function loadLedger() {
+            try {
+                const res = await fetch(`/api/worker/${currentWorker.id}/ledger?t=${Date.now()}`);
+                const data = await res.json();
+                const l = data.ledger;
+                
+                document.getElementById('lbl-earned').textContent = `₹${l.total_earned.toFixed(0)}`;
+                document.getElementById('lbl-advance').textContent = `₹${l.total_advance.toFixed(0)}`;
+                document.getElementById('lbl-remaining').textContent = `₹${l.remaining_balance.toFixed(0)}`;
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadHistory() {
+            try {
+                const res = await fetch(`/api/worker/${currentWorker.id}/entries?t=${Date.now()}`);
+                const data = await res.json();
+                const container = document.getElementById('history-container');
+                
+                if(data.entries.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center p-6 bg-white rounded-xl border border-slate-100 shadow-sm">
+                            <span class="material-symbols-outlined text-slate-300 text-3xl mb-2">history</span>
+                            <p class="text-sm text-slate-500">No work history found.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = data.entries.map(e => {
+                    let statusColor = "bg-yellow-100 text-yellow-800";
+                    let statusIcon = "schedule";
+                    if(e.status === 'APPROVED') { statusColor = "bg-green-100 text-green-800"; statusIcon = "check_circle"; }
+                    if(e.status === 'REJECTED') { statusColor = "bg-red-100 text-red-800"; statusIcon = "cancel"; }
+                    
+                    const date = new Date(e.entry_date).toLocaleDateString('en-IN', {day:'numeric', month:'short'});
+                    
+                    let title = currentWorker.worker_type === 'DAILY_SALARY' ? "Daily Work" : `${e.quantity}x ${e.garment_type}`;
+                    
+                    return `
+                        <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-xs font-semibold ${statusColor} px-2 py-0.5 rounded flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-[12px]">${statusIcon}</span> ${e.status}
+                                    </span>
+                                    <span class="text-xs text-slate-400">${date}</span>
+                                </div>
+                                <p class="font-bold text-slate-800">${title}</p>
+                                ${e.bill_number ? `<p class="text-xs text-slate-500">Bill: ${e.bill_number}</p>` : ''}
+                                ${e.extra_work_description ? `<p class="text-xs text-slate-500 truncate w-48">${e.extra_work_description}</p>` : ''}
+                            </div>
+                            <div class="text-right">
+                                <p class="font-bold text-slate-900 text-lg">₹${e.total_amount}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch(e) { console.error(e); }
+        }
+
+        function startScanner() {
+            document.getElementById('start-scan-btn').classList.add('hidden');
+            html5QrcodeScanner = new Html5Qrcode("qr-reader");
+            html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                onScanSuccess,
+                (errorMessage) => { /* ignore typical errors */ }
+            ).catch(err => {
+                alert("Failed to start scanner. Please ensure camera permissions are granted.");
+                document.getElementById('start-scan-btn').classList.remove('hidden');
+            });
+        }
+
+        async function onScanSuccess(decodedText, decodedResult) {
+            if(html5QrcodeScanner) {
+                try {
+                    await html5QrcodeScanner.stop();
+                } catch(e) {
+                    console.warn("Scanner stop error:", e);
+                }
+                try {
+                    html5QrcodeScanner.clear();
+                } catch(e) {}
+                document.getElementById('start-scan-btn').classList.remove('hidden');
+                document.getElementById('start-scan-btn').innerHTML = '<span class="material-symbols-outlined">qr_code_scanner</span> Scan Again';
+            }
+
+            if(decodedText.startsWith("ORDER:")) {
+                scannedOrderId = decodedText.split(":")[1];
+                await fetchOrderDetails(scannedOrderId);
+            } else {
+                alert("Invalid QR Code: " + decodedText);
+            }
+        }
+
+        async function fetchOrderDetails(id) {
+            try {
+                const res = await fetch(`/api/orders/${id}?t=${Date.now()}`);
+                if (!res.ok) throw new Error('Order not found');
+                const data = await res.json();
+                
+                document.getElementById('scan-order-num').textContent = data.order.order_number;
+                
+                let detailsHtml = `<p class="font-bold text-slate-800">${data.order.customer_name}</p>`;
+                
+                let itemsHtml = '<div class="mt-3 border-t border-purple-200 pt-3"><p class="text-xs text-purple-600 font-semibold uppercase tracking-wider mb-1">Garments</p><ul class="list-disc pl-4 text-sm text-slate-700">';
+                if (data.order.items && data.order.items.length > 0) {
+                    data.order.items.forEach(item => {
+                        itemsHtml += `<li><b>${item.clothing_type}</b> (Qty: ${item.quantity})</li>`;
+                    });
+                } else {
+                    itemsHtml += '<li>No items found</li>';
+                }
+                itemsHtml += '</ul></div>';
+                
+                document.getElementById('scan-customer-name').innerHTML = detailsHtml + itemsHtml;
+                
+                document.getElementById('scan-order-status').textContent = data.order.status;
+                
+                document.getElementById('scan-result').classList.remove('hidden');
+                document.getElementById('scan-result').classList.add('flex');
+                document.getElementById('scan-msg').classList.add('hidden');
+            } catch (e) {
+                alert("Could not load order details.");
+            }
+        }
+
+        function showPaymentModal() {
+            const modal = document.getElementById('payment-modal');
+            const content = document.getElementById('payment-modal-content');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            // Small delay for transition
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.classList.add('opacity-100');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function hidePaymentModal() {
+            const modal = document.getElementById('payment-modal');
+            const content = document.getElementById('payment-modal-content');
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                document.getElementById('payment-amount').value = '';
+                document.getElementById('payment-note').value = '';
+                document.getElementById('payment-method').value = 'Cash';
+            }, 300);
+        }
+
+        async function submitPayment() {
+            if(!scannedOrderId) return;
+            
+            const amount = parseFloat(document.getElementById('payment-amount').value);
+            const method = document.getElementById('payment-method').value;
+            const note = document.getElementById('payment-note').value;
+            
+            if (isNaN(amount) || amount <= 0) {
+                alert("Please enter a valid amount.");
+                return;
+            }
+            
+            const btn = document.getElementById('submit-payment-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">refresh</span> Processing...';
+            btn.disabled = true;
+            
+            try {
+                const res = await fetch(`/api/worker/${currentWorker.id}/advance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: parseInt(scannedOrderId),
+                        amount: amount,
+                        payment_method: method,
+                        note: note
+                    })
+                });
+                
+                const data = await res.json();
+                if(data.status === 'success') {
+                    hidePaymentModal();
+                    
+                    const msg = document.getElementById('scan-msg');
+                    msg.textContent = `₹${amount} advance recorded successfully!`;
+                    msg.classList.remove('hidden', 'text-slate-500', 'text-red-500');
+                    msg.classList.add('text-green-500');
+                } else {
+                    alert(data.detail || "Error saving advance");
+                }
+            } catch (e) {
+                alert("Network error while processing advance");
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function submitOrderStage(stage) {
+            if(!scannedOrderId) return;
+            
+            const msg = document.getElementById('scan-msg');
+            msg.textContent = "Updating...";
+            msg.classList.remove('hidden', 'text-green-500', 'text-red-500');
+            msg.classList.add('text-slate-500');
+            
+            try {
+                const res = await fetch(`/api/orders/${scannedOrderId}/stage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pin: currentWorker.pin, // Since they are logged in, we have their PIN
+                        stage: stage,
+                        extra_desc: "",
+                        extra_amount: 0
+                    })
+                });
+                
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Failed");
+                
+                msg.textContent = "Order updated successfully!";
+                msg.classList.replace('text-slate-500', 'text-green-500');
+                document.getElementById('scan-order-status').textContent = stage;
+                
+                // Refresh data in background
+                loadLedger();
+                loadHistory();
+            } catch (e) {
+                msg.textContent = "Error: " + e.message;
+                msg.classList.replace('text-slate-500', 'text-red-500');
+            }
+        }
+
+        // Admin Functions
+        const MEASUREMENT_TEMPLATES = {
+            "Shirt": ["Length", "Shoulder", "Chest", "Waist", "Hip", "Sleeve Length", "Bicep", "Cuff", "Collar", "Front Length", "Back Length"],
+            "Pant": ["Length", "Waist", "Hip", "Thigh", "Knee", "Bottom", "Rise"],
+            "Kurta": ["Length", "Shoulder", "Chest", "Waist", "Hip", "Sleeve Length", "Collar", "Side Slit"],
+            "Blouse": ["Length", "Shoulder", "Bust", "Waist", "Sleeve", "Armhole", "Neck Front", "Neck Back"],
+            "Suit": ["Jacket Length", "Shoulder", "Chest", "Waist", "Sleeve", "Pant Length", "Pant Waist", "Pant Hip"],
+            "Custom": ["Measurement 1", "Measurement 2", "Measurement 3"]
+        };
+
+        let selectedCustomerId = null;
+        let currentCustomerMeasurements = [];
+
+        async function searchMobileCustomers(q) {
+            const dropdown = document.getElementById('admin-cust-dropdown');
+            if (q.trim().length < 2) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                if (data.customers.length > 0) {
+                    dropdown.innerHTML = data.customers.map(c => `
+                        <div class="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0" onclick="selectMobileCustomer(${c.id}, '${c.name.replace(/'/g, "\\'")}', '${c.mobile || ''}', '')">
+                            <p class="font-semibold text-slate-800">${c.name}</p>
+                            <p class="text-xs text-slate-500">${c.mobile || 'No Mobile'}</p>
+                        </div>
+                    `).join('');
+                    dropdown.classList.remove('hidden');
+                } else {
+                    dropdown.innerHTML = '<div class="px-4 py-3 text-sm text-slate-500">No customers found</div>';
+                    dropdown.classList.remove('hidden');
+                }
+            } catch(e) { console.error("Search failed", e); }
+        }
+
+        async function selectMobileCustomer(id, name, mobile, address) {
+            selectedCustomerId = id;
+            document.getElementById('admin-cust-name').value = name;
+            document.getElementById('admin-cust-phone').value = mobile;
+            document.getElementById('admin-cust-address').value = address;
+            
+            document.getElementById('admin-cust-name').disabled = true;
+            document.getElementById('admin-cust-phone').disabled = true;
+            document.getElementById('admin-cust-address').disabled = true;
+            
+            document.getElementById('btn-clear-cust').classList.remove('hidden');
+            document.getElementById('admin-cust-dropdown').classList.add('hidden');
+            document.getElementById('admin-cust-search').value = '';
+            
+            try {
+                const res = await fetch(`/api/customers/${id}/measurements`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    currentCustomerMeasurements = data.measurements || [];
+                }
+            } catch(e) { console.error("Failed to load measurements", e); }
+            
+            // Re-trigger garment change if something is already selected
+            const currentGarment = document.getElementById('admin-garment-type').value;
+            if (currentGarment) {
+                handleGarmentChange(currentGarment);
+            }
+        }
+
+        function clearSelectedCustomer() {
+            selectedCustomerId = null;
+            currentCustomerMeasurements = [];
+            document.getElementById('admin-cust-name').value = '';
+            document.getElementById('admin-cust-phone').value = '';
+            document.getElementById('admin-cust-address').value = '';
+            
+            document.getElementById('admin-cust-name').disabled = false;
+            document.getElementById('admin-cust-phone').disabled = false;
+            document.getElementById('admin-cust-address').disabled = false;
+            
+            document.getElementById('btn-clear-cust').classList.add('hidden');
+            
+            const currentGarment = document.getElementById('admin-garment-type').value;
+            if (currentGarment) {
+                handleGarmentChange(currentGarment);
+            }
+        }
+
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const dropdown = document.getElementById('admin-cust-dropdown');
+            const searchInput = document.getElementById('admin-cust-search');
+            if (dropdown && !dropdown.contains(e.target) && e.target !== searchInput) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        function handleGarmentChange(value) {
+            // Auto set price when garment typed matches a rate
+            const rate = garmentRates.find(r => r.garment_type.toLowerCase() === value.toLowerCase());
+            if(rate) document.getElementById('admin-price').value = rate.rate;
+
+            // Generate measurement fields (24 Box Grid exactly like Desktop App)
+            const grid = document.getElementById('admin-measurements-grid');
+            
+            // For mobile, grid-cols-4 or 6 depending on screen width. We use grid-cols-4 gap-2 for a good mobile layout.
+            grid.className = "grid grid-cols-4 gap-2";
+            grid.innerHTML = '';
+            
+            // Find old profile if exists
+            const profile = currentCustomerMeasurements.find(m => m.template_type.toLowerCase() === value.toLowerCase());
+
+            for (let i = 1; i <= 24; i++) {
+                const field = `Box ${i}`;
+                const savedVal = (profile && profile.values[field]) ? profile.values[field] : '';
+                grid.innerHTML += `
+                    <div>
+                        <div class="relative">
+                            <input type="text" data-name="${field}" value="${savedVal}" 
+                                autocomplete="off"
+                                class="measurement-field w-full p-2.5 bg-surface-container-lowest border border-slate-200 rounded focus:border-slate-900 focus:ring-1 outline-none text-sm text-center font-semibold">
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Mobile Photo Attachment Handling
+        let mobilePhotosBase64 = [];
+        let currentOrderItems = [];
+        
+        async function handleMobilePhotoSelect(event) {
+            const files = event.target.files;
+            if(!files || files.length === 0) return;
+            
+            const MAX_WIDTH = 1024;
+            const MAX_HEIGHT = 1024;
+            
+            for(let i=0; i<files.length; i++) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height = Math.round(height * (MAX_WIDTH / width));
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width = Math.round(width * (MAX_HEIGHT / height));
+                                height = MAX_HEIGHT;
+                            }
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        // Compress to JPEG with 0.6 quality
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                        mobilePhotosBase64.push(dataUrl);
+                        renderMobilePhotos();
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(files[i]);
+            }
+        }
+
+        function renderMobilePhotos() {
+            const container = document.getElementById('admin-photo-preview');
+            container.innerHTML = '';
+            mobilePhotosBase64.forEach((b64, idx) => {
+                container.innerHTML += `
+                    <div class="relative w-16 h-16 group">
+                        <img src="${b64}" class="w-full h-full object-cover rounded-lg border shadow-sm">
+                        <button onclick="removeMobilePhoto(${idx})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 text-xs w-5 h-5 flex items-center justify-center hover:bg-red-600 shadow-md">✕</button>
+                    </div>
+                `;
+            });
+        }
+
+        function removeMobilePhoto(index) {
+            mobilePhotosBase64.splice(index, 1);
+            renderMobilePhotos();
+        }
+
+        function addCustomMeasurementMobile() {
+            const container = document.getElementById('admin-measurements-grid');
+            const id = Date.now();
+            const html = `
+                <div class="custom-meas-row col-span-2 flex gap-2 items-end">
+                    <div class="flex-1">
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Measurement Name</label>
+                        <input type="text" placeholder="e.g. Bicep" class="custom-meas-name w-full px-3 py-2.5 rounded-lg border border-slate-200 focus:border-slate-900 outline-none">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Value</label>
+                        <input type="text" placeholder="e.g. 14" class="custom-meas-val w-full px-3 py-2.5 rounded-lg border border-slate-200 focus:border-slate-900 outline-none">
+                    </div>
+                    <button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 p-2">
+                        <span class="material-symbols-outlined text-[20px]">delete</span>
+                    </button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+        }
+
+        function addAdminOrderItem() {
+            const garment_type = document.getElementById('admin-garment-type').value;
+            const quantity = parseInt(document.getElementById('admin-quantity').value);
+            const price = parseFloat(document.getElementById('admin-price').value);
+            
+            if (!garment_type) {
+                alert("Please select a Garment Type to add.");
+                return;
+            }
+            if (!price) {
+                alert("Please enter a Price to add.");
+                return;
+            }
+
+            let measurements_text = "";
+            const fields = document.querySelectorAll('.measurement-field');
+            fields.forEach(f => {
+                if (f.value.trim()) {
+                    measurements_text += `${f.dataset.name}: ${f.value.trim()}\n`;
+                }
+            });
+            
+            const customRows = document.querySelectorAll('.custom-meas-row');
+            customRows.forEach(row => {
+                const nameInput = row.querySelector('.custom-meas-name');
+                const valInput = row.querySelector('.custom-meas-val');
+                if (nameInput && valInput && nameInput.value.trim() && valInput.value.trim()) {
+                    measurements_text += `${nameInput.value.trim()}: ${valInput.value.trim()}\n`;
+                }
+            });
+
+            const save_profile = document.getElementById('admin-save-profile').checked;
+            const notes = document.getElementById('admin-instructions').value.trim();
+
+            currentOrderItems.push({
+                garment_type,
+                quantity,
+                price,
+                measurements_text,
+                save_profile,
+                notes,
+                image_base64: [...mobilePhotosBase64]
+            });
+
+            renderAdminItems();
+
+            // Clear fields for next item
+            document.getElementById('admin-garment-type').value = '';
+            document.getElementById('admin-quantity').value = '1';
+            document.getElementById('admin-price').value = '';
+            document.getElementById('admin-measurements-grid').innerHTML = '';
+            document.getElementById('admin-instructions').value = '';
+            mobilePhotosBase64 = [];
+            renderMobilePhotos();
+        }
+
+        function renderAdminItems() {
+            const container = document.getElementById('admin-items-list');
+            container.innerHTML = '';
+            if(currentOrderItems.length === 0) return;
+
+            currentOrderItems.forEach((item, index) => {
+                let measHtml = '';
+                if(item.measurements_text) {
+                    const parts = item.measurements_text.split('\n');
+                    parts.forEach(p => {
+                        if(p.includes(':')) {
+                            const val = p.split(':')[1].trim();
+                            if(val) {
+                                measHtml += `<div class="bg-indigo-50 text-indigo-900 text-[10px] font-semibold px-2 py-0.5 rounded border border-indigo-100">${val}</div>`;
+                            }
+                        }
+                    });
+                }
+
+                container.innerHTML += `
+                    <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm relative">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="text-slate-800 font-semibold text-sm">
+                                ${item.garment_type} <span class="font-normal text-slate-500 ml-1">Qty: ${item.quantity} × ₹${item.price}</span>
+                            </div>
+                            <div class="text-slate-900 font-semibold text-sm">
+                                ₹${item.quantity * item.price}
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap gap-1 mb-2">
+                            ${measHtml}
+                        </div>
+                        <div class="flex justify-end gap-2 border-t border-slate-100 pt-2 mt-2">
+                            <button type="button" onclick="duplicateAdminItem(${index})" class="text-slate-500 hover:text-green-600 transition-colors" title="Duplicate">
+                                <span class="material-symbols-outlined text-[18px]">content_copy</span>
+                            </button>
+                            <button type="button" onclick="removeAdminItem(${index})" class="text-red-500 hover:text-red-700 transition-colors" title="Delete">
+                                <span class="material-symbols-outlined text-[18px]">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            const totalContainer = document.getElementById('admin-total-container');
+            const totalSpan = document.getElementById('admin-grand-total');
+            if (currentOrderItems.length > 0) {
+                const total = currentOrderItems.reduce((acc, item) => acc + (item.quantity * item.price), 0);
+                totalSpan.textContent = total;
+                totalContainer.classList.remove('hidden');
+            } else {
+                totalContainer.classList.add('hidden');
+            }
+        }
+
+        function duplicateAdminItem(index) {
+            const item = currentOrderItems[index];
+            currentOrderItems.push({ ...item });
+            renderAdminItems();
+        }
+
+        function removeAdminItem(index) {
+            currentOrderItems.splice(index, 1);
+            renderAdminItems();
+        }
+
+        async function submitAdminOrder() {
+            const btn = document.getElementById('admin-submit-btn');
+            const msg = document.getElementById('admin-submit-msg');
+            
+            const name = document.getElementById('admin-cust-name').value.trim();
+            const mobile = document.getElementById('admin-cust-phone').value.trim();
+            const address = document.getElementById('admin-cust-address').value.trim();
+            
+            if (!name) {
+                alert("Customer Name is required.");
+                return;
+            }
+
+            // Also capture any partially filled item if garment type is present
+            const garment_type = document.getElementById('admin-garment-type').value;
+            if (garment_type) {
+                addAdminOrderItem();
+            }
+
+            if (currentOrderItems.length === 0) {
+                alert("Please add at least one item to the order.");
+                return;
+            }
+
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Saving...';
+            btn.disabled = true;
+
+            try {
+                let customer_id = selectedCustomerId;
+
+                if (!customer_id) {
+                    // 1. Create Customer
+                    const custRes = await fetch('/api/customers/add', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name: name, mobile: mobile ? '+91 ' + mobile : '', address: address})
+                    });
+                    const custData = await custRes.json();
+                    if (!custRes.ok) throw new Error("Failed to create customer");
+                    customer_id = custData.customer_id;
+                }
+
+                const advance_amount = parseFloat(document.getElementById('admin-advance').value) || 0;
+                const delivery_date = document.getElementById('admin-delivery-date').value || null;
+                const send_whatsapp = document.getElementById('admin-send-whatsapp').checked;
+
+                // 2. Create Order
+                const payload = {
+                    customer_id: customer_id,
+                    items: currentOrderItems,
+                    special_instructions: "",
+                    advance_amount,
+                    delivery_date,
+                    send_whatsapp
+                };
+
+                const res = await fetch('/api/orders/create', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!res.ok) throw new Error("Failed to create order");
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    if (data.whatsapp_url) {
+                        window.open(data.whatsapp_url, '_blank');
+                    }
+                    msg.textContent = `Order #${data.order_number} created successfully!`;
+                    msg.classList.remove('hidden', 'text-red-500');
+                    msg.classList.add('text-green-500');
+                
+                // Reset form
+                clearSelectedCustomer();
+                document.getElementById('admin-garment-type').value = '';
+                document.getElementById('admin-quantity').value = '1';
+                document.getElementById('admin-price').value = '';
+                document.getElementById('admin-measurements-grid').innerHTML = '';
+                document.getElementById('admin-instructions').value = '';
+                document.getElementById('admin-advance').value = '0';
+                document.getElementById('admin-delivery-date').value = '';
+                
+                mobilePhotosBase64 = [];
+                currentOrderItems = [];
+                renderMobilePhotos();
+                renderAdminItems();
+                document.getElementById('admin-total-container').classList.add('hidden');
+
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+                }
+            } catch (e) {
+                msg.textContent = "Error: " + e.message;
+                msg.classList.remove('hidden', 'text-green-500');
+                msg.classList.add('text-red-500');
+            } finally {
+                btn.innerHTML = '<span class="material-symbols-outlined">add_circle</span> Submit Order';
+                btn.disabled = false;
+            }
+        }
+        function startSpeechRecognition(elementId) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert("Speech recognition is not supported in this browser. Please try Google Chrome.");
+                return;
+            }
+            
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-IN'; // Optimized for Indian accent/context
+
+            const targetInput = document.getElementById(elementId);
+            const originalPlaceholder = targetInput.placeholder;
+            
+            // Visual feedback
+            targetInput.placeholder = "Listening... Speak now";
+            targetInput.classList.remove('border-slate-200', 'focus:border-slate-900');
+            targetInput.classList.add('border-blue-500', 'ring-2', 'ring-blue-200', 'bg-blue-50');
+
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                if (targetInput.value) {
+                    targetInput.value += ' ' + text;
+                } else {
+                    targetInput.value = text;
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error", event.error);
+                if (event.error !== 'no-speech') {
+                    alert("Microphone error: " + event.error);
+                }
+            };
+
+            recognition.onend = () => {
+                // Restore visual state
+                targetInput.placeholder = originalPlaceholder;
+                targetInput.classList.add('border-slate-200', 'focus:border-slate-900');
+                targetInput.classList.remove('border-blue-500', 'ring-2', 'ring-blue-200', 'bg-blue-50');
+            };
+
+            recognition.start();
+        }
+    </script>
+</body>
+</html>

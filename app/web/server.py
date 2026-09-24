@@ -1,0 +1,580 @@
+import os
+import sys
+import re
+import uvicorn
+import logging
+from threading import Thread
+from typing import Optional, List
+from fastapi import FastAPI, HTTPException, Request, Depends, Response
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from app.services.worker_service import worker_service
+from app.config import ASSETS_DIR, APP_DATA_DIR, UPLOADS_DIR
+from app.web.admin_routes import router as admin_router
+
+logger = logging.getLogger(__name__)
+
+# Global reference to the WebBridge for signaling the UI thread
+bridge_instance = None
+
+app = FastAPI(title="Haroon Tailor Worker Portal")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# We will serve mobile web assets from app/assets/mobile
+mobile_assets_dir = os.path.join(ASSETS_DIR, "mobile")
+os.makedirs(mobile_assets_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=mobile_assets_dir), name="static")
+
+receipts_dir = os.path.join(APP_DATA_DIR, "receipts")
+os.makedirs(receipts_dir, exist_ok=True)
+app.mount("/receipts", StaticFiles(directory=receipts_dir), name="receipts")
+
+# ─── Admin Panel: serve desktop HTML pages for phone browser access ────────
+# Register admin REST API routes
+app.include_router(admin_router)
+
+# Serve CSS, JS, fonts, images as static assets for admin pages
+www_dir = os.path.join(ASSETS_DIR, "www")
+app.mount("/admin_assets", StaticFiles(directory=www_dir), name="admin_assets")
+
+# Serve uploaded images (order photos etc.) at /uploads/
+os.makedirs(os.path.join(UPLOADS_DIR, "items"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
+
+@app.get("/app/{page_name}")
+def serve_admin_page(page_name: str, response: Response):
+    """
+    Serve the desktop HTML pages with the API shim injected.
+    This lets the same UI work in a phone browser.
+    """
+    # Ensure .html extension
+    if not page_name.endswith(".html"):
+        page_name += ".html"
+
+    html_path = os.path.join(www_dir, "html", page_name)
+    if not os.path.exists(html_path):
+        raise HTTPException(status_code=404, detail=f"Page not found: {page_name}")
+
+    with open(html_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # 1. Remove Qt WebChannel script (not available in browser)
+    content = content.replace(
+        '<script src="qrc:///qtwebchannel/qwebchannel.js"></script>',
+        '<!-- QWebChannel removed for browser mode -->'
+    )
+
+    # 2. Fix relative asset paths: ../css/ -> /admin_assets/css/
+    content = content.replace('"../css/', '"/admin_assets/css/')
+    content = content.replace("'../css/", "'/admin_assets/css/")
+    content = content.replace('"../js/', '"/admin_assets/js/')
+    content = content.replace("'../js/", "'/admin_assets/js/")
+    content = content.replace('"../img/', '"/admin_assets/img/')
+    content = content.replace("'../img/", "'/admin_assets/img/")
+    content = content.replace('"../fonts/', '"/admin_assets/fonts/')
+    content = content.replace("'../fonts/", "'/admin_assets/fonts/")
+
+    # 3. Inject the API shim BEFORE any other JS files
+    shim_tag = '<script src="/admin_assets/js/web_api_shim.js"></script>\n'
+    # Insert right after <head> or before first <script>
+    if '<head>' in content:
+        content = content.replace('<head>', '<head>\n' + shim_tag, 1)
+    else:
+        content = shim_tag + content
+
+    # 4. Add mobile-friendly meta tags if not present
+    if 'viewport' not in content:
+        viewport = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">\n'
+        content = content.replace('<head>\n' + shim_tag, '<head>\n' + shim_tag + viewport, 1)
+
+    # 5. Add mobile CSS overrides for sidebar (hide on small screens)
+    mobile_css = '''
+    <style>
+    /* Mobile responsive overrides */
+    @media (max-width: 768px) {
+        nav[style*="position:fixed"][style*="width:280px"] {
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            z-index: 9999 !important;
+        }
+        nav[style*="position:fixed"][style*="width:280px"].mobile-open {
+            transform: translateX(0);
+        }
+        /* Remove sidebar offset from main content on mobile */
+        main[style*="margin-left:280px"], main[class*="ml-[280px]"],
+        div[style*="margin-left:280px"] {
+            margin-left: 0 !important;
+        }
+        main[class*="pl-[280px]"] {
+            padding-left: 16px !important;
+            padding-right: 16px !important;
+        }
+        main[class*="pt-[72px]"] {
+            padding-top: 60px !important;
+        }
+        .mobile-menu-btn {
+            display: flex !important;
+        }
+        .mobile-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 9998;
+        }
+        .mobile-overlay.active {
+            display: block;
+        }
+        /* Make tables scrollable on mobile */
+        table { font-size: 13px; }
+        .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+        /* Improve touch targets */
+        button, a, input, select, textarea {
+            min-height: 40px;
+        }
+        /* Fix grid layouts for mobile */
+        .grid-cols-2, .grid-cols-3, .grid-cols-4, .grid-cols-5 {
+            grid-template-columns: 1fr !important;
+        }
+    }
+    @media (min-width: 769px) {
+        .mobile-menu-btn {
+            display: none !important;
+        }
+    }
+    /* Smooth scrolling */
+    html { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+    </style>
+    '''
+
+    # Mobile hamburger menu button + overlay
+    mobile_menu_html = '''
+    <button class="mobile-menu-btn" onclick="document.querySelector('nav').classList.toggle('mobile-open'); document.getElementById('mobile-overlay').classList.toggle('active');" style="display:none; position:fixed; top:12px; left:12px; z-index:10000; width:44px; height:44px; border-radius:12px; background:#091426; color:white; border:none; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+        <span class="material-symbols-outlined" style="font-size:24px;">menu</span>
+    </button>
+    <div id="mobile-overlay" class="mobile-overlay" onclick="document.querySelector('nav').classList.remove('mobile-open'); this.classList.remove('active');"></div>
+    '''
+
+    # Insert mobile CSS before </head>
+    content = content.replace('</head>', mobile_css + '</head>')
+
+    # Insert mobile menu button after <body...>
+    body_match = re.search(r'(<body[^>]*>)', content)
+    if body_match:
+        content = content.replace(body_match.group(1), body_match.group(1) + mobile_menu_html)
+
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return HTMLResponse(content)
+
+
+# Redirect /admin to dashboard
+@app.get("/admin")
+def admin_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/app/dashboard")
+
+class LoginRequest(BaseModel):
+    name: str
+    pin: str
+
+class CustomerRequest(BaseModel):
+    name: str
+    mobile: str = ""
+    address: str = ""
+
+
+
+
+@app.post("/api/login")
+def login(req: LoginRequest):
+    worker = worker_service.authenticate_worker(req.name, req.pin)
+    if not worker:
+        raise HTTPException(status_code=401, detail="Invalid name or PIN")
+    return {"status": "success", "worker": worker}
+
+@app.post("/api/customers/add")
+def add_customer(req: CustomerRequest):
+    from app.services.customer_service import CustomerService
+    try:
+        cust_srv = CustomerService()
+        customer = cust_srv.create_customer(name=req.name, mobile=req.mobile, address=req.address)
+        if bridge_instance:
+            bridge_instance.notification_requested.emit("Success", f"New Customer Added: {customer.name}")
+            if hasattr(bridge_instance, "customer_added"):
+                bridge_instance.customer_added.emit()
+        return {"status": "success", "customer_id": customer.id}
+    except Exception as e:
+        logger.error(f"Failed to add customer via API: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/customers")
+def search_customers(q: str = ""):
+    from app.services.customer_service import CustomerService
+    cust_srv = CustomerService()
+    customers = cust_srv.search_customers(q)
+    return {
+        "status": "success",
+        "customers": [{"id": c.id, "name": c.name, "mobile": c.mobile} for c in customers]
+    }
+
+@app.get("/api/customers/{customer_id}/measurements")
+def get_customer_measurements(customer_id: int):
+    from app.services.measurement_service import MeasurementService
+    try:
+        meas_srv = MeasurementService()
+        measurements = meas_srv.get_profiles_for_customer(customer_id)
+        data = []
+        for m in measurements:
+            vals = {}
+            for v in m.values:
+                vals[v.field_name] = v.field_value
+            data.append({
+                "id": m.id,
+                "template_type": m.template_type,
+                "values": vals,
+                "updated_at": m.updated_at.isoformat() if m.updated_at else None
+            })
+        return {"status": "success", "measurements": data}
+    except Exception as e:
+        logger.error(f"Failed to fetch measurements: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+class WorkEntryRequest(BaseModel):
+    garment_type: Optional[str] = None
+    quantity: int = 0
+    bill_number: Optional[str] = None
+    extra_work_description: Optional[str] = None
+    extra_amount: float = 0.0
+    is_present: bool = False
+
+@app.post("/api/worker/{worker_id}/work-entry")
+def submit_work_entry(worker_id: int, req: WorkEntryRequest):
+    res = worker_service.submit_work_entry(
+        worker_id=worker_id,
+        garment_type=req.garment_type,
+        quantity=req.quantity,
+        bill_number=req.bill_number,
+        extra_work_description=req.extra_work_description,
+        extra_amount=req.extra_amount,
+        is_present=req.is_present
+    )
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res["error"])
+            
+    return {"status": "success", "entry": res}
+
+class WorkerAdvanceRequest(BaseModel):
+    order_id: int
+    amount: float
+    payment_method: str = "Cash"
+    note: str = ""
+
+@app.post("/api/worker/{worker_id}/advance")
+def submit_worker_advance(worker_id: int, req: WorkerAdvanceRequest):
+    notes = f"Order {req.order_id} ({req.payment_method})"
+    if req.note:
+        notes += f" - {req.note}"
+    try:
+        advance = worker_service.record_advance(worker_id, req.amount, notes)
+        return {"status": "success", "advance": advance}
+    except Exception as e:
+        logger.error(f"Failed to record worker advance: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/worker/{worker_id}/entries")
+def get_worker_entries(worker_id: int):
+    entries = worker_service.get_worker_entries(worker_id)
+    return {"status": "success", "entries": entries}
+
+@app.get("/api/worker/{worker_id}/ledger")
+def get_worker_ledger(worker_id: int):
+    ledger = worker_service.get_worker_ledger(worker_id)
+    return {"status": "success", "ledger": ledger}
+
+@app.get("/api/garment-rates")
+def get_garment_rates():
+    rates = worker_service.get_garment_rates()
+    return {"status": "success", "rates": rates}
+
+@app.get("/api/stock-items")
+def get_stock_items():
+    from app.services.stock_service import stock_service
+    items = stock_service.get_all_stock()
+    return {
+        "status": "success",
+        "items": [{"id": i.id, "name": i.name, "unit": i.unit, "quantity": i.quantity} for i in items]
+    }
+@app.get("/api/orders/{order_id}")
+def get_order_details(order_id: int):
+    from app.services.order_service import OrderService
+    srv = OrderService()
+    order = srv.get_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    items = []
+    for item in order.items:
+        items.append({"clothing_type": item.clothing_type, "quantity": item.quantity})
+        
+    return {
+        "status": "success", 
+        "order": {
+            "id": order.id,
+            "order_number": order.order_number,
+            "customer_name": order.customer.name if order.customer else "Unknown",
+            "customer_mobile": order.customer.mobile if order.customer else "",
+            "customer_address": order.customer.address if order.customer else "",
+            "status": order.status,
+            "total_amount": order.total_amount,
+            "paid_amount": order.paid_amount,
+            "remaining_amount": order.remaining_amount,
+            "items": items
+        }
+    }
+
+class PaymentRequest(BaseModel):
+    pin: str
+    amount: float
+    payment_method: str = "Cash"
+    note: str = ""
+
+@app.post("/api/orders/{order_id}/payment")
+def submit_order_payment(order_id: int, req: PaymentRequest):
+    # 1. Verify PIN by checking all workers (same as stage update)
+    workers = worker_service.get_all_workers()
+    matched_worker = None
+    for w in workers:
+        if w["pin"] == req.pin and w["is_active"]:
+            matched_worker = w
+            break
+            
+    if not matched_worker:
+        raise HTTPException(status_code=401, detail="Invalid PIN")
+        
+    # 2. Add the payment
+    from app.services.payment_service import PaymentService
+    srv = PaymentService()
+    try:
+        payment = srv.add_payment(
+            order_id=order_id,
+            amount=req.amount,
+            payment_method=req.payment_method,
+            note=f"Collected by {matched_worker['name']} (Mobile) - {req.note}"
+        )
+        
+        if bridge_instance:
+            bridge_instance.notification_requested.emit("Success", f"Payment of ₹{req.amount} collected for Order {order_id}")
+            if hasattr(bridge_instance, "order_updated"):
+                bridge_instance.order_updated.emit()
+            if hasattr(bridge_instance, "dashboard_updated"):
+                bridge_instance.dashboard_updated.emit()
+                
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to add mobile payment: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class StageRequest(BaseModel):
+    pin: str
+    stage: str
+    extra_amount: float = 0.0
+    extra_desc: str = ""
+
+@app.post("/api/orders/{order_id}/stage")
+def submit_order_stage(order_id: int, req: StageRequest):
+    # 1. Verify PIN by checking all workers
+    workers = worker_service.get_all_workers()
+    matched_worker = None
+    for w in workers:
+        if w["pin"] == req.pin and w["is_active"]:
+            matched_worker = w
+            break
+            
+    if not matched_worker:
+        raise HTTPException(status_code=401, detail="Invalid PIN")
+        
+    # 2. Update the order
+    from app.services.order_service import OrderService
+    srv = OrderService()
+    try:
+        srv.mark_stage_complete(
+            order_id=order_id,
+            stage_name=req.stage,
+            worker_id=matched_worker["id"],
+            extra_amount=req.extra_amount,
+            extra_desc=req.extra_desc
+        )
+        
+        if bridge_instance:
+            bridge_instance.notification_requested.emit("Info", f"Order {order_id} status updated to {req.stage.replace('_', ' ')}")
+            if hasattr(bridge_instance, "order_added"):
+                bridge_instance.order_added.emit()
+                
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+class MobileOrderItem(BaseModel):
+    garment_type: str
+    quantity: int
+    price: float
+    measurements_text: str = ""
+    save_profile: bool = False
+    image_base64: Optional[List[str]] = None
+    notes: str = ""
+
+class MobileOrderRequest(BaseModel):
+    customer_id: int
+    items: List[MobileOrderItem]
+    special_instructions: str = ""
+    advance_amount: float = 0.0
+    delivery_date: Optional[str] = None
+    send_whatsapp: bool = False
+
+@app.post("/api/orders/create")
+def create_mobile_order(req: MobileOrderRequest):
+    logger.info(f"Creating new order from worker portal for customer: {req.customer_id}")
+    try:
+        from app.services.order_service import OrderService
+        from datetime import date, datetime
+        
+        srv = OrderService()
+        
+        all_item_data = []
+        for item in req.items:
+            measurements_dict = {}
+            if item.measurements_text:
+                import re
+                parts = re.split(r'[,\n]', item.measurements_text)
+                for part in parts:
+                    if ':' in part:
+                        k, v = part.split(':', 1)
+                        measurements_dict[k.strip()] = v.strip()
+                    elif part.strip():
+                        measurements_dict[part.strip()] = ""
+                        
+            all_item_data.append({
+                "clothing_type": item.garment_type,
+                "quantity": item.quantity,
+                "price": item.price,
+                "measurements": measurements_dict,
+                "save_profile": item.save_profile,
+                "image_base64": item.image_base64,
+                "notes": item.notes
+            })
+        
+        del_date = None
+        if req.delivery_date:
+            try:
+                del_date = datetime.strptime(req.delivery_date, "%Y-%m-%d").date()
+            except:
+                pass
+
+        order = srv.create_order(
+            customer_id=req.customer_id,
+            items=all_item_data,
+            order_date=date.today(),
+            delivery_date=del_date,
+            special_instructions=req.special_instructions,
+            advance_amount=req.advance_amount
+        )
+        
+        whatsapp_url = None
+        if req.send_whatsapp:
+            from app.database.engine import get_session
+            from app.models.customer import Customer
+            from app.repositories.settings_repo import SettingsRepository
+            import urllib.parse
+            
+            session = get_session()
+            try:
+                customer = session.query(Customer).get(req.customer_id)
+                settings = SettingsRepository(session).get_settings()
+                shop_name = settings.shop_name if settings else "Haroon Tailor"
+                
+                if customer and customer.mobile:
+                    clean_phone = customer.mobile.strip().replace("+", "").replace(" ", "").replace("-", "")
+                    if clean_phone.startswith("0"):
+                        clean_phone = "91" + clean_phone[1:]
+                    elif len(clean_phone) == 10:
+                        clean_phone = "91" + clean_phone
+                        
+                    paid_amt = order.total_amount - order.remaining_amount
+                    msg = (
+                        f"🌟 {customer.name}! 🌟\n\n"
+                        f"{shop_name} में आपका बहुत स्वागत है! आपका ऑर्डर #{order.order_number} सफलतापूर्वक दर्ज कर लिया गया है।\n\n"
+                        f"कुल बिल राशि: ₹{order.total_amount}\n"
+                        f"अब तक जमा: ₹{paid_amt}\n"
+                        f"बकाया राशि: ₹{order.remaining_amount}\n\n"
+                        f"किसी भी तरह की पूछताछ के लिए, बेझिझक हमसे संपर्क करें!\n\n"
+                        f"नोट: डिलीवरी के समय रसीद साथ जरूर लाएं।\n\n"
+                        f"धन्यवाद,\n{shop_name}"
+                    )
+                    encoded_msg = urllib.parse.quote(msg)
+                    whatsapp_url = f"whatsapp://send?phone={clean_phone}&text={encoded_msg}"
+            finally:
+                session.close()
+        
+        # Trigger desktop reload
+        if bridge_instance:
+            bridge_instance.notification_requested.emit("Success", f"New Order Created: {order.order_number}")
+            if hasattr(bridge_instance, "order_added"):
+                bridge_instance.order_added.emit()
+                
+        return {"status": "success", "order_id": order.id, "order_number": order.order_number, "whatsapp_url": whatsapp_url}
+    except Exception as e:
+        logger.error(f"Failed to create mobile order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/", response_class=HTMLResponse)
+def index(response: Response):
+    # Return the mobile portal HTML
+    index_path = os.path.join(mobile_assets_dir, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return HTMLResponse(content, headers=response.headers)
+    return "<h1>Worker Portal not found</h1>"
+
+class WebServerThread(Thread):
+    def __init__(self, host="0.0.0.0", port=8000):
+        super().__init__(daemon=True)
+        self.host = host
+        self.port = port
+        self.server = None
+
+    def run(self):
+        try:
+            # Handle PyInstaller windowed mode where stdout/stderr are None
+            import sys, os
+            if sys.stdout is None:
+                sys.stdout = open(os.devnull, "w")
+            if sys.stderr is None:
+                sys.stderr = open(os.devnull, "w")
+
+            logger.info(f"Starting Worker Portal server on {self.host}:{self.port}")
+            config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info", access_log=False)
+            self.server = uvicorn.Server(config)
+            self.server.run()
+        except Exception as e:
+            logger.error(f"Failed to start uvicorn/fastapi server: {e}", exc_info=True)
+        
+    def stop(self):
+        if self.server:
+            self.server.should_exit = True

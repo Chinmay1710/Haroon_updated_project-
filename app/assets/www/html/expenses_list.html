@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tailor Manager - Expenses</title>
+
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+
+<link href="../css/fonts.css" rel="stylesheet"/>
+ <link rel="stylesheet" href="../css/compiled.css">
+</head>
+<body class="bg-surface text-on-surface font-body-md antialiased min-h-screen flex">
+<!-- SideNavBar -->
+<nav style="position:fixed; top:0; bottom:0; left:0; width:280px; display:flex; flex-direction:column; z-index:40; background:#091426; color:#ffffff; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+ <div style="padding:24px; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; gap:8px;">
+ <div style="width:40px; height:40px; border-radius:50%; background:#1e293b; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+ <img src="../img/logo.png" alt="Logo" style="width:100%; height:100%; object-fit:cover;" />
+ </div>
+ <div>
+ <h2 style="font-size:18px; font-weight:700; color:#ffffff; line-height:1.2; margin:0;"><span class="global-shop-name">Artisan Stitch</span></h2>
+ <p style="font-size:13px; color:rgba(255,255,255,0.7); margin:0;" data-i18n="sidebar.premium_tailoring">Premium Tailoring</p>
+ </div>
+ </div>
+ <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; gap:8px; justify-content:center;">
+ <button onclick="window.I18n && window.I18n.setLang('en')" id="lang-btn-en" style="flex:1; padding:6px 0; border-radius:4px; font-size:11px; font-weight:700; border:1px solid #1e293b; background:#1e293b; color:#8590a6; cursor:pointer;">English</button>
+ <button onclick="window.I18n && window.I18n.setLang('hi')" id="lang-btn-hi" style="flex:1; padding:6px 0; border-radius:4px; font-size:11px; font-weight:700; border:1px solid rgba(255,255,255,0.2); background:transparent; color:rgba(255,255,255,0.7); cursor:pointer;">हिन्दी</button>
+ </div>
+ <div style="flex:1; overflow-y:auto; padding:16px 12px; display:flex; flex-direction:column; gap:4px;">
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">dashboard</span>
+ <span data-i18n="sidebar.dashboard">Dashboard</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">person</span>
+ <span data-i18n="sidebar.customers">Customers</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">shopping_bag</span>
+ <span data-i18n="sidebar.orders">Orders</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">payments</span>
+ <span data-i18n="sidebar.payments">Payments</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">local_shipping</span>
+ <span data-i18n="sidebar.deliveries">Deliveries</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:#ffffff; font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; background:rgba(211,228,254,0.1); border-left:4px solid #d3e4fe; opacity:0.9;">
+ <span class="material-symbols-outlined" style="font-size:25px; font-variation-settings: 'FILL' 1;">receipt_long</span>
+ <span data-i18n="sidebar.expenses">Expenses</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">engineering</span>
+ <span data-i18n="sidebar.workers">Workers</span>
+ </a>
+ <a href="#" data-nav="stock_list" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">inventory_2</span>
+ <span data-i18n="sidebar.stock">Stock</span>
+ </a>
+<a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">settings</span>
+ <span data-i18n="sidebar.settings">Settings</span>
+ </a>
+ 
+ <!-- INJECTED WORKER LINK -->
+ <div style="margin-top: 16px; padding: 12px; background: rgba(30,41,59,0.5); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 4px;">
+ <span style="font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 700; text-transform: uppercase;">Worker Link</span>
+ <div style="display:flex; align-items:center; justify-content:space-between;">
+ <span class="sidebar-worker-link" style="color: #6ee7b7; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; cursor: text; user-select: all;">Loading...</span>
+ </div>
+ <script>
+ document.addEventListener("DOMContentLoaded", () => {
+ setTimeout(() => {
+ if (window.API) {
+ window.API.request('get_worker_portal_url').then(res => {
+ const links = document.querySelectorAll('.sidebar-worker-link');
+ links.forEach(el => {
+ if (res && res.status === 'success') {
+ el.textContent = res.data.url.replace('https://', '').replace('http://', '');
+ } else {
+ el.textContent = 'Not Active';
+ }
+ });
+ }).catch(e => {
+ const links = document.querySelectorAll('.sidebar-worker-link');
+ links.forEach(el => el.textContent = 'Error');
+ });
+ }
+ }, 500);
+ });
+ </script>
+ </div>
+ <!-- END INJECTED WORKER LINK -->
+
+ </div>
+ <div style="padding:12px; border-top:1px solid rgba(255,255,255,0.1); display:flex; flex-direction:column; gap:4px;">
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:8px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:14px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:22px;">backup</span>
+ <span data-i18n="sidebar.backup">Backup &amp; Restore</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:8px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:14px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:22px;">help</span>
+ <span data-i18n="sidebar.help">Help</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:8px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:14px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:22px;">cloud_off</span>
+ <span data-i18n="sidebar.offline">Offline Mode</span>
+ </a>
+ </div>
+</nav>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-[280px] h-[72px] flex justify-between items-center px-gutter z-30 bg-surface dark:bg-surface shadow-sm transition-transform">
+<div class="flex items-center gap-4">
+<h2 class="font-headline-md text-headline-md text-primary">Tailor Manager</h2>
+</div>
+<div class="flex items-center gap-6">
+<button class="flex items-center gap-2 bg-primary text-on-primary px-4 py-3 rounded-lg font-label-lg text-label-lg hover:shadow-[0px_4px_20px_rgba(0,0,0,0.1)] " onclick="window.API.navigate('new_order')">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+ New Order
+ </button>
+<div class="flex items-center gap-2 border-l border-outline-variant/30 pl-6">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest/20 hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+</button>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-secondary-container ml-2 cursor-pointer shadow-[0px_4px_20px_rgba(0,0,0,0.05)]">
+<img alt='\"Shop' class="w-full h-full object-cover" data-alt="A portrait of a meticulously organized tailor's workspace, featuring a vintage measuring tape neatly coiled next to a pair of sharp tailor's scissors on a pristine white oak table. Soft, diffused natural light pouring in from a nearby window creates a bright, modern, and reliable corporate aesthetic." profile\"="" src='\"../img/profile.png\"/'/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-[280px] mt-[72px] flex-1 p-container_padding max-w-7xl mx-auto w-full">
+<!-- Header Section -->
+<div class="flex justify-between items-end mb-stack_lg">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-2" data-i18n="sidebar.expenses">Expenses</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Manage and track your workshop expenditures.</p>
+</div>
+<button class="flex items-center gap-2 bg-primary text-on-primary px-5 py-3 rounded-lg font-label-lg text-label-lg hover:shadow-[0px_4px_20px_rgba(0,0,0,0.1)] hover:bg-primary/90 active:scale-95" onclick="window.API.navigate('add_expense')">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+ Add Expense
+ </button>
+</div>
+<!-- Summary Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-stack_lg">
+<!-- Today's Expenses -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-highest/30 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="today">today</span>
+</div>
+<span class="px-2 py-1 bg-surface-container-highest/20 text-primary rounded-full font-label-sm text-label-sm">Today</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-on-surface-variant mb-1">Today's Expenses</p>
+<h3 id="exp-today" class="font-display text-display text-on-surface">$145.00</h3>
+</div>
+</div>
+<!-- This Month -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20 flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-highest/30 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+</div>
+<span class="px-2 py-1 bg-surface-container-highest/20 text-primary rounded-full font-label-sm text-label-sm">This Month</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-on-surface-variant mb-1">This Month</p>
+<h3 id="exp-this-month" class="font-display text-display text-on-surface">$2,840.50</h3>
+</div>
+</div>
+<!-- Total Expenses -->
+<div class="bg-primary rounded-xl p-6 shadow-[0px_10px_30px_rgba(0,0,0,0.1)] flex flex-col justify-between relative overflow-hidden">
+<!-- Abstract pattern overlay -->
+<div class="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
+<div class="flex justify-between items-start mb-4 relative z-10">
+<div class="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+</div>
+<span class="px-2 py-1 bg-white/10 text-on-primary rounded-full font-label-sm text-label-sm">This Week</span>
+</div>
+<div class="relative z-10">
+<p class="font-label-lg text-label-lg text-on-primary/80 mb-1">This Week</p>
+<h3 id="exp-this-week" class="font-display text-display text-on-primary">$14,290.00</h3>
+</div>
+</div>
+</div>
+<!-- Expenses List -->
+<div>
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+ <h3 class="font-headline-md text-headline-md text-on-surface">Recent Expenses</h3>
+ <!-- Search Bar -->
+ <div class="relative w-full sm:w-64">
+ <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+ <input class="w-full pl-10 pr-4 py-2 rounded-xl border border-outline-variant bg-surface text-on-surface font-body-md placeholder:text-outline focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-shadow" id="expense-search" placeholder="Search expenses..." type="text"/>
+ </div>
+</div>
+<div class="flex flex-col gap-3">
+<!-- Header Row -->
+<div class="grid grid-cols-12 gap-4 px-6 py-3 border-b border-outline-variant/30 text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<div class="col-span-2">Date</div>
+<div class="col-span-3">Expense Name</div>
+<div class="col-span-2">Category</div>
+<div class="col-span-3">Note</div>
+<div class="col-span-2 text-right">Amount</div>
+</div>
+<!-- List Items -->
+<div id="table-expenses" class="flex flex-col gap-3">
+ <!-- Expenses will be dynamically loaded here by JS -->
+</div>
+</div>
+</div>
+</main>
+<script src="../js/i18n.js?v=1787471943"></script>
+<script src="../js/api.js?v=1787471943"></script>
+<script src="../js/app.js?v=1787471943"></script>
+<script src="../js/expenses.js?v=1787471943"></script>
+</body></html>

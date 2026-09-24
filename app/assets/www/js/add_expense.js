@@ -1,0 +1,74 @@
+document.addEventListener('DOMContentLoaded', () => {
+ function init() {
+ if (!window.pyBridge) {
+ setTimeout(init, 100);
+ return;
+ }
+ 
+ // Set default date to today
+ const dateInput = document.getElementById('expenseDate');
+ if (dateInput) {
+ dateInput.valueAsDate = new Date();
+ }
+
+ if (window.API && window.API.attachMic) {
+ window.API.attachMic('expenseName');
+ window.API.attachMic('expenseNotes');
+ }
+
+ const form = document.getElementById('add-expense-form');
+ if (form) {
+ form.addEventListener('submit', async (e) => {
+ e.preventDefault();
+ await saveExpense();
+ });
+ }
+ }
+ 
+ init();
+});
+
+async function saveExpense() {
+ const name = document.getElementById('expenseName').value.trim();
+ const amountStr = document.getElementById('expenseAmount').value;
+ const amount = parseFloat(amountStr.replace(/[₹, ]/g, ''));
+ const category = document.getElementById('expenseCategory').value;
+ const date = document.getElementById('expenseDate').value;
+ const notes = document.getElementById('expenseNotes').value.trim();
+ 
+ if (!name || isNaN(amount) || !category || !date) {
+ window.API.toast("Please fill all required fields", "error");
+ return;
+ }
+ 
+ const payload = {
+ name: name,
+ amount: amount,
+ category: category,
+ expense_date: date,
+ note: notes
+ };
+ 
+ try {
+ await window.API.request('create_expense', payload);
+ const successMsg = document.getElementById('success-message');
+ if (successMsg) {
+ successMsg.classList.remove('hidden', '', 'translate-y-[-10px]');
+ successMsg.classList.add('opacity-100', 'translate-y-0');
+ document.getElementById('add-expense-form').reset();
+ document.getElementById('expenseDate').valueAsDate = new Date();
+ 
+ 
+
+ successMsg.classList.add('hidden', '', 'translate-y-[-10px]');
+ successMsg.classList.remove('opacity-100', 'translate-y-0');
+ window.API.navigate('expenses_list');
+ 
+ } else {
+ window.API.navigate('expenses_list');
+ }
+ } catch (e) {
+ console.error(e);
+ window.API.toast("Error saving expense", "error");
+ }
+}
