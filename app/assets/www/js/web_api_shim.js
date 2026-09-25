@@ -203,45 +203,49 @@
 
                 // Handle print commands on mobile browser
                 if (action === 'print_pos_document' || action === 'print_receipt' || action === 'print_stitching_slip') {
-                    // Inject website-specific 80mm styling dynamically
-                    // This ensures Desktop app QWebEngine is completely unaffected
-                    var style = document.createElement('style');
-                    style.id = 'website-thermal-print-style';
-                    style.innerHTML = `
-                        @media print {
-                            @page { margin: 0; size: 80mm auto !important; }
-                            body, html {
-                                margin: 0 !important;
-                                padding: 0 !important;
-                                background: white !important;
-                                width: 100% !important;
-                            }
-                            .pos-receipt, .pos-slip {
-                                width: 100% !important;
-                                max-width: 100% !important;
-                                margin: 0 !important;
-                                padding: 2mm !important;
-                                box-sizing: border-box !important;
-                                /* 15mm safe space at the very bottom for manual cutting */
-                                padding-bottom: 15mm !important;
-                            }
-                            /* Use physical print units (pt) so the spooler renders exact physical sizes */
-                            .pos-receipt, .pos-slip { font-size: 11pt !important; }
-                            .text-lg { font-size: 15pt !important; }
-                            .flex-between[style*="14px"] { font-size: 10.5pt !important; }
-                            #rp-paid-history { font-size: 8.5pt !important; }
-                            .text-center[style*="10px"], .flex-between[style*="10px"] { font-size: 8pt !important; }
-                            #ss-generated-date { font-size: 7.5pt !important; }
-                            .receipt-table th, .receipt-table td { font-size: 10.5pt !important; }
-                        }
-                    `;
-                    document.head.appendChild(style);
-                    window.print();
-                    // Remove it shortly after the print dialog resolves
-                    setTimeout(function() {
-                        var injected = document.getElementById('website-thermal-print-style');
-                        if (injected) injected.remove();
-                    }, 2000);
+                    // Extract the print container
+                    var printCanvas = document.querySelector('.print-canvas');
+                    if (printCanvas) {
+                        // Gather essential styles to embed
+                        var essentialStyles = `
+                            body { font-family: 'Arial', sans-serif; color: black; background: white; margin: 0; padding: 10px; width: 100%; box-sizing: border-box; }
+                            .dashed-line { border-top: 2px dashed #000; margin: 8px 0; }
+                            .flex-between { display: flex; justify-content: space-between; align-items: flex-start; }
+                            .text-center { text-align: center; }
+                            .text-right { text-align: right; }
+                            .font-bold { font-weight: bold; }
+                            .text-lg { font-size: 24px; font-weight: bold; }
+                            table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+                            th, td { padding: 4px 0; font-size: 16px; }
+                            th { text-align: left; border-bottom: 2px dashed #000; border-top: 2px dashed #000; }
+                            .pos-receipt, .pos-slip { width: 100%; max-width: 100%; padding-bottom: 40px; }
+                            /* Mobile classes just in case */
+                            .flex-col { display: flex; flex-direction: column; }
+                            .items-center { align-items: center; }
+                            .mt-2 { margin-top: 8px; }
+                            .mb-2 { margin-bottom: 8px; }
+                        `;
+                        
+                        var htmlContent = '<!DOCTYPE html><html><head><style>' + essentialStyles + '</style></head><body>' + printCanvas.outerHTML + '</body></html>';
+                        var encodedContent = encodeURIComponent(htmlContent);
+                        var intentUrl = "intent://#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;action=android.intent.action.VIEW;type=text/html;S.android.intent.extra.TEXT=" + encodedContent + ";end";
+                        
+                        // Fallback to standard window.print() if RawBT intent fails to trigger
+                        var iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = intentUrl;
+                        document.body.appendChild(iframe);
+                        
+                        // We also set timeout to try normal print if rawbt didn't intercept it
+                        setTimeout(function() {
+                            document.body.removeChild(iframe);
+                            window.print();
+                        }, 1000);
+                        
+                    } else {
+                        // Fallback if no print canvas
+                        window.print();
+                    }
                     
                     resolve({status: 'success'});
                     return;
