@@ -32,12 +32,17 @@
  }
  @media print {
  body { background: white; margin: 0; padding: 0; display: block; }
- .pos-receipt { width: 100%; max-width: 100%; box-shadow: none; margin: 0; padding: 0; padding-bottom: 40px !important; font-size: 28px !important; }
+ .pos-receipt { width: 100%; max-width: 100%; box-shadow: none; margin: 0; padding: 0; padding-bottom: 40px !important; }
  .no-print { display: none !important; }
  @page { margin: 0; size: 80mm auto; }
- .text-lg { font-size: 36px !important; }
- .receipt-table th, .receipt-table td { font-size: 24px !important; }
  }
+ /* Upscale ONLY for mobile browser thermal print spoolers */
+ body.mobile-print-active .pos-receipt {
+     font-size: 28px !important;
+ }
+ body.mobile-print-active .text-lg { font-size: 36px !important; }
+ body.mobile-print-active .receipt-table th, 
+ body.mobile-print-active .receipt-table td { font-size: 24px !important; }
  .text-center { text-align: center; }
  .text-right { text-align: right; }
  .font-bold { font-weight: bold; }
