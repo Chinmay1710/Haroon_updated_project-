@@ -99,7 +99,7 @@ function renderForm() {
     html += `
     <div class="flex flex-col gap-1">
       <div class="relative">
-        <input class="am-meas-input w-full bg-surface-container-low border border-outline-variant rounded-lg px-2 py-3 font-headline-md text-headline-md text-center text-on-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none" id="${id}" data-idx="${i}" placeholder="" type="text" inputmode="decimal" data-field="${id}"/>
+        <input class="am-meas-input w-full bg-surface-container-low border border-outline-variant rounded-lg px-2 py-3 font-headline-md text-headline-md text-center text-on-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none" id="${id}" data-idx="${i}" placeholder="" type="text" inputmode="text" data-field="${id}"/>
       </div>
     </div>
     `;
