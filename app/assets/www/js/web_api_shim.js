@@ -202,12 +202,8 @@
                 }
 
                 // Handle print commands on mobile browser
-                if (action === 'print_pos_document' || action === 'print_receipt' || action === 'print_stitching_slip') {
-                    document.body.classList.add('mobile-print-active');
+                if (action === 'print_pos_document' || action === 'print_receipt') {
                     window.print();
-                    setTimeout(function() {
-                        document.body.classList.remove('mobile-print-active');
-                    }, 2000);
                     resolve({status: 'success'});
                     return;
                 }

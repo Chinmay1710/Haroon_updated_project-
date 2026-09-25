@@ -8,7 +8,7 @@
  
  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
  <style>
- /* 80mm POS receipt styling (Thermer style) */
+ /* 58mm POS receipt styling (Thermer style) */
  body {
  background-color: #f3f4f6;
  display: flex;
@@ -19,8 +19,8 @@
  padding: 20px;
  }
  .pos-slip {
- width: 80mm; /* Standard 80mm paper size */
- max-width: 80mm;
+ width: 58mm; /* Standard 58mm paper size */
+ max-width: 58mm;
  background: white;
  padding: 2mm;
  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -32,15 +32,10 @@
  }
  @media print {
  body { background: white; margin: 0; padding: 0; display: block; }
- .pos-slip { width: 100%; max-width: 100%; box-shadow: none; margin: 0; padding: 0; padding-bottom: 40px !important; }
+ .pos-slip { width: 100%; max-width: 100%; box-shadow: none; margin: 0; padding: 0; }
  .no-print { display: none !important; }
- @page { margin: 0; size: 80mm auto; }
+ @page { margin: 0; size: 58mm auto; }
  }
- /* Upscale ONLY for mobile browser thermal print spoolers */
- body.mobile-print-active .pos-slip {
-     font-size: 28px !important;
- }
- body.mobile-print-active .text-lg { font-size: 36px !important; }
  .text-center { text-align: center; }
  .text-right { text-align: right; }
  .font-bold { font-weight: bold; }
@@ -74,7 +69,7 @@
  
  <div class="dashed-line"></div>
  
- <div class="flex-between font-bold" style="font-size: 0.95em;">
+ <div class="flex-between font-bold" style="font-size: 14px;">
  <span>Bill No:</span>
  <span id="ss-order-number">...</span>
  </div>
@@ -104,13 +99,13 @@
 
  <div class="dashed-line"></div>
  
- <div class="flex-between mt-2">
+ <div class="flex-between mt-2" style="font-size: 10px;">
  <span>Cut By: _____</span>
  <span>Sewn By: _____</span>
  </div>
  
  <div class="text-center mt-2 flex flex-col items-center">
- <div id="ss-generated-date" style="margin-top: 5px; font-size: 0.8em;">Generated: ...</div>
+ <div id="ss-generated-date" style="font-size: 9px; margin-top: 5px;">Generated: ...</div>
  </div>
  </main>
 
