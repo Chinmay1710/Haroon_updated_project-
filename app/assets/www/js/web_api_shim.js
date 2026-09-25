@@ -80,7 +80,7 @@
             // Handle open_url on mobile
             if (action === 'open_url') {
                 var openUrl = payload.url || '';
-                if (openUrl) window.open(openUrl, '_blank');
+                if (openUrl) window.location.href = openUrl;
                 if (callback) callback(JSON.stringify({status: 'success'}));
                 return;
             }
@@ -94,8 +94,15 @@
                         var waParams = new URLSearchParams(waUrl.replace('whatsapp://send?', ''));
                         waUrl = 'https://wa.me/' + waParams.get('phone') + '?text=' + waParams.get('text');
                     }
-                    window.open(waUrl, '_blank');
+                    window.location.href = waUrl;
                 }
+                if (callback) callback(JSON.stringify({status: 'success'}));
+                return;
+            }
+
+            // Handle print commands on mobile browser
+            if (action === 'print_pos_document' || action === 'print_receipt') {
+                window.print();
                 if (callback) callback(JSON.stringify({status: 'success'}));
                 return;
             }
@@ -175,7 +182,7 @@
 
                 // Handle open_url
                 if (action === 'open_url') {
-                    if (payload.url) window.open(payload.url, '_blank');
+                    if (payload.url) window.location.href = payload.url;
                     resolve({});
                     return;
                 }
@@ -188,9 +195,16 @@
                             var waParams = new URLSearchParams(waUrl.replace('whatsapp://send?', ''));
                             waUrl = 'https://wa.me/' + waParams.get('phone') + '?text=' + waParams.get('text');
                         }
-                        window.open(waUrl, '_blank');
+                        window.location.href = waUrl;
                     }
                     resolve({});
+                    return;
+                }
+
+                // Handle print commands on mobile browser
+                if (action === 'print_pos_document' || action === 'print_receipt') {
+                    window.print();
+                    resolve({status: 'success'});
                     return;
                 }
 
