@@ -86,7 +86,8 @@ def serve_admin_page(page_name: str, response: Response):
     content = content.replace("'../fonts/", "'/admin_assets/fonts/")
 
     # 3. Inject the API shim BEFORE any other JS files
-    shim_tag = '<script src="/admin_assets/js/web_api_shim.js"></script>\n'
+    import time
+    shim_tag = f'<script src="/admin_assets/js/web_api_shim.js?v={int(time.time())}"></script>\n'
     # Insert right after <head> or before first <script>
     if '<head>' in content:
         content = content.replace('<head>', '<head>\n' + shim_tag, 1)

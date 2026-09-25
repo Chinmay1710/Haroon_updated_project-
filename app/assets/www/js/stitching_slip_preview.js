@@ -139,7 +139,7 @@ window.savePdf = async function() {
  }
 };
 
-window.printSlip = async function() {
+window.printSlip = function() {
  let navParamsStr = sessionStorage.getItem("nav_params");
  let navParams = navParamsStr ? JSON.parse(navParamsStr) : null;
  if (!navParams || !navParams.order_id) {
@@ -147,10 +147,14 @@ window.printSlip = async function() {
  return;
  }
  
- try {
- await window.API.request('print_pos_document', {type: 'stitching_slip', order_id: navParams.order_id});
- } catch (e) {
+ if (window.__triggerMobilePrint) {
+ window.__triggerMobilePrint();
+ return;
+ }
+ 
+ window.API.request('print_pos_document', {type: 'stitching_slip', order_id: navParams.order_id})
+ .catch(function(e) {
  console.error(e);
  window.API.toast(e, "error");
- }
+ });
 };
