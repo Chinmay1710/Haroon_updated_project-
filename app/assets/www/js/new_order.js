@@ -361,8 +361,8 @@ function populateSavedProfilesDropdown(type) {
 function renderMeasurementFields(type, values) {
   const container = document.getElementById('modal-measurements-grid');
   
-  // Use 6 columns layout
-  container.className = "grid grid-cols-3 md:grid-cols-6 gap-4";
+  // Use 6 columns layout on all devices as requested (6x4 grid)
+  container.className = "grid grid-cols-6 gap-2 md:gap-4";
   
   let html = '';
   for (let i = 1; i <= 24; i++) {
@@ -373,7 +373,7 @@ function renderMeasurementFields(type, values) {
     html += `
     <div>
       <div class="relative">
-        <input type="text" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2.5 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center">
+        <input type="text" inputmode="decimal" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
       </div>
     </div>
     `;

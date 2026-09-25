@@ -90,8 +90,8 @@ function renderForm() {
   
   const grid = document.getElementById('am-form-grid');
   
-  // Use 6 columns layout
-  grid.className = "grid grid-cols-3 md:grid-cols-6 gap-4";
+  // Use 6 columns layout on all devices as requested (6x4 grid)
+  grid.className = "grid grid-cols-6 gap-2 md:gap-4";
   
   let html = '';
   for (let i = 1; i <= 24; i++) {
@@ -99,7 +99,7 @@ function renderForm() {
     html += `
     <div class="flex flex-col gap-1">
       <div class="relative">
-        <input class="am-meas-input w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 font-headline-md text-headline-md text-center text-on-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none" id="${id}" data-idx="${i}" placeholder="" type="text" data-field="${id}"/>
+        <input class="am-meas-input w-full bg-surface-container-low border border-outline-variant rounded-lg px-2 py-3 font-headline-md text-headline-md text-center text-on-background focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none" id="${id}" data-idx="${i}" placeholder="" type="text" inputmode="decimal" data-field="${id}"/>
       </div>
     </div>
     `;
