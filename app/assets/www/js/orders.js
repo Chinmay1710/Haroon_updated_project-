@@ -194,7 +194,7 @@ function renderOrders(orders) {
  
  // Clear everything except headers
  const headersHTML = `
- <div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+ <div class="order-row-header grid grid-cols-12 gap-1 md:gap-4 px-1 md:px-4 py-2 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
  <div class="col-span-2">Order Info</div>
  <div class="col-span-3">Customer &amp; Item</div>
  <div class="col-span-2">Dates</div>
@@ -309,12 +309,12 @@ function renderOrders(orders) {
  }
  
  const card = document.createElement('div');
- card.className = `${cardBg} rounded-xl shadow-sm border ${cardBorder} p-4 hover:shadow-md transition-shadow group grid grid-cols-1 md:grid-cols-12 gap-4 items-center relative overflow-hidden cursor-pointer`;
+ card.className = `order-row-card ${cardBg} rounded-xl shadow-sm border ${cardBorder} p-1 md:p-4 hover:shadow-md transition-shadow group grid grid-cols-12 gap-1 md:gap-4 items-center relative overflow-hidden cursor-pointer`;
  card.onclick = () => window.API.request('navigate_to', {page: 'order_details', id: o.id});
  
  card.innerHTML = `
  ${errorHighlight}
- <div class="col-span-1 md:col-span-2 flex flex-row md:flex-col justify-between md:justify-start ${isOverdue ? 'pl-2' : ''}">
+ <div class="col-span-2 flex flex-col justify-start ${isOverdue ? 'pl-2' : ''}">
  <div class="flex flex-col items-start">
  <div class="flex items-center gap-1">
  ${isOverdue ? '<span class="material-symbols-outlined text-error text-[18px]">error</span>' : ''}
@@ -323,19 +323,19 @@ function renderOrders(orders) {
  ${thumbnailHtml}
  </div>
  </div>
- <div class="col-span-1 md:col-span-3 flex flex-row md:flex-col justify-between md:justify-start">
+ <div class="col-span-3 flex flex-col justify-start">
  <div class="flex flex-col items-start" onclick="event.stopPropagation(); window.API.request('navigate_to', {page: 'customer_details', id: ${o.customer_id}})">
  <span class="font-label-lg text-label-lg text-primary hover:underline cursor-pointer">${o.customer_name}</span>
  <span class="font-body-sm text-[12px] text-on-surface-variant">${o.customer_mobile || ''}</span>
  </div>
  <span class="font-body-md text-body-md text-on-surface-variant text-sm truncate w-full pr-4 mt-1" title="${o.items || 'Custom'}">${o.items || 'Custom'}</span>
  </div>
- <div class="col-span-1 md:col-span-2 flex flex-row md:flex-col justify-between md:justify-start">
+ <div class="col-span-2 flex flex-col justify-start">
  <div class="flex flex-col">
  <span class="font-label-sm text-label-sm text-on-surface-variant uppercase">Ordered</span>
  <span class="font-body-md text-body-md text-on-surface">${window.API.formatDate(o.order_date)}</span>
  </div>
- <div class="flex flex-col mt-2 md:mt-1">
+ <div class="flex flex-col mt-1">
  <span class="font-label-sm text-label-sm ${isOverdue || isUrgent ? 'text-error font-bold' : 'text-on-surface-variant'} uppercase">Delivery</span>
  <div class="flex items-center">
  <span class="font-body-md text-body-md ${isOverdue || isUrgent ? 'text-error font-semibold' : 'text-on-surface'}">${window.API.formatDate(o.delivery_date)}</span>
@@ -343,19 +343,19 @@ function renderOrders(orders) {
  </div>
  </div>
  </div>
- <div class="col-span-1 md:col-span-1 flex flex-row md:flex-col justify-between md:justify-start items-start md:items-center">
+ <div class="col-span-1 flex flex-col justify-start items-center">
  <div class="flex flex-col items-end">
  <span class="font-body-md text-body-md text-on-surface-variant text-sm">Total:</span>
  <span class="font-label-lg text-label-lg text-on-surface">${window.API.formatCurrency(o.total_amount)}</span>
  </div>
  </div>
- <div class="col-span-1 md:col-span-2 flex justify-start">
+ <div class="col-span-2 flex justify-start">
  <span class="inline-flex items-center px-2.5 py-1 rounded-full font-label-sm text-label-[11px] ${statusBg} ${statusColor}">
  <span class="w-1.5 h-1.5 rounded-full ${statusDot} mr-1.5"></span>
  ${displayStatus}
  </span>
  </div>
- <div class="col-span-1 md:col-span-2 flex justify-end items-center gap-2">
+ <div class="col-span-2 flex justify-end items-center gap-2">
  ${(o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') ? `
  <button class="mark-complete-btn px-3 py-1.5 rounded-md bg-primary/10 text-primary font-label-sm hover:bg-primary hover:text-on-primary whitespace-nowrap shadow-sm border border-primary/20 flex items-center gap-1" title="Mark Stitching Complete">
  <span class="material-symbols-outlined text-[16px]">check_circle</span>

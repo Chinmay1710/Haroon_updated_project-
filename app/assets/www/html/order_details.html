@@ -16,6 +16,7 @@
  </style>
  <link href="../css/fonts.css" rel="stylesheet" />
  <link rel="stylesheet" href="../css/compiled.css">
+  <link rel="manifest" href="../manifest.json">
 </head>
 <body class="bg-surface text-on-surface font-body-md min-h-screen flex">
 <!-- SideNavBar (Suppressed due to sub-page task-focused intent) -->
@@ -25,6 +26,10 @@
 <!-- Order Header -->
 <header class="flex justify-between items-start">
 <div class="flex flex-col gap-stack_sm">
+<button id="mobile-menu-btn" class="md:hidden mr-3 w-10 h-10 flex items-center justify-center text-on-surface rounded-lg relative z-[10000]" onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden'); this.style.opacity='0'; this.style.pointerEvents='none'; event.stopPropagation();">
+    <span class="material-symbols-outlined" style="font-size:24px;">menu</span>
+</button>
+
 <div class="flex items-center gap-stack_md">
 <button onclick="window.API.navigate('orders_list')" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors">
 <span class="material-symbols-outlined text-on-surface-variant">arrow_back</span>
@@ -204,7 +209,32 @@
  </button>
 </div>
 
-<script src="../js/api.js?v=1787471943"></script>
-<script src="../js/app.js?v=1787471943"></script>
-<script src="../js/order_details.js?v=1787471943"></script>
+<script src="../js/api.js?v=1787472025"></script>
+<script src="../js/app.js?v=1787472025"></script>
+<script src="../js/order_details.js?v=1787472025"></script>
+
+<!-- Mobile Bottom Navigation -->
+<nav id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-40 flex items-center justify-around px-2 border-t border-outline-variant/20">
+    <a href="javascript:window.API.navigate('dashboard')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">home</span>
+        <span class="text-[10px] font-medium">Home</span>
+    </a>
+    <a href="javascript:window.API.navigate('orders_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">receipt_long</span>
+        <span class="text-[10px] font-medium">Orders</span>
+    </a>
+    <a href="javascript:window.API.navigate('customers_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">group</span>
+        <span class="text-[10px] font-medium">Customers</span>
+    </a>
+    <a href="javascript:window.API.navigate('payments')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">payments</span>
+        <span class="text-[10px] font-medium">Payments</span>
+    </a>
+    <button onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden');" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">menu</span>
+        <span class="text-[10px] font-medium">More</span>
+    </button>
+</nav>
+
 </body></html>

@@ -14,10 +14,14 @@
  </style>
 <link href="../css/fonts.css" rel="stylesheet"/>
  <link rel="stylesheet" href="../css/compiled.css">
+  <link rel="manifest" href="../manifest.json">
 </head>
 <body class="bg-surface text-on-surface flex w-full min-h-screen">
 <!-- SideNavBar -->
-<nav style="position:fixed; top:0; bottom:0; left:0; width:280px; display:flex; flex-direction:column; z-index:40; background:#091426; color:#ffffff; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+<!-- Mobile Sidebar Overlay -->
+<div id="sidebar-overlay" class="fixed inset-0 hidden md:hidden" style="z-index:9998; background:rgba(0,0,0,0.5);" onclick="document.getElementById('sidebar').classList.remove('left-0'); document.getElementById('sidebar').classList.add('-left-[290px]'); this.classList.add('hidden'); var mb=document.getElementById('mobile-menu-btn'); if(mb){mb.style.opacity='1'; mb.style.pointerEvents='auto';}"></div>
+<!-- SideNavBar -->
+<nav id="sidebar" class="fixed top-0 bottom-0 -left-[290px] md:left-0 transition-all duration-300 z-[9999] md:z-40 flex flex-col shadow-md" style="width:280px; background:#091426; color:#ffffff;">
  <div style="padding:24px; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; gap:8px;">
  <div style="width:40px; height:40px; border-radius:50%; background:#1e293b; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
  <img src="../img/logo.png" alt="Logo" style="width:100%; height:100%; object-fit:cover;" />
@@ -116,15 +120,15 @@
  </div>
 </nav>
 <!-- TopAppBar & Main Content Wrapper -->
-<div class="flex-1 ml-[280px] flex flex-col min-h-screen">
+<div class="flex-1 ml-0 md:ml-[280px] flex flex-col min-h-screen">
 <!-- TopAppBar -->
-<header class="fixed top-0 right-0 left-[280px] h-[72px] flex justify-between items-center px-gutter z-30 bg-surface text-primary shadow-sm docked top-0 full-width h-[72px]">
+<header class="fixed top-0 right-0 left-0 md:left-[280px] h-[72px] flex justify-between items-center px-gutter z-30 bg-surface text-primary shadow-sm docked top-0 full-width h-[72px]">
 <div class="flex items-center gap-stack_md flex-1">
+<button id="mobile-menu-btn" class="md:hidden mr-3 w-10 h-10 flex items-center justify-center text-on-surface rounded-lg relative z-[10000]" onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden'); this.style.opacity='0'; this.style.pointerEvents='none'; event.stopPropagation();">
+    <span class="material-symbols-outlined" style="font-size:24px;">menu</span>
+</button>
 <h2 class="font-headline-md text-headline-md text-primary font-bold tracking-tight">Tailor Manager</h2>
-<div class="relative w-full max-w-md hidden md:block">
-<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
-<input id="order-search" class="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-full font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow" placeholder="Search orders, customers..." type="text"/>
-</div>
+
 </div>
 <div class="flex items-center gap-stack_md">
 <button class="text-on-surface-variant hover:text-primary transition-colors flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container-high">
@@ -140,11 +144,15 @@
 </div>
 </header>
 <!-- Main Canvas -->
-<main class="flex-1 mt-[72px] p-container_padding max-w-7xl mx-auto w-full">
+<main class="flex-1 mt-[72px] p-container_padding max-w-7xl overflow-auto mx-auto w-full">
 <div class="mb-stack_lg flex flex-col md:flex-row md:items-end justify-between gap-stack_md">
 <div>
 <h1 class="font-headline-lg text-headline-lg text-on-surface mb-2" data-i18n="sidebar.orders">Orders</h1>
 <p class="font-body-md text-body-md text-on-surface-variant">Manage and track all customer orders across production stages.</p>
+</div>
+<div class="relative w-full md:w-80">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input id="order-search" class="block w-full pl-10 pr-3 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/60 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow" placeholder="Search orders, customers..." type="text"/>
 </div>
 <!-- Filter Tabs -->
 <div class="flex overflow-x-auto gap-2 pb-2 mb-4 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0" id="order-filter-buttons">
@@ -186,8 +194,33 @@
 </div>
 </main>
 </div>
-<script src="../js/i18n.js?v=1787471943"></script>
-<script src="../js/api.js?v=1787471943"></script>
-<script src="../js/app.js?v=1787471943"></script>
-<script src="../js/orders.js?v=1787471943"></script>
+<script src="../js/i18n.js?v=1787472025"></script>
+<script src="../js/api.js?v=1787472025"></script>
+<script src="../js/app.js?v=1787472025"></script>
+<script src="../js/orders.js?v=1787472025"></script>
+
+<!-- Mobile Bottom Navigation -->
+<nav id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-40 flex items-center justify-around px-2 border-t border-outline-variant/20">
+    <a href="javascript:window.API.navigate('dashboard')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">home</span>
+        <span class="text-[10px] font-medium">Home</span>
+    </a>
+    <a href="javascript:window.API.navigate('orders_list')" class="flex flex-col items-center gap-1 p-2 text-primary hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">receipt_long</span>
+        <span class="text-[10px] font-medium">Orders</span>
+    </a>
+    <a href="javascript:window.API.navigate('customers_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">group</span>
+        <span class="text-[10px] font-medium">Customers</span>
+    </a>
+    <a href="javascript:window.API.navigate('payments')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">payments</span>
+        <span class="text-[10px] font-medium">Payments</span>
+    </a>
+    <button onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden');" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">menu</span>
+        <span class="text-[10px] font-medium">More</span>
+    </button>
+</nav>
+
 </body></html>

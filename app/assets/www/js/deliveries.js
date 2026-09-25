@@ -12,6 +12,10 @@ document.addEventListener("DOMContentLoaded", function() {
  return;
  }
  setupFilters();
+ const searchInput = document.getElementById('delivery-search');
+ if (searchInput) {
+     searchInput.addEventListener('input', () => renderDeliveries(allDeliveries));
+ }
  loadDeliveries();
  }
  init();
@@ -128,8 +132,18 @@ function renderDeliveries(deliveries) {
  if(readyC) readyC.innerHTML = '';
  if(completedC) completedC.innerHTML = '';
  
- const readyDeliveries = deliveries.filter(d => d.status === 'STITCHING_COMPLETE' || d.status === 'PARTIALLY_DELIVERED');
- const completedDeliveries = deliveries.filter(d => d.status === 'DELIVERED').slice(0, 10);
+ const q = (document.getElementById('delivery-search')?.value || '').toLowerCase();
+ 
+ const filteredDeliveries = deliveries.filter(d => {
+     if (!q) return true;
+     const custName = (d.customer_name || '').toLowerCase();
+     const orderNum = (d.order_number || '').toLowerCase();
+     const orderId = (d.order_id || '').toLowerCase();
+     return custName.includes(q) || orderNum.includes(q) || orderId.includes(q);
+ });
+ 
+ const readyDeliveries = filteredDeliveries.filter(d => d.status === 'STITCHING_COMPLETE' || d.status === 'PARTIALLY_DELIVERED');
+ const completedDeliveries = filteredDeliveries.filter(d => d.status === 'DELIVERED').slice(0, 10);
  
  if (readyC) {
  if (readyDeliveries.length === 0) {

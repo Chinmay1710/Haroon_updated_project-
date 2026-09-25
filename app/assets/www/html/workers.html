@@ -36,10 +36,14 @@
  </style>
 <link href="../css/fonts.css" rel="stylesheet"/>
  <link rel="stylesheet" href="../css/compiled.css">
+  <link rel="manifest" href="../manifest.json">
 </head>
-<body class="font-body-md text-body-md overflow-x-hidden min-h-screen flex bg-surface">
+<body class="font-body-md text-body-md antialiased overflow-hidden flex h-screen w-full bg-surface">
 <!-- Global Navigation Rail / Sidebar (Shared Component) -->
-<nav style="position:fixed; top:0; bottom:0; left:0; width:280px; display:flex; flex-direction:column; z-index:40; background:#091426; color:#ffffff; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+<!-- Mobile Sidebar Overlay -->
+<div id="sidebar-overlay" class="fixed inset-0 hidden md:hidden" style="z-index:9998; background:rgba(0,0,0,0.5);" onclick="document.getElementById('sidebar').classList.remove('left-0'); document.getElementById('sidebar').classList.add('-left-[290px]'); this.classList.add('hidden'); var mb=document.getElementById('mobile-menu-btn'); if(mb){mb.style.opacity='1'; mb.style.pointerEvents='auto';}"></div>
+<!-- SideNavBar -->
+<nav id="sidebar" class="fixed top-0 bottom-0 -left-[290px] md:left-0 transition-all duration-300 z-[9999] md:z-40 flex flex-col shadow-md" style="width:280px; background:#091426; color:#ffffff;">
  <div style="padding:24px; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; gap:8px;">
  <div style="width:40px; height:40px; border-radius:50%; background:#1e293b; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
  <img src="../img/logo.png" alt="Logo" style="width:100%; height:100%; object-fit:cover;" />
@@ -138,11 +142,15 @@
  </div>
 </nav>
 <!-- Main Content Wrapper -->
-<div class="flex-1 flex flex-col ml-[280px]">
+<div class="flex-1 flex flex-col ml-0 md:ml-0 md:ml-[280px]">
 <!-- TopAppBar (Shared Component) -->
-<header class="fixed top-0 right-0 left-[280px] h-[72px] flex justify-between items-center px-gutter z-30 bg-surface shadow-sm">
+<header class="fixed top-0 right-0 left-0 md:left-0 md:left-[280px] h-[72px] flex justify-between items-center px-gutter z-30 bg-surface shadow-sm">
 <!-- Brand / Search Area -->
 <div class="flex items-center gap-8 flex-1">
+<button id="mobile-menu-btn" class="md:hidden mr-3 w-10 h-10 flex items-center justify-center text-on-surface rounded-lg relative z-[10000]" onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden'); this.style.opacity='0'; this.style.pointerEvents='none'; event.stopPropagation();">
+    <span class="material-symbols-outlined" style="font-size:24px;">menu</span>
+</button>
+
 <span class="font-headline-md text-headline-md text-primary font-bold">Tailor Manager</span>
 </div>
 <!-- Global Actions -->
@@ -157,14 +165,11 @@
 <span class="material-symbols-outlined text-[20px]" data-icon="add">add</span>
  New Order
  </button>
-<!-- Profile -->
-<div class="ml-2">
-<img alt='\"Shop' class="w-10 h-10 rounded-full object-cover border border-outline-variant/20 shadow-sm" data-alt="A small, professional portrait photograph of a mature master tailor in a warmly lit, elegant workshop, soft focus background, high quality, modern aesthetic." profile\"="" src='\"../img/profile.png\"/'/>
-</div>
+
 </div>
 </header>
 <!-- Canvas Area -->
-<main class="mt-[72px] p-container_padding flex-1 flex flex-col max-w-[1600px] mx-auto w-full">
+<main class="flex-1 mt-[72px] overflow-y-auto p-4 pb-24 md:p-container_padding md:pb-4 max-w-[1600px] mx-auto w-full no-scrollbar min-w-0">
 <!-- Page Header Section -->
 <div class="flex flex-col md:flex-row md:items-end justify-between gap-stack_md mb-stack_lg">
 <div>
@@ -177,7 +182,7 @@
 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
 <span class="material-symbols-outlined text-[20px]" data-icon="search">search</span>
 </div>
-<input class="block w-full pl-10 pr-3 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/60 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow" placeholder="Search workers..." type="text"/>
+<input class="block w-full pl-10 pr-3 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/60 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow" id="worker-search" placeholder="Search workers..." type="text" oninput="renderWorkers()"/>
 </div>
 <!-- Page Primary Action -->
 <div class="flex gap-3">
@@ -223,11 +228,15 @@
  <button id="tab-btn-rates" class="px-4 py-2 font-label-lg border-b-2 border-transparent text-on-surface-variant hover:text-primary transition-colors" onclick="switchAdminTab('rates')">Garment Rates</button>
 </div>
 
-<div id="tab-workers" class="admin-tab-content block">
+<div id="tab-workers" class="admin-tab-content block min-w-0">
 
-<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest overflow-hidden flex-1">
-<div class="overflow-x-auto h-full">
-<table class="w-full text-left border-collapse min-w-[800px]">
+<div class="md:hidden text-xs text-on-surface-variant flex items-center gap-1 mb-2 italic">
+  <span class="material-symbols-outlined text-[14px]">swipe</span> Swipe left/right to view more
+</div>
+
+<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest w-full min-w-0">
+<div class="w-full overflow-x-auto overflow-y-visible" style="-webkit-overflow-scrolling: touch;">
+<table class="w-full text-left border-collapse min-w-[850px]">
 <thead>
 <tr class="bg-surface/50 border-b border-surface-container-highest text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
 <th class="px-6 py-4 font-medium">Worker</th>
@@ -256,9 +265,13 @@
 
 </div> <!-- End tab-workers -->
 
-<div id="tab-pending" class="admin-tab-content hidden">
- <div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest overflow-hidden">
- <table class="w-full text-left border-collapse">
+<div id="tab-pending" class="admin-tab-content hidden min-w-0">
+ <div class="md:hidden text-xs text-on-surface-variant flex items-center gap-1 mb-2 italic">
+   <span class="material-symbols-outlined text-[14px]">swipe</span> Swipe left/right to view more
+ </div>
+ <div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest w-full min-w-0">
+ <div class="w-full overflow-x-auto overflow-y-visible" style="-webkit-overflow-scrolling: touch;">
+ <table class="w-full text-left border-collapse min-w-[700px]">
  <thead>
  <tr class="bg-surface/50 border-b border-surface-container-highest text-on-surface-variant font-label-sm uppercase tracking-wider">
  <th class="px-6 py-4 font-medium">Date</th>
@@ -273,19 +286,24 @@
  </tbody>
  </table>
  </div>
+ </div>
 </div>
 
-<div id="tab-rates" class="admin-tab-content hidden">
- <div class="flex justify-between items-center mb-4">
+<div id="tab-rates" class="admin-tab-content hidden min-w-0">
+ <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-4">
  <h3 class="font-headline-sm">Garment Piece Rates</h3>
  <div class="flex gap-2">
- <input type="text" id="new-garment-name" placeholder="Garment (e.g. Shirt)" class="px-3 py-2 border rounded-lg bg-surface">
+ <input type="text" id="new-garment-name" placeholder="Garment" class="px-3 py-2 border rounded-lg bg-surface flex-1 md:flex-none md:w-auto">
  <input type="number" id="new-garment-rate" placeholder="Rate (₹)" class="px-3 py-2 border rounded-lg bg-surface w-24">
  <button class="bg-primary text-on-primary px-4 py-2 rounded-lg" onclick="saveGarmentRate()">Add/Update</button>
  </div>
  </div>
- <div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest overflow-hidden">
- <table class="w-full text-left border-collapse">
+ <div class="md:hidden text-xs text-on-surface-variant flex items-center gap-1 mb-2 italic">
+   <span class="material-symbols-outlined text-[14px]">swipe</span> Swipe left/right to view more
+ </div>
+ <div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest w-full min-w-0">
+ <div class="w-full overflow-x-auto overflow-y-visible" style="-webkit-overflow-scrolling: touch;">
+ <table class="w-full text-left border-collapse min-w-[700px]">
  <thead>
  <tr class="bg-surface/50 border-b border-surface-container-highest text-on-surface-variant font-label-sm uppercase tracking-wider">
  <th class="px-6 py-4 font-medium">Garment Type</th>
@@ -297,6 +315,7 @@
  <!-- Populated by JS -->
  </tbody>
  </table>
+ </div>
  </div>
 </div>
 
@@ -477,8 +496,8 @@
 
 <!-- Scripts -->
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
-<script src="../js/api.js?v=1787471943"></script>
-<script src="../js/app.js?v=1787471943"></script>
+<script src="../js/api.js?v=1787472025"></script>
+<script src="../js/app.js?v=1787472025"></script>
 
 <!-- Edit Entry Modal -->
 <div class="fixed inset-0 z-50 bg-on-surface/40 hidden flex items-center justify-center" id="edit-entry-modal">
@@ -553,20 +572,23 @@
 
  let globalWorkersList = [];
 
- async function loadWorkers() {
- try {
- const res = await window.API.request('get_all_workers');
+ function renderWorkers() {
  const tbody = document.getElementById('workers-list');
+ if(!tbody) return;
  tbody.innerHTML = '';
+ const q = (document.getElementById('worker-search')?.value || '').toLowerCase();
  
- globalWorkersList = res.workers || [];
+ const filtered = globalWorkersList.filter(w => {
+     if(!q) return true;
+     return (w.name || '').toLowerCase().includes(q) || (w.phone || '').toLowerCase().includes(q);
+ });
  
- if (!res.workers || res.workers.length === 0) {
- tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant">No workers found.</td></tr>`;
- return;
+ if (filtered.length === 0) {
+     tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant">No workers found.</td></tr>`;
+     return;
  }
  
- for (const w of res.workers) {
+ for (const w of filtered) {
  const ledger = w.ledger || {total_earned:0, total_advance:0, remaining_balance:0};
  
  const badge = w.worker_type === 'DAILY_SALARY' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
@@ -594,7 +616,16 @@
  `;
  tbody.appendChild(tr);
  }
- } catch (e) { console.error(e); }
+ }
+ 
+ async function loadWorkers() {
+     try {
+         const res = await window.API.request('get_all_workers');
+         globalWorkersList = res.workers || [];
+         renderWorkers();
+     } catch(e) {
+         console.error(e);
+     }
  }
  
  async function saveWorker() {
@@ -1072,6 +1103,51 @@
  document.addEventListener("DOMContentLoaded", initWorkers);
 
 </script>
-<script src="../js/i18n.js?v=1787471943"></script>
+<script src="../js/i18n.js?v=1787472025"></script>
+
+<script>
+// closeSidebarOnOutsideClick
+document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('click', function(event) {
+        const sidebar = document.getElementById('sidebar');
+        const menuBtn = document.getElementById('mobile-menu-btn');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (sidebar && sidebar.classList.contains('left-0') && window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && (!menuBtn || !menuBtn.contains(event.target))) {
+                sidebar.classList.remove('left-0');
+                sidebar.classList.add('-left-[290px]');
+                if(overlay) overlay.classList.add('hidden');
+                if(menuBtn) { menuBtn.style.opacity='1'; menuBtn.style.pointerEvents='auto'; }
+            }
+        }
+    });
+});
+</script>
+
+
+<!-- Mobile Bottom Navigation -->
+<nav id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-40 flex items-center justify-around px-2 border-t border-outline-variant/20">
+    <a href="javascript:window.API.navigate('dashboard')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">home</span>
+        <span class="text-[10px] font-medium">Home</span>
+    </a>
+    <a href="javascript:window.API.navigate('orders_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">receipt_long</span>
+        <span class="text-[10px] font-medium">Orders</span>
+    </a>
+    <a href="javascript:window.API.navigate('customers_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">group</span>
+        <span class="text-[10px] font-medium">Customers</span>
+    </a>
+    <a href="javascript:window.API.navigate('payments')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">payments</span>
+        <span class="text-[10px] font-medium">Payments</span>
+    </a>
+    <button onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden');" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">menu</span>
+        <span class="text-[10px] font-medium">More</span>
+    </button>
+</nav>
+
 </body>
 </html>

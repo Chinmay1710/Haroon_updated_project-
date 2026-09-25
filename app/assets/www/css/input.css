@@ -1,3 +1,109 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+/* True Mobile-First App Adjustments */
+@media (max-width: 768px) {
+
+    body {
+        -webkit-tap-highlight-color: transparent;
+    }
+    main {
+        padding-bottom: 80px !important; /* Space for bottom nav */
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        width: 100% !important;
+        margin-left: 0 !important;
+    }
+    header {
+        height: 64px !important;
+    }
+    /* Typography Overrides */
+    .text-headline-md, .font-headline-md { font-size: 24px !important; line-height: 1.2 !important; }
+    .text-title-lg, .font-title-lg { font-size: 20px !important; }
+    .text-body-md, .font-body-md { font-size: 14px !important; }
+    .text-label-lg, .font-label-lg { font-size: 14px !important; }
+    
+    /* Touch Targets */
+    button, a, input, select { min-height: 44px; }
+    
+    /* Grid overrides */
+    .grid-cols-2, .grid-cols-3, .grid-cols-4 {
+        grid-template-columns: 1fr !important;
+    }
+    .mobile-2-col {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    /* Fix horizontal scrolling */
+    .overflow-x-auto {
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+    }
+    
+    /* Hide top hamburger if we use bottom nav 'More' ? User said top header should have hamburger, so we keep it! */
+}
+
+/* COMPACT MOBILE ORDER ROW */
+@media (max-width: 767px) {
+    /* Allow wrapping and zero minimum width for flex items to prevent overflow */
+    .order-row-card *, .order-row-header * {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: normal;
+    }
+    
+    /* Make typography compact */
+    .order-row-card .font-label-lg,
+    .order-row-card .text-label-lg,
+    .order-row-card .font-body-md,
+    .order-row-card .text-body-md {
+        font-size: 11px !important;
+        line-height: 1.2 !important;
+    }
+    
+    .order-row-header, .order-row-card .font-label-sm,
+    .order-row-card .text-label-sm,
+    .order-row-card .font-body-sm,
+    .order-row-card .text-body-sm {
+        font-size: 10px !important;
+        line-height: 1.1 !important;
+    }
+    
+    /* Order Number and Icons */
+    .order-row-card .material-symbols-outlined {
+        font-size: 12px !important;
+    }
+    
+    /* Fix thumbnail image */
+    .order-row-card img {
+        width: 30px !important;
+        height: 30px !important;
+    }
+    
+    /* Action buttons */
+    .order-row-card .mark-complete-btn {
+        padding: 4px 6px !important;
+        font-size: 10px !important;
+    }
+    .order-row-card .w-8.h-8 {
+        width: 24px !important;
+        height: 24px !important;
+    }
+    
+    /* Remove horizontal padding from main orders container on mobile so it uses full width */
+    #orders-container {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+    }
+    .order-row-card {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+    }
+    
+    /* Ensure grid columns can shrink below minimum content size */
+    .order-row-card.grid {
+        grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+    }
+}
