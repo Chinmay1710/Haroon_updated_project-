@@ -314,17 +314,19 @@ window.__triggerMobilePrint = function() {
                 width: 100% !important;
                 max-width: 100% !important;
                 margin: 0 !important;
-                padding: 20px !important;
+                padding: 2vw !important;
                 box-sizing: border-box !important;
-                padding-bottom: 200px !important;
+                padding-bottom: 25vw !important;
             }
-            .pos-receipt, .pos-slip { font-size: 40px !important; }
-            .text-lg { font-size: 55px !important; }
-            .flex-between[style*="14px"] { font-size: 38px !important; }
-            #rp-paid-history { font-size: 30px !important; }
-            .text-center[style*="10px"], .flex-between[style*="10px"] { font-size: 28px !important; }
-            #ss-generated-date { font-size: 25px !important; }
-            .receipt-table th, .receipt-table td { font-size: 38px !important; }
+            /* Use extremely large VW (viewport width) units to ensure massive, clear text regardless of Chrome's internal PDF scale */
+            .pos-receipt, .pos-slip { font-size: 5.5vw !important; font-weight: 500 !important; }
+            .text-lg { font-size: 8vw !important; font-weight: bold !important; }
+            .flex-between[style*="14px"] { font-size: 5vw !important; }
+            #rp-paid-history { font-size: 4.5vw !important; }
+            .text-center[style*="10px"], .flex-between[style*="10px"] { font-size: 4vw !important; }
+            #ss-generated-date { font-size: 3.5vw !important; }
+            .receipt-table th, .receipt-table td { font-size: 5.5vw !important; padding: 1.5vw 0 !important; }
+            .dashed-line { border-top-width: 3px !important; margin: 2vw 0 !important; }
         }
     `;
     document.head.appendChild(style);
