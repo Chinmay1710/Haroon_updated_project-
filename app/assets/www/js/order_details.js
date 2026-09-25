@@ -225,7 +225,7 @@ function renderOrder(o) {
  // Measurements for this item
  if (item.measurements && Object.keys(item.measurements).length > 0) {
   const mGrid = document.createElement('div');
-  mGrid.className = 'grid grid-cols-3 md:grid-cols-6 gap-2 p-4';
+  mGrid.className = 'grid grid-cols-6 gap-1 md:gap-2 p-2 md:p-4';
   
   for (let i = 1; i <= 24; i++) {
     const key = `Box ${i}`;
@@ -234,10 +234,10 @@ function renderOrder(o) {
     
     if (val.trim() === '') {
         // Render an empty placeholder to maintain grid structure but look invisible
-        mDiv.className = 'min-h-[40px]';
+        mDiv.className = 'min-h-[30px] md:min-h-[40px]';
     } else {
-        mDiv.className = 'bg-surface-container-lowest rounded flex flex-col items-center justify-center text-center p-2 border border-outline-variant/30 min-h-[40px]';
-        mDiv.innerHTML = `<span class="font-label-lg text-primary">${val}</span>`;
+        mDiv.className = 'bg-surface-container-lowest rounded flex flex-col items-center justify-center text-center p-1 md:p-2 border border-outline-variant/30 min-h-[30px] md:min-h-[40px]';
+        mDiv.innerHTML = `<span class="text-sm md:font-label-lg md:text-label-lg text-primary font-bold md:font-semibold">${val}</span>`;
     }
     mGrid.appendChild(mDiv);
   }
