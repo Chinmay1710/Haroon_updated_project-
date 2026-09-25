@@ -202,7 +202,7 @@
                 }
 
                 // Handle print commands on mobile browser
-                if (action === 'print_pos_document' || action === 'print_receipt') {
+                if (action === 'print_pos_document' || action === 'print_receipt' || action === 'print_stitching_slip') {
                     // Inject website-specific 80mm styling dynamically
                     // This ensures Desktop app QWebEngine is completely unaffected
                     var style = document.createElement('style');
@@ -210,17 +210,20 @@
                     style.innerHTML = `
                         @media print {
                             @page { margin: 0; size: 80mm auto !important; }
-                            .pos-receipt, .pos-slip {
-                                width: 100% !important; max-width: 80mm !important;
-                                font-size: 21px !important; padding-bottom: 40px !important;
+                            body {
+                                margin: 0 !important;
+                                padding: 0 !important;
+                                background: white !important;
                             }
-                            .text-lg { font-size: 28px !important; }
-                            .flex-between[style*="14px"] { font-size: 19px !important; }
-                            #rp-paid-history { font-size: 15px !important; }
-                            .text-center[style*="10px"] { font-size: 14px !important; }
-                            .flex-between[style*="10px"] { font-size: 14px !important; }
-                            #ss-generated-date { font-size: 12px !important; }
-                            .receipt-table th, .receipt-table td { font-size: 19px !important; }
+                            .pos-receipt, .pos-slip {
+                                width: 76mm !important;
+                                max-width: 76mm !important;
+                                margin: 0 auto !important;
+                                padding: 2mm !important;
+                                box-sizing: border-box !important;
+                                /* 15mm safe space at the very bottom for manual cutting */
+                                padding-bottom: 15mm !important;
+                            }
                         }
                     `;
                     document.head.appendChild(style);
