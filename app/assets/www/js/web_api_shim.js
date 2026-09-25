@@ -203,49 +203,7 @@
 
                 // Handle print commands on mobile browser
                 if (action === 'print_pos_document' || action === 'print_receipt' || action === 'print_stitching_slip') {
-                    // Inject website-specific scaling dynamically to bypass Chrome's A4 print bug
-                    // Chrome Android forces A4 size (210mm wide) before sending to the 80mm print spooler.
-                    // The spooler shrinks the A4 page to 80mm. 
-                    // To fill the 80mm paper, we must expand our content to 100% of the A4 page
-                    // and scale all fonts up by ~2.7x so they are readable when shrunk.
-                    var style = document.createElement('style');
-                    style.id = 'website-thermal-print-style';
-                    style.innerHTML = `
-                        @media print {
-                            body, html {
-                                margin: 0 !important;
-                                padding: 0 !important;
-                                background: white !important;
-                                width: 100% !important;
-                            }
-                            .pos-receipt, .pos-slip {
-                                width: 100% !important;
-                                max-width: 100% !important;
-                                margin: 0 !important;
-                                padding: 20px !important;
-                                box-sizing: border-box !important;
-                                /* Huge bottom padding so it survives the 2.7x shrinkage */
-                                padding-bottom: 200px !important;
-                            }
-                            /* Scale fonts up by ~2.7x to survive A4-to-80mm shrinkage */
-                            .pos-receipt, .pos-slip { font-size: 40px !important; }
-                            .text-lg { font-size: 55px !important; }
-                            .flex-between[style*="14px"] { font-size: 38px !important; }
-                            #rp-paid-history { font-size: 30px !important; }
-                            .text-center[style*="10px"], .flex-between[style*="10px"] { font-size: 28px !important; }
-                            #ss-generated-date { font-size: 25px !important; }
-                            .receipt-table th, .receipt-table td { font-size: 38px !important; }
-                        }
-                    `;
-                    document.head.appendChild(style);
-                    window.print();
-                    
-                    // Remove it shortly after the print dialog resolves
-                    setTimeout(function() {
-                        var injected = document.getElementById('website-thermal-print-style');
-                        if (injected) injected.remove();
-                    }, 2000);
-                    
+                    if (window.__triggerMobilePrint) window.__triggerMobilePrint();
                     resolve({status: 'success'});
                     return;
                 }
@@ -338,3 +296,52 @@
     };
 
 })();
+
+// Android Chrome strictly blocks window.print() if called after an async/await or Promise delay.
+// To bypass this, we must overwrite the print functions to run 100% synchronously on click.
+window.__triggerMobilePrint = function() {
+    var style = document.createElement('style');
+    style.id = 'website-thermal-print-style';
+    style.innerHTML = `
+        @media print {
+            body, html {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                width: 100% !important;
+            }
+            .pos-receipt, .pos-slip {
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 20px !important;
+                box-sizing: border-box !important;
+                padding-bottom: 200px !important;
+            }
+            .pos-receipt, .pos-slip { font-size: 40px !important; }
+            .text-lg { font-size: 55px !important; }
+            .flex-between[style*="14px"] { font-size: 38px !important; }
+            #rp-paid-history { font-size: 30px !important; }
+            .text-center[style*="10px"], .flex-between[style*="10px"] { font-size: 28px !important; }
+            #ss-generated-date { font-size: 25px !important; }
+            .receipt-table th, .receipt-table td { font-size: 38px !important; }
+        }
+    `;
+    document.head.appendChild(style);
+    window.print();
+    
+    setTimeout(function() {
+        var injected = document.getElementById('website-thermal-print-style');
+        if (injected) injected.remove();
+    }, 2000);
+};
+
+// Overwrite the async functions defined in the page scripts once they load
+window.addEventListener('load', function() {
+    if (typeof window.printSlip !== 'undefined') {
+        window.printSlip = window.__triggerMobilePrint;
+    }
+    if (typeof window.printReceipt !== 'undefined') {
+        window.printReceipt = window.__triggerMobilePrint;
+    }
+});
