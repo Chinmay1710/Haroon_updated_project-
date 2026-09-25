@@ -210,20 +210,29 @@
                     style.innerHTML = `
                         @media print {
                             @page { margin: 0; size: 80mm auto !important; }
-                            body {
+                            body, html {
                                 margin: 0 !important;
                                 padding: 0 !important;
                                 background: white !important;
+                                width: 100% !important;
                             }
                             .pos-receipt, .pos-slip {
-                                width: 76mm !important;
-                                max-width: 76mm !important;
-                                margin: 0 auto !important;
+                                width: 100% !important;
+                                max-width: 100% !important;
+                                margin: 0 !important;
                                 padding: 2mm !important;
                                 box-sizing: border-box !important;
                                 /* 15mm safe space at the very bottom for manual cutting */
                                 padding-bottom: 15mm !important;
                             }
+                            /* Use physical print units (pt) so the spooler renders exact physical sizes */
+                            .pos-receipt, .pos-slip { font-size: 11pt !important; }
+                            .text-lg { font-size: 15pt !important; }
+                            .flex-between[style*="14px"] { font-size: 10.5pt !important; }
+                            #rp-paid-history { font-size: 8.5pt !important; }
+                            .text-center[style*="10px"], .flex-between[style*="10px"] { font-size: 8pt !important; }
+                            #ss-generated-date { font-size: 7.5pt !important; }
+                            .receipt-table th, .receipt-table td { font-size: 10.5pt !important; }
                         }
                     `;
                     document.head.appendChild(style);
