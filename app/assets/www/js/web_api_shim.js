@@ -203,7 +203,34 @@
 
                 // Handle print commands on mobile browser
                 if (action === 'print_pos_document' || action === 'print_receipt') {
+                    // Inject website-specific 80mm styling dynamically
+                    // This ensures Desktop app QWebEngine is completely unaffected
+                    var style = document.createElement('style');
+                    style.id = 'website-thermal-print-style';
+                    style.innerHTML = `
+                        @media print {
+                            @page { margin: 0; size: 80mm auto !important; }
+                            .pos-receipt, .pos-slip {
+                                width: 100% !important; max-width: 80mm !important;
+                                font-size: 21px !important; padding-bottom: 40px !important;
+                            }
+                            .text-lg { font-size: 28px !important; }
+                            .flex-between[style*="14px"] { font-size: 19px !important; }
+                            #rp-paid-history { font-size: 15px !important; }
+                            .text-center[style*="10px"] { font-size: 14px !important; }
+                            .flex-between[style*="10px"] { font-size: 14px !important; }
+                            #ss-generated-date { font-size: 12px !important; }
+                            .receipt-table th, .receipt-table td { font-size: 19px !important; }
+                        }
+                    `;
+                    document.head.appendChild(style);
                     window.print();
+                    // Remove it shortly after the print dialog resolves
+                    setTimeout(function() {
+                        var injected = document.getElementById('website-thermal-print-style');
+                        if (injected) injected.remove();
+                    }, 2000);
+                    
                     resolve({status: 'success'});
                     return;
                 }
