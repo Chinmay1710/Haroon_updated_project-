@@ -64,6 +64,7 @@ document.addEventListener("DOMContentLoaded", function() {
  defaultDate.setDate(today.getDate() + 5);
  document.getElementById('order-date').value = defaultDate.toISOString().split('T')[0];
  
+ loadClothingTypes();
  loadCustomers(initialCustomerId);
  
  document.getElementById('order-advance').addEventListener('input', (e) => {
@@ -880,3 +881,24 @@ window.closeImageModal = function(event) {
  
  }
 }
+
+
+ async function loadClothingTypes() {
+  try {
+   const settings = await window.API.request('get_settings');
+   const cTypes = settings.clothing_types || "Shirt,Pant,Kurta,Blouse,Suit,Salwar Kameez,Lehenga,Sherwani,Nehru Jacket,Pyjama,Churidar";
+   const select = document.getElementById('modal-item-type');
+   if (select) {
+    select.innerHTML = '';
+    const types = cTypes.split(',').map(s => s.trim()).filter(s => s);
+    types.forEach(t => {
+     const opt = document.createElement('option');
+     opt.value = t;
+     opt.textContent = t;
+     select.appendChild(opt);
+    });
+   }
+  } catch (e) {
+   console.error("Failed to load clothing types");
+  }
+ }

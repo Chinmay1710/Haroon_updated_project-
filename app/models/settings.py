@@ -25,6 +25,7 @@ class ShopSettings(Base):
     auto_backup = Column(Boolean, default=True)
     is_setup_done = Column(Boolean, default=False)
     dictation_language = Column(String(20), default="en-IN")
+    clothing_types = Column(Text, default="Shirt,Pant,Kurta,Blouse,Suit,Salwar Kameez,Lehenga,Sherwani,Nehru Jacket,Pyjama,Churidar")
     
     # Twilio Integration Settings
     twilio_account_sid = Column(String(255), default="")

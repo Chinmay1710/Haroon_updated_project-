@@ -40,6 +40,7 @@ async function loadSettings() {
  setVal('set-address', data.address);
  setVal('set-currency', data.currency_symbol);
  setVal('set-unit', data.measurement_unit);
+ setVal('set-clothing-types', data.clothing_types);
  
  const dictationSelect = document.getElementById('dictationLanguageSelect');
  if (dictationSelect) {
@@ -63,7 +64,8 @@ async function saveSettings() {
  phone: getVal('set-phone'),
  address: getVal('set-address'),
  currency: getVal('set-currency'),
- measurement_unit: getVal('set-unit')
+ measurement_unit: getVal('set-unit'),
+ clothing_types: getVal('set-clothing-types')
  };
  
  const dictationSelect = document.getElementById('dictationLanguageSelect');

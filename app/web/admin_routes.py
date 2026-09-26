@@ -251,6 +251,7 @@ def handle_get_settings(payload):
             "twilio_auth_token": s.twilio_auth_token,
             "twilio_sender_number": s.twilio_sender_number,
             "dictation_language": s.dictation_language,
+            "clothing_types": s.clothing_types,
         }
         return {"status": "success", "data": data}
     finally:
