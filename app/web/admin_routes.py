@@ -789,6 +789,7 @@ def handle_get_order_details(payload):
                 "notes": item.notes or "",
                 "image_path": image_path_out,
                 "is_delivered": getattr(item, "is_delivered", False),
+                "is_ready": getattr(item, "is_ready", False),
                 "measurements": {}
             }
             for m in item.measurements:

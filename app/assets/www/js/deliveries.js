@@ -187,8 +187,17 @@ window.updateStatus = async function(orderId, newStatus, btnElement) {
     btnElement.disabled = false;
    }
    if (res && res.items) {
-    let allItemIds = res.items.map(i => i.id);
-    window.API.request('navigate_to', {page: 'add_payment', order_id: orderId, complete_after: true, delivered_item_ids: allItemIds});
+    let deliverIds = [];
+    if (res.status === 'PARTIALLY_COMPLETE' || res.status === 'PARTIALLY_DELIVERED') {
+        deliverIds = res.items.filter(i => i.is_ready && !i.is_delivered).map(i => i.id);
+        if (deliverIds.length === 0) {
+            // fallback if something is weird
+            deliverIds = res.items.filter(i => !i.is_delivered).map(i => i.id);
+        }
+    } else {
+        deliverIds = res.items.filter(i => !i.is_delivered).map(i => i.id);
+    }
+    window.API.request('navigate_to', {page: 'add_payment', order_id: orderId, complete_after: true, delivered_item_ids: deliverIds});
    }
   } catch (e) {
    console.error(e);

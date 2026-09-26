@@ -376,7 +376,7 @@ function renderOrders(orders) {
  </span>
  </div>
  <div class="col-span-2 flex flex-col justify-center items-end gap-1 pr-8 relative">
- ${(o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'PARTIALLY_COMPLETE') ? `
+ ${((o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') && o.raw_items && o.raw_items.length > 1) ? `
  <button class="mark-partial-btn px-2 py-1 w-full rounded bg-[#fef3c7] text-[#d97706] font-label-sm text-[10px] hover:bg-[#f59e0b] hover:text-white shadow-sm border border-[#f59e0b]/30 flex items-center justify-center gap-1" title="Partially Complete">
  <span class="material-symbols-outlined text-[12px]">timelapse</span>
  Partial
