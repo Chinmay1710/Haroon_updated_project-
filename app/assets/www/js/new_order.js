@@ -224,11 +224,23 @@ async function selectCustomer(id, name, mobile) {
  if (mobileEl) mobileEl.textContent = mobile;
  if (initialsEl) initialsEl.textContent = name.substring(0, 2).toUpperCase();
 
+ // Disable add item button while loading profiles
+ if (addItemBtn) {
+     addItemBtn.classList.add('opacity-50', 'pointer-events-none');
+     addItemBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">sync</span> Loading...';
+ }
+
  // Load their profiles
  try {
  availableProfiles = await window.API.request('get_measurements_for_customer', {customer_id: id});
  } catch(e) {
  availableProfiles = [];
+ }
+ 
+ // Re-enable add item button after loading
+ if (addItemBtn) {
+     addItemBtn.classList.remove('opacity-50', 'pointer-events-none');
+     addItemBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">add</span> Add Item';
  }
 }
 
