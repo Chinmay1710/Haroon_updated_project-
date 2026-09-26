@@ -35,6 +35,10 @@ def get_engine():
             if db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql://", 1)
             
+            # Force psycopg2 driver (not psycopg v3) for compatibility
+            if db_url.startswith("postgresql://") and "+psycopg" not in db_url:
+                db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            
             _engine = create_engine(
                 db_url,
                 echo=False,
