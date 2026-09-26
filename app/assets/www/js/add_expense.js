@@ -53,19 +53,16 @@ async function saveExpense() {
  await window.API.request('create_expense', payload);
  const successMsg = document.getElementById('success-message');
  if (successMsg) {
- successMsg.classList.remove('hidden', '', 'translate-y-[-10px]');
- successMsg.classList.add('opacity-100', 'translate-y-0');
- document.getElementById('add-expense-form').reset();
- document.getElementById('expenseDate').valueAsDate = new Date();
- 
- 
-
- successMsg.classList.add('hidden', '', 'translate-y-[-10px]');
- successMsg.classList.remove('opacity-100', 'translate-y-0');
- window.API.navigate('expenses_list');
- 
+     successMsg.classList.remove('hidden', 'translate-y-[-10px]');
+     successMsg.classList.add('opacity-100', 'translate-y-0');
+     document.getElementById('add-expense-form').reset();
+     document.getElementById('expenseDate').valueAsDate = new Date();
+     
+     setTimeout(() => {
+         window.API.navigate('expenses_list');
+     }, 1000);
  } else {
- window.API.navigate('expenses_list');
+     window.API.navigate('expenses_list');
  }
  } catch (e) {
  console.error(e);
