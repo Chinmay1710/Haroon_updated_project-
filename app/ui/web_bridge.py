@@ -21,6 +21,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def safe_float(val, default=0.0):
+    try:
+        if val == "" or val is None:
+            return default
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 class WebBridge(QObject):
     """Bridge between Javascript and Python."""
     
@@ -191,7 +199,7 @@ class WebBridge(QObject):
                     pin=payload.get("pin"),
                     worker_type=payload.get("worker_type", "PIECE_RATE"),
                     worker_role=payload.get("worker_role", "STITCHING"),
-                    daily_rate=float(payload.get("daily_rate", 0.0))
+                    daily_rate=safe_float(payload.get("daily_rate", 0.0))
                 )
                 response = {"status": "success", "data": {"worker": w}}
 
@@ -212,7 +220,7 @@ class WebBridge(QObject):
 
             elif action == "set_garment_rate":
                 worker_srv = self.services["worker"]
-                rate = worker_srv.set_garment_rate(payload.get("garment_type"), float(payload.get("rate", 0)))
+                rate = worker_srv.set_garment_rate(payload.get("garment_type"), safe_float(payload.get("rate", 0)))
                 response = {"status": "success", "data": {"rate": rate}}
 
             elif action == "delete_garment_rate":
@@ -235,8 +243,8 @@ class WebBridge(QObject):
                 result = worker_srv.edit_pending_entry(
                     entry_id=payload.get("entry_id"),
                     new_quantity=int(payload.get("quantity", 0)),
-                    new_extra_amount=float(payload.get("extra_amount", 0.0)),
-                    new_total_amount=float(payload.get("total_amount", 0.0))
+                    new_extra_amount=safe_float(payload.get("extra_amount", 0.0)),
+                    new_total_amount=safe_float(payload.get("total_amount", 0.0))
                 )
                 if "error" in result:
                     response = {"status": "error", "message": result["error"]}
@@ -245,7 +253,7 @@ class WebBridge(QObject):
 
             elif action == "record_advance":
                 worker_srv = self.services["worker"]
-                advance = worker_srv.record_advance(payload.get("worker_id"), float(payload.get("amount", 0)), payload.get("notes", ""))
+                advance = worker_srv.record_advance(payload.get("worker_id"), safe_float(payload.get("amount", 0)), payload.get("notes", ""))
                 response = {"status": "success", "data": {"advance": advance}}
 
             elif action == "get_worker_ledger":
@@ -619,7 +627,7 @@ class WebBridge(QObject):
                     items = [{
                         "clothing_type": payload.get("clothingType", "Custom"),
                         "quantity": payload.get("quantity", 1),
-                        "price": float(payload.get("price", 0)),
+                        "price": safe_float(payload.get("price", 0)),
                         "measurement_profile_id": payload.get("measurementId")
                     }]
 
@@ -631,7 +639,7 @@ class WebBridge(QObject):
                     order_date=datetime.now().date(),
                     delivery_date=deliv_date,
                     special_instructions=payload.get("notes", ""),
-                    advance_amount=float(payload.get("advance", 0)),
+                    advance_amount=safe_float(payload.get("advance", 0)),
                     payment_method=payload.get("paymentMethod", "Cash")
                 )
                 
@@ -959,7 +967,7 @@ class WebBridge(QObject):
                 
                 payment = pay_srv.add_payment(
                     order_id=order_id,
-                    amount=float(payload.get("amount")),
+                    amount=safe_float(payload.get("amount")),
                     payment_method=payload.get("payment_method", "Cash"),
                     payment_date=date.today()
                 )
@@ -1437,10 +1445,10 @@ class WebBridge(QObject):
                 item = stock_service.add_stock_item(
                     name=payload.get("name"),
                     category=payload.get("category"),
-                    quantity=float(payload.get("quantity", 0)),
+                    quantity=safe_float(payload.get("quantity", 0)),
                     unit=payload.get("unit"),
-                    min_quantity=float(payload.get("min_quantity", 0)),
-                    unit_cost=float(payload.get("unit_cost", 0))
+                    min_quantity=safe_float(payload.get("min_quantity", 0)),
+                    unit_cost=safe_float(payload.get("unit_cost", 0))
                 )
                 response = {"status": "success", "data": item}
                 
@@ -1451,8 +1459,8 @@ class WebBridge(QObject):
                     name=payload.get("name"),
                     category=payload.get("category"),
                     unit=payload.get("unit"),
-                    min_quantity=float(payload.get("min_quantity", 0)),
-                    unit_cost=float(payload.get("unit_cost", 0))
+                    min_quantity=safe_float(payload.get("min_quantity", 0)),
+                    unit_cost=safe_float(payload.get("unit_cost", 0))
                 )
                 response = {"status": "success", "data": item}
                 
@@ -1460,7 +1468,7 @@ class WebBridge(QObject):
                 from app.services.stock_service import stock_service
                 item = stock_service.adjust_stock(
                     item_id=payload.get("id"),
-                    amount=float(payload.get("amount", 0)),
+                    amount=safe_float(payload.get("amount", 0)),
                     operation=payload.get("operation")
                 )
                 response = {"status": "success", "data": item}
@@ -1480,7 +1488,7 @@ class WebBridge(QObject):
                 worker_id = payload.get("worker_id")
                 items = payload.get("items", [])
                 extra_desc = payload.get("extra_desc", "")
-                extra_amount = float(payload.get("extra_amount", 0))
+                extra_amount = safe_float(payload.get("extra_amount", 0))
                 is_present = bool(payload.get("is_present", False))
 
                 if items:
