@@ -26,6 +26,7 @@ let availableCustomers = [];
 let availableProfiles = []; 
 let editItemId = null;
 let currentImagesBase64 = [];
+let currentExistingImages = [];
 
 // For tracking the modal's edit state
 let itemIdCounter = 1;
@@ -113,7 +114,8 @@ async function loadCustomers(initialCustomerId) {
  price: i.price,
  measurements: i.measurements || {},
  notes: i.notes || "",
- save_profile: false
+ save_profile: false,
+ existing_image_path: i.image_path || null
  }));
  
  renderOrderItems();
@@ -278,10 +280,15 @@ window.openAddItemModal = function(itemId = null) {
  
  document.getElementById('modal-special-instructions').value = item.notes || '';
  
+ currentImagesBase64 = [];
+ currentExistingImages = [];
  if (item.image_base64) {
- currentImagesBase64 = Array.isArray(item.image_base64) ? [...item.image_base64] : (item.image_base64 ? [item.image_base64] : []);
- if(window.renderPhotoPreviews) renderPhotoPreviews();
+ currentImagesBase64 = Array.isArray(item.image_base64) ? [...item.image_base64] : [item.image_base64];
  }
+ if (item.existing_image_path) {
+ currentExistingImages = item.existing_image_path.split(',').map(s => s.trim()).filter(s => s);
+ }
+ if(window.renderPhotoPreviews) renderPhotoPreviews();
  
  populateSavedProfilesDropdown(item.clothing_type);
  renderMeasurementFields(item.clothing_type, item.measurements);
@@ -497,6 +504,7 @@ window.saveModalItem = function() {
  measurements: measurements,
  save_profile: saveProfile,
  image_base64: [...currentImagesBase64],
+ existing_image_path: currentExistingImages.join(','),
  notes: specialInstructions
  };
  }
@@ -510,6 +518,7 @@ window.saveModalItem = function() {
  measurements: measurements,
  save_profile: saveProfile,
  image_base64: [...currentImagesBase64],
+ existing_image_path: currentExistingImages.join(','),
  notes: specialInstructions
  });
  }
@@ -725,6 +734,7 @@ window.saveOrder = async function() {
  measurements: i.measurements,
  save_profile: i.save_profile,
  image_base64: i.image_base64 || null,
+ existing_image_path: i.existing_image_path || null,
  notes: i.notes || ''
  }));
  
@@ -786,9 +796,11 @@ window.renderPhotoPreviews = function() {
  const badge = document.getElementById('photo-count-badge');
  const qty = parseInt(document.getElementById('modal-item-qty').value) || 1;
  
+ const totalImgs = currentImagesBase64.length + currentExistingImages.length;
+ 
  if (badge) {
- badge.textContent = `${currentImagesBase64.length} / ${qty}`;
- if (currentImagesBase64.length < qty) {
+ badge.textContent = `${totalImgs} / ${qty}`;
+ if (totalImgs < qty) {
  badge.classList.remove('bg-green-100', 'text-green-800');
  badge.classList.add('bg-primary-container', 'text-on-primary-container');
  } else {
@@ -800,6 +812,18 @@ window.renderPhotoPreviews = function() {
  if (!list) return;
  
  list.innerHTML = '';
+ currentExistingImages.forEach((src, idx) => {
+ const div = document.createElement('div');
+ div.className = 'relative border border-outline rounded-lg overflow-hidden bg-surface-container-lowest h-16 w-16 shadow-sm flex-shrink-0';
+ div.innerHTML = `
+ <img src="${src}" class="w-full h-full object-cover cursor-pointer hover:opacity-80" onclick="openImageModal('${src}')">
+ <button type="button" onclick="removeExistingPhoto(${idx})" class="absolute -top-2 -right-2 w-6 h-6 bg-error text-on-error rounded-full flex items-center justify-center shadow-sm z-10">
+ <span class="material-symbols-outlined text-[14px]" data-icon="close">close</span>
+ </button>
+ `;
+ list.appendChild(div);
+ });
+ 
  currentImagesBase64.forEach((src, idx) => {
  const div = document.createElement('div');
  div.className = 'relative border border-outline rounded-lg overflow-hidden bg-surface-container-lowest h-16 w-16 shadow-sm flex-shrink-0';
@@ -811,6 +835,11 @@ window.renderPhotoPreviews = function() {
  `;
  list.appendChild(div);
  });
+};
+
+window.removeExistingPhoto = function(idx) {
+ currentExistingImages.splice(idx, 1);
+ if(window.renderPhotoPreviews) window.renderPhotoPreviews();
 };
 
 window.removePhoto = function(idx) {
