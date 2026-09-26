@@ -40,7 +40,7 @@ async function loadSettings() {
  setVal('set-address', data.address);
  setVal('set-currency', data.currency_symbol);
  setVal('set-unit', data.measurement_unit);
- setVal('set-clothing-types', data.clothing_types);
+ setVal('set-clothing-types', data.clothing_types || "Shirt,Pant,Kurta,Blouse,Suit,Salwar Kameez,Lehenga,Sherwani,Nehru Jacket,Pyjama,Churidar");
  
  const dictationSelect = document.getElementById('dictationLanguageSelect');
  if (dictationSelect) {
