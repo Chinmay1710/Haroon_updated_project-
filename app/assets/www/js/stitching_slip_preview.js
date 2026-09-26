@@ -50,15 +50,13 @@ async function loadSlipData(orderId) {
      if (index > 0) {
          slipMain.style.pageBreakBefore = 'always';
          slipMain.style.marginTop = '20px';
-         
-         const scissorLine = document.createElement('div');
-         scissorLine.style.textAlign = 'center';
-         scissorLine.style.marginBottom = '20px';
-         scissorLine.innerHTML = '<span>✂️----------------------------------------✂️</span>';
-         container.appendChild(scissorLine);
      }
      
      const garmentText = `${item.clothing_type || 'Custom Item'} (x${item.quantity || 1})`;
+     let garmentTextHtml = `<div>${item.clothing_type || 'Custom Item'} (x${item.quantity || 1})</div>`;
+     if (item.notes && item.notes.trim() !== '') {
+         garmentTextHtml += `<div style="margin-top: 4px; font-size: 0.9em; font-weight: normal;"><strong>Item Note:</strong> ${item.notes}</div>`;
+     }
      
      let measurementsHtml = '';
      if (item.measurements && Object.keys(item.measurements).length > 0) {
@@ -71,16 +69,12 @@ async function loadSlipData(orderId) {
                  const box_number = sideways_row * 6 + sideways_col + 1;
                  const val = values[`Box ${box_number}`] || '';
                  measurementsHtml += `
-                     <div style="border: 2px solid #000000; padding: 8px 4px; text-align: center; background-color: #ffffff; min-height: 48px; display: flex; align-items: center; justify-content: center;">
-                         ${val.trim() !== '' ? `<div style="font-weight: bold; font-size: 1.6em; color: #000000; writing-mode: vertical-rl; text-orientation: mixed;">${val}</div>` : ''}
+                     <div style="border: 1px solid #000000; padding: 8px 4px; text-align: center; background-color: #ffffff; min-height: 48px; display: flex; align-items: center; justify-content: center;">
+                         ${val.trim() !== '' ? `<div style="font-weight: 600; font-size: 1.5em; color: #000000; writing-mode: vertical-rl; text-orientation: mixed;">${val}</div>` : ''}
                      </div>`;
              }
          }
          measurementsHtml += `</div>`;
-         
-         if (item.notes && item.notes.trim() !== '') {
-             measurementsHtml += `<div style="margin-top: 6px; padding-top: 4px; border-top: 1px dashed #000; font-size: 0.9em;"><strong>Item Note:</strong> ${item.notes}</div>`;
-         }
      } else {
          measurementsHtml = '<div style="text-align:center; font-style:italic;">No measurements</div>';
      }
@@ -98,15 +92,11 @@ async function loadSlipData(orderId) {
              <span>Due:</span><span>${window.API.formatDate(o.delivery_date)}</span>
          </div>
          <div class="dashed-line"></div>
-         <div class="mb-2">
-             <div>Customer: <span class="font-bold">${o.customer_name || 'Walk-in'}</span></div>
-         </div>
-         <div class="dashed-line"></div>
          <div class="font-bold mb-2">Garments:</div>
-         <div style="margin-bottom: 5px;">${garmentText}</div>
+         <div style="margin-bottom: 5px;">${garmentTextHtml}</div>
          <div class="dashed-line"></div>
          <div class="font-bold text-center mb-2">MEASUREMENTS</div>
-         <div style="font-weight: bold; margin-bottom: 2px; text-decoration: underline;">${garmentText} - ${o.order_number || ''}</div>
+         <div style="font-weight: bold; margin-bottom: 2px; text-decoration: underline;">${item.clothing_type || 'Custom Item'} - ${o.order_number || ''}</div>
          ${measurementsHtml}
          <div class="dashed-line"></div>
          <div class="flex-between mt-2" style="font-size: 10px;">
