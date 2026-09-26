@@ -157,6 +157,22 @@ class SettingsUpdate(BaseModel):
 
 # ─── Helper ──────────────────────────────────────────────────────────────────
 
+def _fix_image_path(raw_path: str) -> str:
+    """Convert raw DB image path to web-accessible URL. Supports Cloudinary and local."""
+    if not raw_path:
+        return ""
+    paths = raw_path.split(',')
+    fixed = []
+    for p in paths:
+        p = p.strip()
+        if not p:
+            continue
+        if p.startswith("http://") or p.startswith("https://"):
+            fixed.append(p)
+        else:
+            fixed.append(f"/uploads/items/{os.path.basename(p)}")
+    return ",".join(fixed)
+
 def _get_services():
     """Lazy-import services to avoid circular imports at module load time."""
     from app.services.customer_service import CustomerService
@@ -416,7 +432,7 @@ def handle_get_customer_details(payload):
                 "id": o.id,
                 "order_number": o.order_number,
                 "clothing_type": o.items[0].clothing_type if o.items else "Custom",
-                "image_path": o.items[0].image_path if o.items and o.items[0].image_path else "",
+                "image_path": _fix_image_path(o.items[0].image_path if o.items else ""),
                 "order_date": o.order_date.isoformat() if o.order_date else "",
                 "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
                 "status": o.status,
@@ -703,7 +719,7 @@ def handle_get_all_orders(payload):
             "customer_id": o.customer.id if o.customer else None,
             "customer_mobile": o.customer.mobile if o.customer else "",
             "items": ", ".join([f"{i.quantity}x {i.clothing_type}" for i in o.items]) if o.items else "Custom",
-            "image_path": o.items[0].image_path if o.items and o.items[0].image_path else "",
+            "image_path": _fix_image_path(o.items[0].image_path if o.items else ""),
             "order_date": o.order_date.isoformat() if o.order_date else "",
             "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
             "status": o.status,
@@ -762,17 +778,7 @@ def handle_get_order_details(payload):
         }
         
         for item in o.items:
-            image_path_out = ""
-            if item.image_path:
-                # For web, serve images via /uploads/ route
-                paths = item.image_path.split(',')
-                abs_paths = []
-                for p in paths:
-                    p = p.strip()
-                    if p:
-                        filename = os.path.basename(p)
-                        abs_paths.append(f"/uploads/items/{filename}")
-                image_path_out = ",".join(abs_paths)
+            image_path_out = _fix_image_path(item.image_path)
             
             item_data = {
                 "id": item.id,

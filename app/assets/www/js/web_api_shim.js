@@ -6,7 +6,7 @@
  *
  * Zero changes to existing page JS required!
  */
-(function() {
+(function () {
     'use strict';
 
     // ─── Detect if we're in Qt WebEngine or a regular browser ─────────
@@ -45,10 +45,10 @@
 
     // ─── Create fake pyBridge so app.js doesn't error ─────────────────
     window.pyBridge = {
-        log: function(msg) { console.log('[JS-Shim]', msg); },
-        dispatch: function(action, payloadStr, callback) {
+        log: function (msg) { console.log('[JS-Shim]', msg); },
+        dispatch: function (action, payloadStr, callback) {
             var payload = {};
-            try { payload = JSON.parse(payloadStr || '{}'); } catch(e) {}
+            try { payload = JSON.parse(payloadStr || '{}'); } catch (e) { }
 
             // Handle navigation client-side
             if (action === 'navigate_to') {
@@ -57,13 +57,13 @@
                 if (url) {
                     // Pass any extra params
                     var params = new URLSearchParams();
-                    Object.keys(payload).forEach(function(k) {
+                    Object.keys(payload).forEach(function (k) {
                         if (k !== 'page') params.set(k, payload[k]);
                     });
                     var qs = params.toString();
                     window.location.href = url + (qs ? '?' + qs : '');
                 }
-                if (callback) callback(JSON.stringify({status: 'success'}));
+                if (callback) callback(JSON.stringify({ status: 'success' }));
                 return;
             }
 
@@ -71,9 +71,9 @@
             if (action === 'copy_to_clipboard') {
                 var text = payload.text || '';
                 if (navigator.clipboard) {
-                    navigator.clipboard.writeText(text).catch(function(){});
+                    navigator.clipboard.writeText(text).catch(function () { });
                 }
-                if (callback) callback(JSON.stringify({status: 'success'}));
+                if (callback) callback(JSON.stringify({ status: 'success' }));
                 return;
             }
 
@@ -81,7 +81,7 @@
             if (action === 'open_url') {
                 var openUrl = payload.url || '';
                 if (openUrl) window.location.href = openUrl;
-                if (callback) callback(JSON.stringify({status: 'success'}));
+                if (callback) callback(JSON.stringify({ status: 'success' }));
                 return;
             }
 
@@ -96,14 +96,14 @@
                     }
                     window.location.href = waUrl;
                 }
-                if (callback) callback(JSON.stringify({status: 'success'}));
+                if (callback) callback(JSON.stringify({ status: 'success' }));
                 return;
             }
 
             // Handle print commands on mobile browser
             if (action === 'print_pos_document' || action === 'print_receipt') {
                 window.print();
-                if (callback) callback(JSON.stringify({status: 'success'}));
+                if (callback) callback(JSON.stringify({ status: 'success' }));
                 return;
             }
 
@@ -113,47 +113,47 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: action, payload: payload })
             })
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-                if (callback) callback(JSON.stringify(data));
-            })
-            .catch(function(err) {
-                console.error('[Shim] API error for', action, ':', err);
-                if (callback) callback(JSON.stringify({
-                    status: 'error', 
-                    message: 'Network error: ' + err.message
-                }));
-            });
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    if (callback) callback(JSON.stringify(data));
+                })
+                .catch(function (err) {
+                    console.error('[Shim] API error for', action, ':', err);
+                    if (callback) callback(JSON.stringify({
+                        status: 'error',
+                        message: 'Network error: ' + err.message
+                    }));
+                });
         },
         // Fake signal connections (no-op on mobile)
-        notification_requested: { connect: function(){} },
-        customer_added: { connect: function(){} },
-        order_added: { connect: function(){} },
-        dictation_result_requested: { connect: function(){} },
+        notification_requested: { connect: function () { } },
+        customer_added: { connect: function () { } },
+        order_added: { connect: function () { } },
+        dictation_result_requested: { connect: function () { } },
     };
 
     // ─── Override window.API.request to use REST API ──────────────────
     // (api.js sets this up, but we override it before page scripts run)
-    
+
     // Wait for DOMContentLoaded to override after api.js has loaded
     var _originalDOMReady = [];
-    
+
     // We need to intercept before app.js tries to use QWebChannel
     // Create a fake QWebChannel constructor
     window.QWebChannel = undefined;
 
     // Override after DOM is ready (api.js would have set up window.API)
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         // Ensure window.API exists
         if (!window.API) {
             window.API = {};
         }
 
         // Override the request method
-        window.API.request = function(action, payload) {
+        window.API.request = function (action, payload) {
             payload = payload || {};
-            
-            return new Promise(function(resolve, reject) {
+
+            return new Promise(function (resolve, reject) {
                 // Handle navigation client-side
                 if (action === 'navigate_to' && payload) {
                     sessionStorage.setItem('nav_params', JSON.stringify(payload));
@@ -161,7 +161,7 @@
                     var url = PAGE_MAP[page];
                     if (url) {
                         var params = new URLSearchParams();
-                        Object.keys(payload).forEach(function(k) {
+                        Object.keys(payload).forEach(function (k) {
                             if (k !== 'page') params.set(k, payload[k]);
                         });
                         var qs = params.toString();
@@ -174,7 +174,7 @@
                 // Handle copy_to_clipboard
                 if (action === 'copy_to_clipboard') {
                     if (navigator.clipboard && payload.text) {
-                        navigator.clipboard.writeText(payload.text).catch(function(){});
+                        navigator.clipboard.writeText(payload.text).catch(function () { });
                     }
                     resolve({});
                     return;
@@ -204,7 +204,7 @@
                 // Handle print commands on mobile browser
                 if (action === 'print_pos_document' || action === 'print_receipt' || action === 'print_stitching_slip') {
                     if (window.__triggerMobilePrint) window.__triggerMobilePrint();
-                    resolve({status: 'success'});
+                    resolve({ status: 'success' });
                     return;
                 }
 
@@ -214,31 +214,31 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: action, payload: payload })
                 })
-                .then(function(res) { return res.json(); })
-                .then(function(response) {
-                    if (response.status === 'success') {
-                        resolve(response.data);
-                    } else {
-                        console.error('[Shim] API Error [' + action + ']:', response.message);
-                        reject(response.message || 'Unknown error occurred.');
-                    }
-                })
-                .catch(function(err) {
-                    console.error('[Shim] Network error for', action, ':', err);
-                    reject('Network error: ' + err.message);
-                });
+                    .then(function (res) { return res.json(); })
+                    .then(function (response) {
+                        if (response.status === 'success') {
+                            resolve(response.data);
+                        } else {
+                            console.error('[Shim] API Error [' + action + ']:', response.message);
+                            reject(response.message || 'Unknown error occurred.');
+                        }
+                    })
+                    .catch(function (err) {
+                        console.error('[Shim] Network error for', action, ':', err);
+                        reject('Network error: ' + err.message);
+                    });
             });
         };
 
         // Also override navigate helper
-        window.API.navigate = function(page) {
+        window.API.navigate = function (page) {
             window.API.request('navigate_to', { page: page });
         };
 
         // ─── Fix sidebar navigation for browser mode ──────────────────
         var navLinks = document.querySelectorAll('a[href="#"]');
-        navLinks.forEach(function(link) {
-            link.addEventListener('click', function(e) {
+        navLinks.forEach(function (link) {
+            link.addEventListener('click', function (e) {
                 e.preventDefault();
                 var navTarget = this.getAttribute('data-nav');
                 if (navTarget) {
@@ -263,25 +263,25 @@
         });
 
         // Apply global settings
-        setTimeout(function() {
+        setTimeout(function () {
             if (window.applyGlobalSettings) {
                 window.applyGlobalSettings();
             } else {
                 // Manually apply if applyGlobalSettings is not defined (shim loaded before app.js)
-                window.API.request('get_settings').then(function(settings) {
+                window.API.request('get_settings').then(function (settings) {
                     if (settings) {
-                        document.querySelectorAll('.global-shop-name').forEach(function(el) {
+                        document.querySelectorAll('.global-shop-name').forEach(function (el) {
                             if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.value = settings.shop_name;
                             else el.textContent = settings.shop_name;
                         });
-                        document.querySelectorAll('.global-shop-phone').forEach(function(el) {
+                        document.querySelectorAll('.global-shop-phone').forEach(function (el) {
                             el.textContent = settings.phone || '';
                         });
-                        document.querySelectorAll('.global-shop-address').forEach(function(el) {
+                        document.querySelectorAll('.global-shop-address').forEach(function (el) {
                             el.textContent = settings.address || '';
                         });
                     }
-                }).catch(function(){});
+                }).catch(function () { });
             }
         }, 200);
 
@@ -289,7 +289,7 @@
     });
 
     // ─── Global dispatchToPython replacement ──────────────────────────
-    window.dispatchToPython = function(action, payload) {
+    window.dispatchToPython = function (action, payload) {
         if (window.pyBridge) {
             window.pyBridge.dispatch(action, JSON.stringify(payload || {}));
         }
@@ -299,7 +299,7 @@
 
 // Android Chrome strictly blocks window.print() if called after an async/await or Promise delay.
 // To bypass this, we must overwrite the print functions to run 100% synchronously on click.
-window.__triggerMobilePrint = function() {
+window.__triggerMobilePrint = function () {
     var style = document.createElement('style');
     style.id = 'website-thermal-print-style';
     style.innerHTML = `
@@ -331,15 +331,15 @@ window.__triggerMobilePrint = function() {
     `;
     document.head.appendChild(style);
     window.print();
-    
-    setTimeout(function() {
+
+    setTimeout(function () {
         var injected = document.getElementById('website-thermal-print-style');
         if (injected) injected.remove();
     }, 2000);
 };
 
 // Overwrite the async functions defined in the page scripts once they load
-window.addEventListener('load', function() {
+window.addEventListener('load', function () {
     if (typeof window.printSlip !== 'undefined') {
         window.printSlip = window.__triggerMobilePrint;
     }
