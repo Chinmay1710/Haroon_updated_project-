@@ -186,13 +186,8 @@ window.updateStatus = async function(orderId, newStatus, btnElement) {
     btnElement.innerHTML = originalContent;
     btnElement.disabled = false;
    }
-   if (res && res.items && res.items.length > 1) {
-    const selectedIds = await window.API.showPartialDeliveryModal(res.items);
-    if (!selectedIds) return; // Cancelled
-    window.API.request('navigate_to', {page: 'add_payment', order_id: orderId, complete_after: true, delivered_item_ids: selectedIds});
-   } else {
-    // Single item order, just deliver all
-    let allItemIds = res && res.items ? res.items.map(i => i.id) : [];
+   if (res && res.items) {
+    let allItemIds = res.items.map(i => i.id);
     window.API.request('navigate_to', {page: 'add_payment', order_id: orderId, complete_after: true, delivered_item_ids: allItemIds});
    }
   } catch (e) {
