@@ -316,7 +316,7 @@ window.__triggerMobilePrint = function() {
                 margin: 0 !important;
                 padding: 2vw 6vw !important;
                 box-sizing: border-box !important;
-                padding-bottom: 25vw !important;
+                padding-bottom: 40vw !important;
             }
             /* Use extremely large VW (viewport width) units to ensure massive, clear text regardless of Chrome's internal PDF scale */
             .pos-receipt, .pos-slip { font-size: 5.5vw !important; font-weight: 500 !important; }

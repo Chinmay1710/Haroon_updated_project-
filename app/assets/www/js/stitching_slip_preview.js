@@ -49,7 +49,7 @@ async function loadSlipData(orderId) {
      slipMain.className = 'pos-slip print-canvas';
      if (index > 0) {
          slipMain.style.pageBreakBefore = 'always';
-         slipMain.style.marginTop = '20px';
+         slipMain.style.marginTop = '40vw'; // Creates a massive gap between slips
      }
      
      const garmentText = `${item.clothing_type || 'Custom Item'} (x${item.quantity || 1})`;
