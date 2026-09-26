@@ -207,62 +207,17 @@
 
 <div id="tab-workers" class="admin-tab-content block min-w-0">
 
-<div class="md:hidden text-xs text-on-surface-variant flex items-center gap-1 mb-2 italic">
-  <span class="material-symbols-outlined text-[14px]">swipe</span> Swipe left/right to view more
-</div>
 
-<div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest w-full min-w-0">
-<div class="w-full overflow-x-auto overflow-y-visible" style="-webkit-overflow-scrolling: touch;">
-<table class="w-full text-left border-collapse min-w-[850px]">
-<thead>
-<tr class="bg-surface/50 border-b border-surface-container-highest text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
-<th class="px-6 py-4 font-medium">Worker</th>
-<th class="px-6 py-4 font-medium">Role</th>
-<th class="px-6 py-4 font-medium">Payment Type</th>
-<th class="px-6 py-4 font-medium">Total Earned</th>
-<th class="px-6 py-4 font-medium">Advance Given</th>
-<th class="px-6 py-4 font-medium">Balance</th>
-<th class="px-6 py-4 font-medium text-right">Actions</th>
-</tr>
-</thead>
-<tbody class="divide-y divide-surface-container-highest" id="workers-list">
-<!-- Loading State -->
-<tr>
-<td class="px-6 py-12 text-center" colspan="5">
-<div class="inline-flex flex-col items-center justify-center text-on-surface-variant">
-<span class="material-symbols-outlined animate-spin text-3xl mb-2">refresh</span>
-<p class="font-body-md text-body-md">Loading workers...</p>
-</div>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
+<div id="workers-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full min-w-0">
+    <!-- Populated by JS -->
 </div>
 
 </div> <!-- End tab-workers -->
 
 <div id="tab-pending" class="admin-tab-content hidden min-w-0">
- <div class="md:hidden text-xs text-on-surface-variant flex items-center gap-1 mb-2 italic">
-   <span class="material-symbols-outlined text-[14px]">swipe</span> Swipe left/right to view more
- </div>
- <div class="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-highest w-full min-w-0">
- <div class="w-full overflow-x-auto overflow-y-visible" style="-webkit-overflow-scrolling: touch;">
- <table class="w-full text-left border-collapse min-w-[700px]">
- <thead>
- <tr class="bg-surface/50 border-b border-surface-container-highest text-on-surface-variant font-label-sm uppercase tracking-wider">
- <th class="px-6 py-4 font-medium">Date</th>
- <th class="px-6 py-4 font-medium">Worker</th>
- <th class="px-6 py-4 font-medium">Details</th>
- <th class="px-6 py-4 font-medium">Amount</th>
- <th class="px-6 py-4 font-medium text-right">Actions</th>
- </tr>
- </thead>
- <tbody id="pending-list" class="divide-y divide-surface-container-highest">
- <!-- Populated by JS -->
- </tbody>
- </table>
- </div>
+
+ <div id="pending-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 w-full min-w-0">
+    <!-- Populated by JS -->
  </div>
 </div>
 
@@ -550,9 +505,9 @@
  let globalWorkersList = [];
 
  function renderWorkers() {
- const tbody = document.getElementById('workers-list');
- if(!tbody) return;
- tbody.innerHTML = '';
+ const container = document.getElementById('workers-grid');
+ if(!container) return;
+ container.innerHTML = '';
  const q = (document.getElementById('worker-search')?.value || '').toLowerCase();
  
  const filtered = globalWorkersList.filter(w => {
@@ -561,37 +516,60 @@
  });
  
  if (filtered.length === 0) {
-     tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant">No workers found.</td></tr>`;
+     container.innerHTML = `<div class="col-span-full py-12 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl border border-surface-container-highest">No workers found.</div>`;
      return;
  }
  
  for (const w of filtered) {
  const ledger = w.ledger || {total_earned:0, total_advance:0, remaining_balance:0};
  
- const badge = w.worker_type === 'DAILY_SALARY' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
+ const badge = w.worker_type === 'DAILY_SALARY' ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-purple-100 text-purple-800 border-purple-200';
  const typeStr = w.worker_type === 'DAILY_SALARY' ? `Daily (₹${w.daily_rate})` : 'Piece Rate';
- const roleBadge = w.worker_role === 'ADMIN' ? 'bg-red-100 text-red-800' : (w.worker_role === 'CUTTING' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800');
+ const roleBadge = w.worker_role === 'ADMIN' ? 'bg-red-100 text-red-800 border-red-200' : (w.worker_role === 'CUTTING' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200');
  const roleStr = w.worker_role || 'STITCHING';
  
- const tr = document.createElement('tr');
- tr.className = "hover:bg-surface-container-lowest/50 cursor-pointer";
- tr.innerHTML = `
- <td class="px-6 py-4" onclick="openWorkerHistory(${w.id}, '${w.name.replace(/'/g, "\\'")}')">
- <div class="font-bold text-primary hover:underline">${w.name}</div>
- <div class="text-xs text-on-surface-variant">PIN: ${w.pin} | ${w.phone || ''}</div>
- </td>
- <td class="px-6 py-4"><span class="text-xs px-2 py-1 rounded ${roleBadge} font-bold uppercase tracking-wider">${roleStr}</span></td>
- <td class="px-6 py-4"><span class="text-xs px-2 py-1 rounded ${badge} font-bold uppercase tracking-wider">${typeStr}</span></td>
- <td class="px-6 py-4 font-bold text-green-700">₹${ledger.total_earned.toFixed(0)}</td>
- <td class="px-6 py-4 font-bold text-orange-600">₹${ledger.total_advance.toFixed(0)}</td>
- <td class="px-6 py-4 font-bold text-lg">₹${ledger.remaining_balance.toFixed(0)}</td>
- <td class="px-6 py-4 text-right whitespace-nowrap">
- <button onclick="event.stopPropagation(); openLogWorkModal(${w.id}, '${w.name.replace(/'/g, "\\'")}')" class="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-600 hover:text-white transition-colors mr-1" title="Log Work">Log Work</button>
- <button onclick="event.stopPropagation(); openAdvanceModal(${w.id}, '${w.name.replace(/'/g, "\\'")}')" class="text-sm bg-primary/10 text-primary px-3 py-1.5 rounded hover:bg-primary hover:text-white transition-colors mr-1" title="Give Advance">Advance</button>
- <button onclick="event.stopPropagation(); deleteWorker(${w.id}, '${w.name.replace(/'/g, "\\'")}')" class="text-sm bg-red-100 text-red-700 px-2.5 py-1.5 rounded hover:bg-red-600 hover:text-white transition-colors" title="Delete Worker"><span class="material-symbols-outlined text-[18px] align-middle">delete</span></button>
- </td>
+ const nameSafe = w.name.replace(/'/g, "\\'");
+ const card = document.createElement('div');
+ card.className = "bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container-highest hover:shadow-md transition-shadow flex flex-col";
+ card.innerHTML = `
+ <div class="flex justify-between items-start mb-4 cursor-pointer" onclick="openWorkerHistory(${w.id}, '${nameSafe}')">
+ <div class="flex items-center gap-3">
+ <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+ <span class="material-symbols-outlined">person</span>
+ </div>
+ <div>
+ <div class="font-bold text-on-surface text-lg hover:text-primary transition-colors">${w.name}</div>
+ <div class="text-xs text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">pin</span> ${w.pin} ${w.phone ? `| ${w.phone}` : ''}</div>
+ </div>
+ </div>
+ <div class="flex flex-col items-end gap-1.5 shrink-0 ml-2">
+ <span class="text-[10px] px-2 py-0.5 rounded border ${roleBadge} font-bold uppercase tracking-wider">${roleStr}</span>
+ <span class="text-[10px] px-2 py-0.5 rounded border ${badge} font-bold uppercase tracking-wider">${typeStr}</span>
+ </div>
+ </div>
+ 
+ <div class="grid grid-cols-3 gap-2 mb-4 p-3 bg-surface-container/30 rounded-lg cursor-pointer" onclick="openWorkerHistory(${w.id}, '${nameSafe}')">
+ <div>
+ <div class="text-[10px] text-on-surface-variant uppercase font-semibold mb-0.5">Earned</div>
+ <div class="font-bold text-green-700 text-sm">₹${ledger.total_earned.toFixed(0)}</div>
+ </div>
+ <div>
+ <div class="text-[10px] text-on-surface-variant uppercase font-semibold mb-0.5">Advance</div>
+ <div class="font-bold text-orange-600 text-sm">₹${ledger.total_advance.toFixed(0)}</div>
+ </div>
+ <div>
+ <div class="text-[10px] text-on-surface-variant uppercase font-semibold mb-0.5">Balance</div>
+ <div class="font-bold text-lg leading-tight text-on-surface">₹${ledger.remaining_balance.toFixed(0)}</div>
+ </div>
+ </div>
+ 
+ <div class="flex justify-end gap-2 border-t border-surface-container pt-3 mt-auto">
+ <button onclick="event.stopPropagation(); deleteWorker(${w.id}, '${nameSafe}')" class="w-8 h-8 flex items-center justify-center text-red-600 bg-red-50 hover:bg-red-600 hover:text-white rounded-full transition-colors mr-auto shrink-0" title="Delete Worker"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+ <button onclick="event.stopPropagation(); openAdvanceModal(${w.id}, '${nameSafe}')" class="text-sm bg-primary/10 text-primary px-4 py-1.5 rounded-full hover:bg-primary hover:text-white transition-colors font-medium shrink-0">Advance</button>
+ <button onclick="event.stopPropagation(); openLogWorkModal(${w.id}, '${nameSafe}')" class="text-sm bg-primary text-on-primary shadow-sm px-4 py-1.5 rounded-full hover:bg-primary/90 transition-colors font-medium flex items-center gap-1 shrink-0"><span class="material-symbols-outlined text-[16px]">work</span> Log Work</button>
+ </div>
  `;
- tbody.appendChild(tr);
+ container.appendChild(card);
  }
  }
  
@@ -624,31 +602,41 @@
  async function loadPending() {
  try {
  const res = await window.API.request('get_all_pending_entries');
- const tbody = document.getElementById('pending-list');
- tbody.innerHTML = '';
+ const container = document.getElementById('pending-grid');
+ container.innerHTML = '';
  if (!res.entries || res.entries.length === 0) {
- tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-on-surface-variant">No pending entries.</td></tr>`;
+ container.innerHTML = `<div class="col-span-full py-12 text-center text-on-surface-variant bg-surface-container-lowest rounded-xl border border-surface-container-highest">No pending entries.</div>`;
  return;
  }
  res.entries.forEach(e => {
  const date = new Date(e.entry_date).toLocaleDateString();
  let desc = e.garment_type ? `${e.quantity}x ${e.garment_type}` : 'Daily Salary';
  if (e.bill_number) desc += ` (Bill: ${e.bill_number})`;
- if (e.extra_work_description) desc += `<br><span class="text-xs text-on-surface-variant">Extra: ${e.extra_work_description}</span>`;
+ if (e.extra_work_description) desc += `<br><span class="text-xs text-on-surface-variant mt-1 inline-block">Extra: ${e.extra_work_description}</span>`;
  
- const tr = document.createElement('tr');
- tr.innerHTML = `
- <td class="px-6 py-4 text-sm">${date}</td>
- <td class="px-6 py-4 font-bold">${e.worker_name}</td>
- <td class="px-6 py-4 text-sm">${desc}</td>
- <td class="px-6 py-4 font-bold text-lg">₹${e.total_amount}</td>
- <td class="px-6 py-4 text-right whitespace-nowrap">
- <button onclick="openEditModal(${e.id}, '${e.worker_name}', ${e.quantity || 1}, ${e.extra_amount || 0}, ${e.total_amount})" class="text-white bg-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-700 mr-1"><span class="material-symbols-outlined text-[14px] align-middle">edit</span></button>
- <button onclick="approveEntry(${e.id}, 'APPROVED')" class="text-white bg-green-600 px-3 py-1 rounded text-sm hover:bg-green-700">Approve</button>
- <button onclick="approveEntry(${e.id}, 'REJECTED')" class="text-white bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-700 ml-1">Reject</button>
- </td>
+ const nameSafe = e.worker_name.replace(/'/g, "\\'");
+ const card = document.createElement('div');
+ card.className = "bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container-highest hover:shadow-md transition-shadow flex flex-col";
+ card.innerHTML = `
+ <div class="flex justify-between items-start mb-3">
+ <div>
+ <div class="font-bold text-lg text-on-surface">${e.worker_name}</div>
+ <div class="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5"><span class="material-symbols-outlined text-[14px]">calendar_today</span> ${date}</div>
+ </div>
+ <div class="font-bold text-xl text-primary bg-primary/10 px-3 py-1 rounded-lg">₹${e.total_amount}</div>
+ </div>
+ 
+ <div class="text-sm text-on-surface bg-surface-container/30 p-3 rounded-lg mb-4 flex-1">
+ ${desc}
+ </div>
+ 
+ <div class="flex justify-end gap-2 border-t border-surface-container pt-3">
+ <button onclick="openEditModal(${e.id}, '${nameSafe}', ${e.quantity || 1}, ${e.extra_amount || 0}, ${e.total_amount})" class="w-8 h-8 flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-full transition-colors mr-auto shrink-0" title="Edit Entry"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+ <button onclick="approveEntry(${e.id}, 'REJECTED')" class="text-sm bg-red-100 text-red-700 px-4 py-1.5 rounded-full hover:bg-red-600 hover:text-white transition-colors font-medium shrink-0">Reject</button>
+ <button onclick="approveEntry(${e.id}, 'APPROVED')" class="text-sm bg-green-600 text-white shadow-sm px-4 py-1.5 rounded-full hover:bg-green-700 transition-colors font-medium flex items-center gap-1 shrink-0"><span class="material-symbols-outlined text-[16px]">check_circle</span> Approve</button>
+ </div>
  `;
- tbody.appendChild(tr);
+ container.appendChild(card);
  });
  } catch(e) { console.error(e); }
  }
