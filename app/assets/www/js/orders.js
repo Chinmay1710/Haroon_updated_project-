@@ -94,7 +94,10 @@ window.markOrderComplete = async function(id) {
  }
 };
 
-window.markOrderPartiallyComplete = async function(id) {
+window.markOrderPartiallyComplete = async function(id, rawItems) {
+ if (typeof window.openPartialModal === 'function') {
+ window.openPartialModal(id, rawItems);
+ } else {
  const ok = confirm('Mark this order as Partially Complete?');
  if (ok) {
  try {
@@ -103,6 +106,7 @@ window.markOrderPartiallyComplete = async function(id) {
  loadOrders();
  } catch (e) {
  window.API.toast("Failed to update status: " + e, "error");
+ }
  }
  }
 };
@@ -371,20 +375,20 @@ function renderOrders(orders) {
  ${displayStatus}
  </span>
  </div>
- <div class="col-span-2 flex justify-end items-center gap-2">
+ <div class="col-span-2 flex flex-col justify-center items-end gap-1 pr-8 relative">
  ${(o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'PARTIALLY_COMPLETE') ? `
- <button class="mark-partial-btn px-2 py-1.5 rounded-md bg-[#fef3c7] text-[#d97706] font-label-sm hover:bg-[#f59e0b] hover:text-white whitespace-nowrap shadow-sm border border-[#f59e0b]/30 flex items-center gap-1" title="Partially Complete">
- <span class="material-symbols-outlined text-[14px]">timelapse</span>
+ <button class="mark-partial-btn px-2 py-1 w-full rounded bg-[#fef3c7] text-[#d97706] font-label-sm text-[10px] hover:bg-[#f59e0b] hover:text-white shadow-sm border border-[#f59e0b]/30 flex items-center justify-center gap-1" title="Partially Complete">
+ <span class="material-symbols-outlined text-[12px]">timelapse</span>
  Partial
  </button>
  ` : ''}
  ${(o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') ? `
- <button class="mark-complete-btn px-3 py-1.5 rounded-md bg-primary/10 text-primary font-label-sm hover:bg-primary hover:text-on-primary whitespace-nowrap shadow-sm border border-primary/20 flex items-center gap-1" title="Mark Stitching Complete">
- <span class="material-symbols-outlined text-[16px]">check_circle</span>
+ <button class="mark-complete-btn px-2 py-1 w-full rounded bg-primary/10 text-primary font-label-sm text-[10px] hover:bg-primary hover:text-on-primary shadow-sm border border-primary/20 flex items-center justify-center gap-1" title="Mark Stitching Complete">
+ <span class="material-symbols-outlined text-[12px]">check_circle</span>
  Complete
  </button>
  ` : ''}
- <button class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:${isOverdue ? 'bg-error-container hover:text-error' : 'bg-surface-container-highest hover:text-primary'} transition-colors">
+ <button class="w-8 h-8 rounded-full absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center text-on-surface-variant hover:${isOverdue ? 'bg-error-container hover:text-error' : 'bg-surface-container-highest hover:text-primary'} transition-colors">
  <span class="material-symbols-outlined text-[20px]">chevron_right</span>
  </button>
  </div>
@@ -396,7 +400,7 @@ function renderOrders(orders) {
  if (partialBtn) {
  partialBtn.addEventListener('click', (e) => {
  e.stopPropagation();
- window.markOrderPartiallyComplete(o.id);
+ window.markOrderPartiallyComplete(o.id, o.raw_items);
  });
  }
  const completeBtn = card.querySelector('.mark-complete-btn');

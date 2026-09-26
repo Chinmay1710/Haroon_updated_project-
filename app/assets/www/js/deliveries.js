@@ -142,7 +142,7 @@ function renderDeliveries(deliveries) {
      return custName.includes(q) || orderNum.includes(q) || orderId.includes(q);
  });
  
- const readyDeliveries = filteredDeliveries.filter(d => d.status === 'STITCHING_COMPLETE' || d.status === 'PARTIALLY_DELIVERED');
+ const readyDeliveries = filteredDeliveries.filter(d => d.status === 'STITCHING_COMPLETE' || d.status === 'PARTIALLY_DELIVERED' || d.status === 'PARTIALLY_COMPLETE');
  const completedDeliveries = filteredDeliveries.filter(d => d.status === 'DELIVERED').slice(0, 10);
  
  if (readyC) {

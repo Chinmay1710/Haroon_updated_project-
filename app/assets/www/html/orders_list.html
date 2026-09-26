@@ -144,10 +144,10 @@
 </div>
 </main>
 </div>
-<script src="../js/i18n.js?v=1790453053"></script>
-<script src="../js/api.js?v=1790453053"></script>
-<script src="../js/app.js?v=1790453053"></script>
-<script src="../js/orders.js?v=1790453053"></script>
+<script src="../js/i18n.js?v=1790453685"></script>
+<script src="../js/api.js?v=1790453685"></script>
+<script src="../js/app.js?v=1790453685"></script>
+<script src="../js/orders.js?v=1790453685"></script>
 
 <!-- Mobile Bottom Navigation -->
 <nav id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-40 flex items-center justify-around px-2 border-t border-outline-variant/20">
@@ -173,4 +173,91 @@
     </button>
 </nav>
 
-</body></html>
+<!-- Partial Complete Modal -->
+<div id="partial-complete-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50" onclick="closePartialModal()"></div>
+    
+    <!-- Modal Content -->
+    <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md relative flex flex-col max-h-[90vh]">
+        <div class="px-6 py-4 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-lowest rounded-t-2xl z-10">
+            <h3 class="font-headline-sm text-headline-sm text-on-surface">Mark Items Ready</h3>
+            <button onclick="closePartialModal()" class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-highest flex items-center justify-center text-on-surface-variant transition-colors">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto" id="partial-modal-items">
+            <!-- Checkboxes will be injected here -->
+        </div>
+        
+        <div class="px-6 py-4 border-t border-outline-variant/30 flex justify-end gap-3 bg-surface-container-lowest rounded-b-2xl">
+            <button onclick="closePartialModal()" class="px-6 py-2.5 rounded-full font-label-lg text-primary hover:bg-primary/10 transition-colors">
+                Cancel
+            </button>
+            <button id="partial-modal-save-btn" class="px-6 py-2.5 rounded-full bg-primary text-on-primary font-label-lg hover:bg-primary/90 transition-colors shadow-sm">
+                Save
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPartialOrderId = null;
+
+window.closePartialModal = function() {
+    document.getElementById('partial-complete-modal').classList.add('hidden');
+    document.getElementById('partial-complete-modal').classList.remove('flex');
+}
+
+window.openPartialModal = function(orderId, rawItemsRaw) {
+    currentPartialOrderId = orderId;
+    const container = document.getElementById('partial-modal-items');
+    container.innerHTML = '';
+    
+    // Parse if it's a string, otherwise use directly
+    const rawItems = typeof rawItemsRaw === 'string' ? JSON.parse(decodeURIComponent(rawItemsRaw)) : rawItemsRaw;
+    
+    if (!rawItems || rawItems.length === 0) {
+        container.innerHTML = '<p class="text-on-surface-variant">No items found.</p>';
+    } else {
+        rawItems.forEach(item => {
+            const isChecked = item.is_ready ? 'checked' : '';
+            container.innerHTML += `
+                <label class="flex items-center gap-3 p-3 mb-2 rounded-xl border border-outline-variant hover:bg-surface-container-lowest cursor-pointer">
+                    <input type="checkbox" class="partial-item-cb w-5 h-5 rounded border-outline text-primary focus:ring-primary" value="${item.id}" ${isChecked}>
+                    <span class="font-body-lg text-on-surface">${item.name}</span>
+                </label>
+            `;
+        });
+    }
+    
+    document.getElementById('partial-complete-modal').classList.remove('hidden');
+    document.getElementById('partial-complete-modal').classList.add('flex');
+}
+
+document.getElementById('partial-modal-save-btn').addEventListener('click', async () => {
+    if (!currentPartialOrderId) return;
+    
+    const checkboxes = document.querySelectorAll('.partial-item-cb');
+    const readyIds = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) readyIds.push(parseInt(cb.value));
+    });
+    
+    try {
+        await window.API.request('update_order_status', {
+            order_id: currentPartialOrderId,
+            ready_item_ids: readyIds
+        });
+        window.API.toast("Items updated successfully", "success");
+        window.closePartialModal();
+        if (typeof loadOrders === 'function') loadOrders();
+    } catch(e) {
+        window.API.toast("Failed to update: " + e, "error");
+    }
+});
+</script>
+
+</body>
+</html>

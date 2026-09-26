@@ -719,6 +719,7 @@ def handle_get_all_orders(payload):
             "customer_id": o.customer.id if o.customer else None,
             "customer_mobile": o.customer.mobile if o.customer else "",
             "items": ", ".join([f"{i.quantity}x {i.clothing_type}" for i in o.items]) if o.items else "Custom",
+            "raw_items": [{"id": i.id, "name": f"{i.quantity}x {i.clothing_type}", "is_ready": getattr(i, "is_ready", False)} for i in o.items] if o.items else [],
             "image_path": _fix_image_path(o.items[0].image_path if o.items else ""),
             "order_date": o.order_date.isoformat() if o.order_date else "",
             "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
@@ -806,6 +807,7 @@ def handle_update_order_status(payload):
     order_id = payload.get("order_id") or payload.get("id")
     send_whatsapp = payload.get("send_whatsapp", False)
     delivered_item_ids = payload.get("delivered_item_ids")
+    ready_item_ids = payload.get("ready_item_ids")
     
     from app.models.order import Order, OrderItem
     session = get_session()
@@ -820,6 +822,18 @@ def handle_update_order_status(payload):
                 status = "DELIVERED"
             else:
                 status = "PARTIALLY_DELIVERED"
+                
+        if order and ready_item_ids is not None:
+            for item in order.items:
+                if item.id in ready_item_ids:
+                    item.is_ready = True
+                else:
+                    item.is_ready = False
+            all_ready = all(item.is_ready for item in order.items) if order.items else True
+            if all_ready:
+                status = "STITCHING_COMPLETE"
+            else:
+                status = "PARTIALLY_COMPLETE"
         
         if order:
             order.status = status
@@ -1102,7 +1116,7 @@ def handle_get_deliveries_dashboard(payload):
         orders = session.query(Order).options(
             joinedload(Order.customer),
         ).filter(
-            Order.status.in_(["STITCHING_COMPLETE", "DELIVERED"])
+            Order.status.in_(["STITCHING_COMPLETE", "PARTIALLY_COMPLETE", "DELIVERED"])
         ).order_by(Order.updated_at.desc()).all()
         
         deliveries_list = []
@@ -1119,12 +1133,20 @@ def handle_get_deliveries_dashboard(payload):
                 else:
                     counts["upcoming"] += 1
             
+            # Show only ready items if partially complete, else all items
+            if o.status == "PARTIALLY_COMPLETE":
+                items_str = ", ".join([f"{i.quantity}x {i.clothing_type}" for i in o.items if getattr(i, 'is_ready', False)]) if o.items else "Custom"
+                if not items_str:
+                    items_str = "No items ready"
+            else:
+                items_str = ", ".join([f"{i.quantity}x {i.clothing_type}" for i in o.items]) if o.items else "Custom"
+            
             deliveries_list.append({
                 "id": o.id,
                 "order_number": o.order_number,
                 "customer_name": o.customer.name if o.customer else "",
                 "mobile": o.customer.mobile if o.customer else "",
-                "items": "Various",
+                "items": items_str,
                 "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
                 "status": o.status,
                 "total_amount": o.total_amount,

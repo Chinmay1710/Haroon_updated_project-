@@ -67,6 +67,7 @@ class OrderItem(Base):
     price = Column(Float, default=0.0, nullable=False)
     notes = Column(Text)
     image_path = Column(String(255), nullable=True)
+    is_ready = Column(Boolean, default=False, nullable=False)
     is_delivered = Column(Boolean, default=False, nullable=False)
 
     # Relationships
