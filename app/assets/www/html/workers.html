@@ -448,12 +448,7 @@
  window.API.attachMic('new-garment-name');
  window.API.attachMic('adv-notes');
  }
- try {
- const portalRes = await window.API.request('get_worker_portal_url');
- if (portalRes && portalRes.url) document.getElementById('portal-url').value = portalRes.url;
- } catch(e) {
- document.getElementById('portal-url').value = "Not Running";
- }
+ 
  await loadWorkers();
  } catch(e) { console.error(e); }
  }
