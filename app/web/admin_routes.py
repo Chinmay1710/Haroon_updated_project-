@@ -910,6 +910,7 @@ def handle_get_all_payments(payload):
                 "amount": p.amount,
                 "payment_date": p.payment_date.isoformat() if p.payment_date else "",
                 "payment_method": p.payment_method,
+                "remaining_amount": getattr(p.order, 'remaining_amount', 0) if p.order else 0,
                 "updated_at": p.updated_at.isoformat() if hasattr(p, "updated_at") and p.updated_at else ""
             })
         data.sort(key=lambda x: x["updated_at"] if x.get("updated_at") else str(x["id"]), reverse=True)
