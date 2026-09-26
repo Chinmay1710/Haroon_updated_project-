@@ -289,7 +289,7 @@ window.openAddItemModal = function(itemId = null) {
  document.getElementById('modal-title').textContent = "Add New Item";
  document.getElementById('btn-save-modal-item').textContent = "Add Item";
  
- document.getElementById('modal-item-qty').value = 1;
+ document.getElementById('modal-item-qty').value = '';
  document.getElementById('modal-item-price').value = "";
  
  const type = document.getElementById('modal-item-type').value;
