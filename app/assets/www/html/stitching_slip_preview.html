@@ -61,53 +61,9 @@
  </button>
  </div>
 
- <main class="pos-slip print-canvas">
- <div class="text-center mb-2 mt-2">
- <div class="font-bold text-lg">STITCHING SLIP</div>
- <div><span class="global-shop-name">Artisan Stitch</span></div>
+ <div id="slips-container">
+ <!-- Slips injected dynamically by JS -->
  </div>
- 
- <div class="dashed-line"></div>
- 
- <div class="flex-between font-bold" style="font-size: 14px;">
- <span>Bill No:</span>
- <span id="ss-order-number">...</span>
- </div>
- <div class="flex-between">
- <span>Due:</span>
- <span id="ss-due-date">...</span>
- </div>
- 
- <div class="dashed-line"></div>
- 
- <div class="mb-2">
- <div>Customer: <span id="ss-customer-name" class="font-bold">...</span></div>
- <!-- Intentionally no mobile number as requested -->
- </div>
-
- <div class="dashed-line"></div>
- 
- <div class="font-bold mb-2">Garments:</div>
- <div id="ss-garment-type" style="margin-bottom: 5px;">Loading...</div>
-
- <div class="dashed-line"></div>
- <div class="font-bold text-center mb-2">MEASUREMENTS</div>
- 
- <div id="ss-measurements-container">
- <!-- Measurements injected by JS -->
- </div>
-
- <div class="dashed-line"></div>
- 
- <div class="flex-between mt-2" style="font-size: 10px;">
- <span>Cut By: _____</span>
- <span>Sewn By: _____</span>
- </div>
- 
- <div class="text-center mt-2 flex flex-col items-center">
- <div id="ss-generated-date" style="font-size: 9px; margin-top: 5px;">Generated: ...</div>
- </div>
- </main>
 
  <script src="../js/api.js?v=1787472025"></script>
  <script src="../js/app.js?v=1787472025"></script>

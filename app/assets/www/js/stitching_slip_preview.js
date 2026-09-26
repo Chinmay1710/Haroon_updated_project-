@@ -26,96 +26,93 @@ document.addEventListener("DOMContentLoaded", function() {
 async function loadSlipData(orderId) {
  try {
  const o = await window.API.request('get_order_details', {id: orderId});
+ const container = document.getElementById('slips-container');
+ container.innerHTML = '';
  
- document.getElementById('ss-order-number').textContent = o.order_number;
- document.getElementById('ss-due-date').textContent = window.API.formatDate(o.delivery_date);
+ if (!o.items || o.items.length === 0) {
+ container.innerHTML = '<div style="text-align:center; padding: 20px;">No items in order</div>';
+ return;
+ }
  
- document.getElementById('ss-customer-name').textContent = o.customer_name || 'Walk-in';
- 
- const garmentText = o.items && o.items.length > 0 
- ? o.items.map(i => `${i.clothing_type || 'Custom Item'} (x${i.quantity || 1})`).join(", ")
- : "Custom Item (x1)";
- document.getElementById('ss-garment-type').textContent = garmentText;
+ // Need shop name from global if possible, or fallback
+ let shopName = "Haroon Tailor";
+ try {
+     const settings = await window.API.request('get_settings');
+     if (settings && settings.shop_name) shopName = settings.shop_name;
+ } catch(e){}
  
  const now = new Date();
- document.getElementById('ss-generated-date').textContent = `Generated: ${window.API.formatDate(now)} - ${now.toLocaleTimeString()}`;
+ const generatedText = `Generated: ${window.API.formatDate(now)} - ${now.toLocaleTimeString()}`;
  
- // Measurements
- const mContainer = document.getElementById('ss-measurements-container');
- mContainer.innerHTML = '';
- 
- let hasMeasurements = false;
- 
- if (o.items && o.items.length > 0) {
  o.items.forEach((item, index) => {
- if (item.measurements && Object.keys(item.measurements).length > 0) {
- hasMeasurements = true;
- const section = document.createElement('div');
- section.style.marginBottom = '10px';
- 
-  section.innerHTML = `
-  <div style="font-weight: bold; margin-bottom: 2px; text-decoration: underline;">
-  ${item.clothing_type || 'Item'} - ${o.order_number || ''}
-  </div>
-  `;
- 
-  const values = item.measurements;
-  
-  const gridContainer = document.createElement('div');
-  gridContainer.style.display = 'grid';
-  gridContainer.style.gridTemplateColumns = 'repeat(4, 1fr)';
-  gridContainer.style.gap = '0px'; 
-  gridContainer.style.marginTop = '8px';
-  
-  const new_cols = 4;
-  const new_rows = 6;
-  
-  for (let r = 0; r < new_rows; r++) {
-    for (let c = 0; c < new_cols; c++) {
-        const sideways_row = 3 - c;
-        const sideways_col = r;
-        const box_number = sideways_row * 6 + sideways_col + 1;
-        
-        const key = `Box ${box_number}`;
-        const val = values[key] || '';
-        const mItem = document.createElement('div');
-        
-        mItem.style.border = '1px solid #94a3b8'; // Slate 400
-        mItem.style.padding = '8px 4px';
-        mItem.style.textAlign = 'center';
-        mItem.style.backgroundColor = '#ffffff';
-        mItem.style.minHeight = '48px'; 
-        mItem.style.display = 'flex';
-        mItem.style.alignItems = 'center';
-        mItem.style.justifyContent = 'center';
-        
-        if (String(val).trim() !== '') {
-            mItem.innerHTML = `<div style="font-weight: normal; font-size: 1.4em; color: #000000; writing-mode: vertical-rl; text-orientation: mixed;">${val}</div>`;
-        }
-        gridContainer.appendChild(mItem);
-    }
-  }
-  section.appendChild(gridContainer);
- 
- if (item.notes && item.notes.trim() !== '') {
- const notesItem = document.createElement('div');
- notesItem.style.marginTop = '6px';
- notesItem.style.paddingTop = '4px';
- notesItem.style.borderTop = '1px dashed #ccc';
- notesItem.style.fontSize = '0.9em';
- notesItem.innerHTML = `<strong>Item Note:</strong> ${item.notes}`;
- section.appendChild(notesItem);
- }
- 
- mContainer.appendChild(section);
- }
+     const slipMain = document.createElement('main');
+     slipMain.className = 'pos-slip print-canvas';
+     if (index > 0) {
+         slipMain.style.pageBreakBefore = 'always';
+         slipMain.style.marginTop = '20px';
+     }
+     
+     const garmentText = `${item.clothing_type || 'Custom Item'} (x${item.quantity || 1})`;
+     
+     let measurementsHtml = '';
+     if (item.measurements && Object.keys(item.measurements).length > 0) {
+         const values = item.measurements;
+         measurementsHtml += `<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0px; margin-top: 8px;">`;
+         for (let r = 0; r < 6; r++) {
+             for (let c = 0; c < 4; c++) {
+                 const sideways_row = 3 - c;
+                 const sideways_col = r;
+                 const box_number = sideways_row * 6 + sideways_col + 1;
+                 const val = values[`Box ${box_number}`] || '';
+                 measurementsHtml += `
+                     <div style="border: 2px solid #000000; padding: 8px 4px; text-align: center; background-color: #ffffff; min-height: 48px; display: flex; align-items: center; justify-content: center;">
+                         ${val.trim() !== '' ? `<div style="font-weight: bold; font-size: 1.6em; color: #000000; writing-mode: vertical-rl; text-orientation: mixed;">${val}</div>` : ''}
+                     </div>`;
+             }
+         }
+         measurementsHtml += `</div>`;
+         
+         if (item.notes && item.notes.trim() !== '') {
+             measurementsHtml += `<div style="margin-top: 6px; padding-top: 4px; border-top: 1px dashed #000; font-size: 0.9em;"><strong>Item Note:</strong> ${item.notes}</div>`;
+         }
+     } else {
+         measurementsHtml = '<div style="text-align:center; font-style:italic;">No measurements</div>';
+     }
+     
+     slipMain.innerHTML = `
+         <div class="text-center mb-2 mt-2">
+             <div class="font-bold text-lg">STITCHING SLIP</div>
+             <div class="font-bold">${shopName}</div>
+         </div>
+         <div class="dashed-line"></div>
+         <div class="flex-between font-bold" style="font-size: 14px;">
+             <span>Bill No:</span><span>${o.order_number || ''}</span>
+         </div>
+         <div class="flex-between">
+             <span>Due:</span><span>${window.API.formatDate(o.delivery_date)}</span>
+         </div>
+         <div class="dashed-line"></div>
+         <div class="mb-2">
+             <div>Customer: <span class="font-bold">${o.customer_name || 'Walk-in'}</span></div>
+         </div>
+         <div class="dashed-line"></div>
+         <div class="font-bold mb-2">Garments:</div>
+         <div style="margin-bottom: 5px;">${garmentText}</div>
+         <div class="dashed-line"></div>
+         <div class="font-bold text-center mb-2">MEASUREMENTS</div>
+         <div style="font-weight: bold; margin-bottom: 2px; text-decoration: underline;">${garmentText} - ${o.order_number || ''}</div>
+         ${measurementsHtml}
+         <div class="dashed-line"></div>
+         <div class="flex-between mt-2" style="font-size: 10px;">
+             <span>Cut By: _____</span><span>Sewn By: _____</span>
+         </div>
+         <div class="text-center mt-2 flex flex-col items-center">
+             <div style="font-size: 9px; margin-top: 5px;">${generatedText}</div>
+         </div>
+     `;
+     
+     container.appendChild(slipMain);
  });
- }
- 
- if (!hasMeasurements) {
- mContainer.innerHTML = '<div style="text-align:center; font-style:italic;">No measurements</div>';
- }
-
  
  } catch (e) {
  console.error(e);

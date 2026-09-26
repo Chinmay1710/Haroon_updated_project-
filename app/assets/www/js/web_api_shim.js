@@ -314,7 +314,7 @@ window.__triggerMobilePrint = function() {
                 width: 100% !important;
                 max-width: 100% !important;
                 margin: 0 !important;
-                padding: 2vw !important;
+                padding: 2vw 6vw !important;
                 box-sizing: border-box !important;
                 padding-bottom: 25vw !important;
             }
