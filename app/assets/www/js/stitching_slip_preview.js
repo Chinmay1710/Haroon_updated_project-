@@ -50,6 +50,12 @@ async function loadSlipData(orderId) {
      if (index > 0) {
          slipMain.style.pageBreakBefore = 'always';
          slipMain.style.marginTop = '20px';
+         
+         const scissorLine = document.createElement('div');
+         scissorLine.style.textAlign = 'center';
+         scissorLine.style.marginBottom = '20px';
+         scissorLine.innerHTML = '<span>✂️----------------------------------------✂️</span>';
+         container.appendChild(scissorLine);
      }
      
      const garmentText = `${item.clothing_type || 'Custom Item'} (x${item.quantity || 1})`;
