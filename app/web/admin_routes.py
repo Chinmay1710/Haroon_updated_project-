@@ -20,6 +20,14 @@ from app.config import APP_DATA_DIR, UPLOADS_DIR, MEASUREMENT_TEMPLATES
 
 logger = logging.getLogger(__name__)
 
+def safe_float(val, default=0.0):
+    try:
+        if val == "" or val is None:
+            return default
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 router = APIRouter(prefix="/admin-api", tags=["admin"])
 
 
@@ -637,7 +645,7 @@ def handle_create_order(payload):
         items = [{
             "clothing_type": payload.get("clothingType", "Custom"),
             "quantity": payload.get("quantity", 1),
-            "price": float(payload.get("price", 0)),
+            "price": safe_float(payload.get("price", 0)),
             "measurement_profile_id": payload.get("measurementId")
         }]
     
@@ -647,8 +655,8 @@ def handle_create_order(payload):
         order_date=datetime.now().date(),
         delivery_date=deliv_date,
         special_instructions=payload.get("notes", ""),
-        advance_amount=float(payload.get("advance", 0)),
-        discount=float(payload.get("discount", 0)),
+        advance_amount=safe_float(payload.get("advance", 0)),
+        discount=safe_float(payload.get("discount", 0)),
         payment_method=payload.get("paymentMethod", "Cash")
     )
     
@@ -956,7 +964,7 @@ def handle_create_payment(payload):
     
     payment = pay_srv.add_payment(
         order_id=order_id,
-        amount=float(payload.get("amount")),
+        amount=safe_float(payload.get("amount")),
         payment_method=payload.get("payment_method", "Cash"),
         payment_date=date.today()
     )
@@ -1257,13 +1265,14 @@ def handle_get_all_workers(payload):
 def handle_add_worker(payload):
     services = _get_services()
     worker_srv = services["worker"]
+    
     w = worker_srv.add_worker(
         name=payload.get("name"),
         phone=payload.get("phone"),
         pin=payload.get("pin"),
         worker_type=payload.get("worker_type", "PIECE_RATE"),
         worker_role=payload.get("worker_role", "STITCHING"),
-        daily_rate=float(payload.get("daily_rate", 0.0))
+        daily_rate=safe_float(payload.get("daily_rate", 0.0))
     )
     return {"status": "success", "data": {"worker": w}}
 
@@ -1292,7 +1301,7 @@ def handle_get_garment_rates(payload):
 def handle_set_garment_rate(payload):
     services = _get_services()
     worker_srv = services["worker"]
-    rate = worker_srv.set_garment_rate(payload.get("garment_type"), float(payload.get("rate", 0)))
+    rate = worker_srv.set_garment_rate(payload.get("garment_type"), safe_float(payload.get("rate", 0)))
     return {"status": "success", "data": {"rate": rate}}
 
 
@@ -1323,8 +1332,8 @@ def handle_edit_pending_entry(payload):
     result = worker_srv.edit_pending_entry(
         entry_id=payload.get("entry_id"),
         new_quantity=int(payload.get("quantity", 0)),
-        new_extra_amount=float(payload.get("extra_amount", 0.0)),
-        new_total_amount=float(payload.get("total_amount", 0.0))
+        new_extra_amount=safe_float(payload.get("extra_amount", 0.0)),
+        new_total_amount=safe_float(payload.get("total_amount", 0.0))
     )
     if "error" in result:
         return {"status": "error", "message": result["error"]}
@@ -1335,7 +1344,7 @@ def handle_record_advance(payload):
     services = _get_services()
     worker_srv = services["worker"]
     advance = worker_srv.record_advance(
-        payload.get("worker_id"), float(payload.get("amount", 0)), payload.get("notes", "")
+        payload.get("worker_id"), safe_float(payload.get("amount", 0)), payload.get("notes", "")
     )
     return {"status": "success", "data": {"advance": advance}}
 
@@ -1381,7 +1390,8 @@ def handle_submit_manual_work(payload):
     worker_id = payload.get("worker_id")
     items = payload.get("items", [])
     extra_desc = payload.get("extra_desc", "")
-    extra_amount = float(payload.get("extra_amount", 0))
+    
+    extra_amount = safe_float(payload.get("extra_amount", 0))
     is_present = bool(payload.get("is_present", False))
     
     if items:
@@ -1443,10 +1453,10 @@ def handle_add_stock_item(payload):
     item = stock_service.add_stock_item(
         name=payload.get("name"),
         category=payload.get("category"),
-        quantity=float(payload.get("quantity", 0)),
+        quantity=safe_float(payload.get("quantity", 0)),
         unit=payload.get("unit"),
-        min_quantity=float(payload.get("min_quantity", 0)),
-        unit_cost=float(payload.get("unit_cost", 0))
+        min_quantity=safe_float(payload.get("min_quantity", 0)),
+        unit_cost=safe_float(payload.get("unit_cost", 0))
     )
     return {"status": "success", "data": item}
 
@@ -1458,8 +1468,8 @@ def handle_update_stock_item(payload):
         name=payload.get("name"),
         category=payload.get("category"),
         unit=payload.get("unit"),
-        min_quantity=float(payload.get("min_quantity", 0)),
-        unit_cost=float(payload.get("unit_cost", 0))
+        min_quantity=safe_float(payload.get("min_quantity", 0)),
+        unit_cost=safe_float(payload.get("unit_cost", 0))
     )
     return {"status": "success", "data": item}
 
@@ -1468,7 +1478,7 @@ def handle_adjust_stock(payload):
     from app.services.stock_service import stock_service
     item = stock_service.adjust_stock(
         item_id=payload.get("id"),
-        amount=float(payload.get("amount", 0)),
+        amount=safe_float(payload.get("amount", 0)),
         operation=payload.get("operation")
     )
     return {"status": "success", "data": item}
