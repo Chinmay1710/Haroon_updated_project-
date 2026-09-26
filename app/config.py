@@ -140,7 +140,7 @@ MEASUREMENT_TEMPLATES = {
 # Order statuses
 # ---------------------------------------------------------------------------
 
-ORDER_STATUSES = ["NEW", "CUTTING_COMPLETE", "STITCHING_COMPLETE", "DELIVERED", "CANCELLED"]
+ORDER_STATUSES = ["NEW", "CUTTING_COMPLETE", "PARTIALLY_COMPLETE", "STITCHING_COMPLETE", "DELIVERED", "CANCELLED"]
 PAYMENT_METHODS = ["Cash", "UPI", "Card", "Other"]
 PAYMENT_STATUSES = ["UNPAID", "PARTIALLY PAID", "PAID"]
 EXPENSE_CATEGORIES = ["Material", "Electricity", "Rent", "Salary", "Transport", "Other"]

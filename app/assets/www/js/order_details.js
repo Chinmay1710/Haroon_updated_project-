@@ -93,6 +93,15 @@ document.addEventListener("DOMContentLoaded", function() {
  window.API.request('navigate_to', {page: 'new_order', order_id: orderId, action: 'edit'});
  });
  
+ document.getElementById('od-mark-partial-btn').addEventListener('click', async function() {
+ if (currentOrder) {
+ const ok = confirm('Mark this order as Partially Complete?');
+ if (ok) {
+ updateOrderStatus(orderId, 'PARTIALLY_COMPLETE');
+ }
+ }
+ });
+
  document.getElementById('od-mark-complete-btn').addEventListener('click', async function() {
  if (currentOrder) {
  const confirmResult = await window.API.confirmWithCheckbox(
@@ -154,10 +163,18 @@ function renderOrder(o) {
  document.getElementById('od-customer-address').textContent = o.customer_address || '';
  
  const markBtn = document.getElementById('od-mark-complete-btn');
+ const partialBtn = document.getElementById('od-mark-partial-btn');
+ 
  if (o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') {
  markBtn.classList.remove('hidden');
  } else {
  markBtn.classList.add('hidden');
+ }
+
+ if (o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'PARTIALLY_COMPLETE') {
+ partialBtn.classList.remove('hidden');
+ } else {
+ partialBtn.classList.add('hidden');
  }
  
  document.getElementById('od-view-customer-btn').onclick = () => {

@@ -84,10 +84,22 @@ window.markOrderComplete = async function(id) {
  try {
  const res = await window.API.request('update_order_status', {order_id: id, status: 'STITCHING_COMPLETE', send_whatsapp: confirmResult.checked});
  window.API.toast("Order marked as Stitching Complete", "success");
- // Open WhatsApp with pre-typed message
  if (res && res.whatsapp_url) {
  window.API.request('open_whatsapp_url', {url: res.whatsapp_url});
  }
+ loadOrders();
+ } catch (e) {
+ window.API.toast("Failed to update status: " + e, "error");
+ }
+ }
+};
+
+window.markOrderPartiallyComplete = async function(id) {
+ const ok = confirm('Mark this order as Partially Complete?');
+ if (ok) {
+ try {
+ await window.API.request('update_order_status', {order_id: id, status: 'PARTIALLY_COMPLETE'});
+ window.API.toast("Order marked as Partially Complete", "success");
  loadOrders();
  } catch (e) {
  window.API.toast("Failed to update status: " + e, "error");
@@ -267,6 +279,11 @@ function renderOrders(orders) {
  statusBg = 'bg-surface-container-high';
  statusDot = 'bg-primary';
  break;
+ case 'PARTIALLY_COMPLETE':
+ statusColor = 'text-[#d97706]';
+ statusBg = 'bg-[#fef3c7]';
+ statusDot = 'bg-[#f59e0b]';
+ break;
  case 'STITCHING_COMPLETE':
  statusColor = 'text-on-tertiary-container';
  statusBg = 'bg-tertiary-fixed';
@@ -355,6 +372,12 @@ function renderOrders(orders) {
  </span>
  </div>
  <div class="col-span-2 flex justify-end items-center gap-2">
+ ${(o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'PARTIALLY_COMPLETE') ? `
+ <button class="mark-partial-btn px-2 py-1.5 rounded-md bg-[#fef3c7] text-[#d97706] font-label-sm hover:bg-[#f59e0b] hover:text-white whitespace-nowrap shadow-sm border border-[#f59e0b]/30 flex items-center gap-1" title="Partially Complete">
+ <span class="material-symbols-outlined text-[14px]">timelapse</span>
+ Partial
+ </button>
+ ` : ''}
  ${(o.status !== 'STITCHING_COMPLETE' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') ? `
  <button class="mark-complete-btn px-3 py-1.5 rounded-md bg-primary/10 text-primary font-label-sm hover:bg-primary hover:text-on-primary whitespace-nowrap shadow-sm border border-primary/20 flex items-center gap-1" title="Mark Stitching Complete">
  <span class="material-symbols-outlined text-[16px]">check_circle</span>
@@ -369,6 +392,13 @@ function renderOrders(orders) {
  
  container.appendChild(card);
  
+ const partialBtn = card.querySelector('.mark-partial-btn');
+ if (partialBtn) {
+ partialBtn.addEventListener('click', (e) => {
+ e.stopPropagation();
+ window.markOrderPartiallyComplete(o.id);
+ });
+ }
  const completeBtn = card.querySelector('.mark-complete-btn');
  if (completeBtn) {
  completeBtn.addEventListener('click', (e) => {
