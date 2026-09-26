@@ -52,6 +52,10 @@ os.makedirs(os.path.join(UPLOADS_DIR, "items"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 
+@app.get("/health")
+def health_check():
+    return {"status": "alive"}
+
 @app.get("/app/{page_name}")
 def serve_admin_page(page_name: str, response: Response):
     """
