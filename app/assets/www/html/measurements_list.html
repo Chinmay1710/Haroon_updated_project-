@@ -257,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <span class="material-symbols-outlined text-[24px]">payments</span>
         <span class="text-[10px] font-medium">Payments</span>
     </a>
-    <button onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden');" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+    <button onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden'); event.stopPropagation();" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
         <span class="material-symbols-outlined text-[24px]">menu</span>
         <span class="text-[10px] font-medium">More</span>
     </button>
