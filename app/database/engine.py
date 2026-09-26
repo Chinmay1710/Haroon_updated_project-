@@ -102,6 +102,17 @@ def init_db():
     engine = get_engine()
     auto_migrate(engine, Base)
     Base.metadata.create_all(engine)
+    
+    # Quick fix for PostgreSQL to add the missing column
+    if engine.dialect.name != "sqlite":
+        try:
+            with engine.connect() as conn:
+                from sqlalchemy import text
+                conn.execute(text("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_ready BOOLEAN DEFAULT FALSE NOT NULL"))
+                conn.commit()
+                print("Successfully ensured is_ready column exists in Postgres.")
+        except Exception as e:
+            print(f"Postgres column check/migration error (might already exist): {e}")
 
 
 def close_db():
