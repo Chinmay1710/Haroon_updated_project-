@@ -323,7 +323,7 @@
 
  
  try {
- const data = await window.API.request('get_customer_qr_url');
+ const data = await window.API.request('get_customer_qr_url', { origin: window.location.origin });
  if(data && data.url) {
  const url = data.url;
  urlText.textContent = url;

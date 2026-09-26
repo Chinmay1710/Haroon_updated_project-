@@ -498,10 +498,18 @@ def handle_delete_customer(payload):
 
 
 def handle_get_customer_qr_url(payload):
-    from app.web.tunnel import GLOBAL_TUNNEL_URL
-    tunnel_url = GLOBAL_TUNNEL_URL
-    if tunnel_url:
-        qr_url = f"{tunnel_url}/static/customer_form.html"
+    base_url = payload.get("origin")
+    
+    if not base_url:
+        from app.web.tunnel import GLOBAL_TUNNEL_URL
+        base_url = GLOBAL_TUNNEL_URL
+
+    if base_url:
+        # Strip trailing slash if present
+        base_url = base_url.rstrip("/")
+        # We assume the mobile customer form is served at /static/customer_form.html
+        qr_url = f"{base_url}/static/customer_form.html"
+        
         # Generate QR base64
         try:
             import qrcode
@@ -519,7 +527,8 @@ def handle_get_customer_qr_url(payload):
             logger.error(f"Error generating QR: {e}")
             base64_url = ""
         return {"status": "success", "data": {"url": qr_url, "base64": base64_url}}
-    return {"status": "error", "message": "Worker Portal is not running"}
+    
+    return {"status": "error", "message": "Server URL could not be determined"}
 
 
 # ─── MEASUREMENTS ────────────────────────────────────────────────────────────
