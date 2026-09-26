@@ -1109,16 +1109,22 @@ def handle_get_stock_payment_summary(payload):
 def handle_get_deliveries_dashboard(payload):
     from app.models.order import Order
     from sqlalchemy.orm import joinedload
+    from sqlalchemy import or_, and_
+    from datetime import datetime
     
     today = date.today()
     tomorrow = today + timedelta(days=1)
+    recent_threshold = datetime.now() - timedelta(days=7)
     
     session = get_session()
     try:
         orders = session.query(Order).options(
             joinedload(Order.customer),
         ).filter(
-            Order.status.in_(["STITCHING_COMPLETE", "PARTIALLY_COMPLETE", "DELIVERED"])
+            or_(
+                Order.status.in_(["STITCHING_COMPLETE", "PARTIALLY_COMPLETE"]),
+                and_(Order.status == "DELIVERED", Order.updated_at >= recent_threshold)
+            )
         ).order_by(Order.updated_at.desc()).all()
         
         deliveries_list = []
