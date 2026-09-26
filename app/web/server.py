@@ -56,6 +56,10 @@ app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 def health_check():
     return {"status": "alive"}
 
+@app.get("/ping")
+def ping():
+    return JSONResponse(content={"ok": True}, status_code=200)
+
 @app.get("/app/{page_name}")
 def serve_admin_page(page_name: str, response: Response):
     """
