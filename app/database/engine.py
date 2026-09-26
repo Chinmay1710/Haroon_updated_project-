@@ -103,19 +103,8 @@ def init_db():
     auto_migrate(engine, Base)
     Base.metadata.create_all(engine)
     
-    # Quick fix for PostgreSQL to add the missing columns
-    if engine.dialect.name != "sqlite":
-        try:
-            with engine.connect() as conn:
-                from sqlalchemy import text
-                conn.execute(text("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_ready BOOLEAN DEFAULT FALSE NOT NULL"))
-                conn.execute(text("ALTER TABLE workers ADD COLUMN IF NOT EXISTS worker_role VARCHAR(20) DEFAULT 'STITCHING' NOT NULL"))
-                conn.execute(text("ALTER TABLE work_entries ADD COLUMN IF NOT EXISTS is_settled BOOLEAN DEFAULT FALSE NOT NULL"))
-                conn.execute(text("ALTER TABLE worker_advances ADD COLUMN IF NOT EXISTS is_settled BOOLEAN DEFAULT FALSE NOT NULL"))
-                conn.commit()
-                print("Successfully ensured missing columns exist in Postgres.")
-        except Exception as e:
-            print(f"Postgres column check/migration error (might already exist): {e}")
+    # auto_migrate now handles missing columns across both SQLite and Postgres automatically.
+
 
 
 def close_db():

@@ -72,68 +72,76 @@ def auto_migrate(engine, Base):
     """
     Idempotent, additive-only migration.
     Inspects all tables in the live database and adds missing columns 
-    defined in the SQLAlchemy metadata.
+    defined in the SQLAlchemy metadata. Works for both SQLite and Postgres.
     """
     logger.info("Starting safe database auto-migration check...")
     
-    if engine.dialect.name != "sqlite":
-        logger.info("Non-SQLite database detected. Skipping SQLite-specific auto-migrations.")
-        return
-
-    if not os.path.exists(DATABASE_PATH):
+    if engine.dialect.name == "sqlite" and not os.path.exists(DATABASE_PATH):
         logger.info("No existing database found. Skipping migration. create_all() will handle it.")
         return
 
-    # To avoid making backups on every single startup when no migration is needed,
-    # we first do a dry run to see if ANY migration is needed.
+    from sqlalchemy import inspect
+    insp = inspect(engine)
+    
+    # Dry run
     needs_migration = False
     try:
-        with engine.begin() as conn:
-            for table_name, table in Base.metadata.tables.items():
-                result = conn.execute(text(f"PRAGMA table_info('{table_name}')"))
-                existing_cols = {row[1] for row in result.fetchall()}
-                if not existing_cols:
-                    continue
-                for col in table.columns:
-                    if col.name not in existing_cols:
-                        needs_migration = True
-                        break
-                if needs_migration:
+        for table_name, table in Base.metadata.tables.items():
+            if not insp.has_table(table_name):
+                continue
+            existing_cols = {c["name"] for c in insp.get_columns(table_name)}
+            for col in table.columns:
+                if col.name not in existing_cols:
+                    needs_migration = True
                     break
+            if needs_migration:
+                break
     except Exception as e:
         logger.error(f"Failed during migration dry-run: {e}")
-        raise
+        return
 
     if not needs_migration:
         logger.info("Database schema is up to date. No migration required.")
         return
 
-    # Backup before any modifications
-    safe_db_backup(DATABASE_PATH)
+    if engine.dialect.name == "sqlite":
+        safe_db_backup(DATABASE_PATH)
     
     try:
         with engine.begin() as conn:
             for table_name, table in Base.metadata.tables.items():
-                result = conn.execute(text(f"PRAGMA table_info('{table_name}')"))
-                existing_cols = {row[1] for row in result.fetchall()}
-                
-                if not existing_cols:
+                if not insp.has_table(table_name):
                     continue
+                
+                existing_cols = {c["name"] for c in insp.get_columns(table_name)}
                 
                 for col in table.columns:
                     if col.name not in existing_cols:
                         logger.info(f"Missing column detected: {table_name}.{col.name}")
                         
-                        col_type = get_sqlite_type(col.type)
-                        default_clause = get_sqlite_default(col)
+                        col_type = get_sqlite_type(col.type) if engine.dialect.name == "sqlite" else str(col.type.compile(engine.dialect))
+                        
+                        default_clause = ""
+                        if engine.dialect.name == "sqlite":
+                            default_clause = get_sqlite_default(col)
+                        else:
+                            if col.server_default:
+                                default_clause = f"DEFAULT {col.server_default.arg}"
+                            elif str(col.type).startswith("BOOLEAN") or str(col.type).startswith("BOOL"):
+                                default_clause = "DEFAULT FALSE"
+                            elif "INT" in str(col.type) or "FLOAT" in str(col.type) or "REAL" in str(col.type):
+                                default_clause = "DEFAULT 0"
+                            elif str(col.type).startswith("VARCHAR") or str(col.type).startswith("STRING"):
+                                default_clause = "DEFAULT ''"
                         
                         alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type} {default_clause}"
-                        logger.info(f"Executing: {alter_sql}")
                         
+                        logger.info(f"Executing: {alter_sql}")
                         conn.execute(text(alter_sql))
                         logger.info(f"Successfully added column {table_name}.{col.name}")
                         
         logger.info("Auto-migration completed successfully.")
     except Exception as e:
         logger.error(f"FATAL ERROR during auto-migration: {e}")
-        raise RuntimeError(f"Database migration failed. To prevent corruption, application will not start: {e}")
+        if engine.dialect.name == "sqlite":
+            raise RuntimeError(f"Database migration failed. To prevent corruption, application will not start: {e}")
