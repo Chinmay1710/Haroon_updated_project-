@@ -23,7 +23,8 @@ class OrderRepository:
 
     def create(self, customer_id: int, order_date: date = None,
                delivery_date: date = None, total_amount: float = 0.0,
-               advance_amount: float = 0.0, special_instructions: str = "",
+               advance_amount: float = 0.0, discount: float = 0.0, 
+               special_instructions: str = "",
                notes: str = "") -> Order:
         order = Order(
             order_number=self._generate_order_number(),
@@ -33,6 +34,7 @@ class OrderRepository:
             delivery_date=delivery_date,
             total_amount=total_amount,
             advance_amount=advance_amount,
+            discount=discount,
             paid_amount=advance_amount,  # advance is initial payment
             special_instructions=special_instructions,
             notes=notes,

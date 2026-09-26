@@ -153,3 +153,12 @@ DEFAULT_CURRENCY = "₹"
 DEFAULT_MEASUREMENT_UNIT = "inches"
 DEFAULT_DATE_FORMAT = "DD/MM/YYYY"
 DEFAULT_PAPER_SIZE = "A4"
+
+# ---------------------------------------------------------------------------
+# Cloudinary Configuration (Cloud Image Storage)
+# ---------------------------------------------------------------------------
+
+CLOUDINARY_CLOUD_NAME = "t4m27rpl"
+CLOUDINARY_API_KEY = "584576944991222"
+CLOUDINARY_API_SECRET = "IiKkCmFdVJKAKCE1kZyzQu_gyeA"
+CLOUDINARY_ENABLED = True  # Set to False to fall back to local storage

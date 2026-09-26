@@ -254,6 +254,12 @@ function renderOrder(o) {
  
  // Finances
  document.getElementById('od-total').textContent = window.API.formatCurrency(o.total_amount);
+ if (o.discount && o.discount > 0) {
+ document.getElementById('od-discount-container').classList.remove('hidden');
+ document.getElementById('od-discount').textContent = "-" + window.API.formatCurrency(o.discount);
+ } else {
+ document.getElementById('od-discount-container').classList.add('hidden');
+ }
  const paid = o.total_amount - o.remaining_amount;
  document.getElementById('od-paid').textContent = window.API.formatCurrency(paid);
  document.getElementById('od-balance').textContent = window.API.formatCurrency(o.remaining_amount);

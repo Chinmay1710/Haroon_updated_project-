@@ -18,6 +18,7 @@ class Order(Base):
     order_date = Column(Date, default=date.today, nullable=False)
     delivery_date = Column(Date, nullable=True)
     total_amount = Column(Float, default=0.0, nullable=False)
+    discount = Column(Float, default=0.0, nullable=False)
     advance_amount = Column(Float, default=0.0, nullable=False)
     paid_amount = Column(Float, default=0.0, nullable=False)
     special_instructions = Column(Text)

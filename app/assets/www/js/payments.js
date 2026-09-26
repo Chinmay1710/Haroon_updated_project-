@@ -390,7 +390,7 @@ function renderPendingBalances(orders) {
  ${o.status === 'DELIVERED' ? '<span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded bg-[#fef2f2] text-error font-label-sm text-[10px] uppercase border border-[#fca5a5]"><span class="material-symbols-outlined text-[12px]">local_shipping</span> Delivered (Unpaid)</span>' : ''}
  </div>
  <div class="font-body-md text-body-md text-on-surface">${o.customer_name || 'Customer'}</div>
- <div class="font-label-lg text-label-lg text-on-surface">${window.API.formatCurrency(o.total_amount)}</div>
+ <div class="flex flex-col"><div class="font-label-lg text-label-lg text-on-surface">${window.API.formatCurrency(o.total_amount)}</div>${o.discount > 0 ? `<div class="font-body-sm text-success text-[10px] whitespace-nowrap">- ${window.API.formatCurrency(o.discount)}</div>` : ""}</div>
  <div class="font-label-lg text-label-lg text-error font-bold">${window.API.formatCurrency(o.remaining_amount)}</div>
  <div class="text-right font-body-md text-body-md flex items-center justify-end gap-2">
  <button onclick="event.stopPropagation(); window.API.request('generate_payment_reminder_whatsapp', {order_id: ${o.id}}).then(data=>{ window.API.request('open_whatsapp_url', {url: data.whatsapp_url}); }).catch(err=>{ window.API.toast(err, 'error'); });" class="px-3 py-1.5 bg-surface text-primary rounded-lg hover:bg-surface-container-low transition-colors text-sm font-medium border border-outline-variant flex items-center justify-center shadow-sm" title="Send WhatsApp Reminder">

@@ -197,9 +197,15 @@
  </div>
 
  <div class="space-y-4">
- <div>
+ <div class="flex gap-4">
+ <div class="flex-1">
+ <label class="block font-label-lg text-on-surface mb-2">Discount Amount</label>
+ <input id="order-discount" type="number" min="0" placeholder="0" class="w-full p-3 bg-surface rounded-lg border border-outline-variant focus:border-primary outline-none text-right font-body-lg">
+ </div>
+ <div class="flex-1">
  <label class="block font-label-lg text-on-surface mb-2">Advance Amount Paid</label>
  <input id="order-advance" type="number" min="0" placeholder="0" class="w-full p-3 bg-surface rounded-lg border border-outline-variant focus:border-primary outline-none text-right font-body-lg">
+ </div>
  </div>
  <div>
  <label class="block font-label-lg text-on-surface mb-2"><span data-i18n="new_order.payment_method">Payment Method</span></label>
@@ -244,12 +250,6 @@
  <div>
  <label class="block font-label-sm text-on-surface-variant mb-1">Clothing Type</label>
  <select id="modal-item-type" class="w-full p-3 bg-surface rounded-lg border border-outline-variant focus:border-primary outline-none" onchange="handleClothingTypeChange()">
- <option value="Shirt">Shirt</option>
- <option value="Pant">Pant</option>
- <option value="Kurta">Kurta</option>
- <option value="Blouse">Blouse</option>
- <option value="Suit">Suit</option>
- <option value="Custom">Custom</option>
  </select>
  </div>
  <div>
@@ -365,9 +365,9 @@
  </div>
 
  <!-- JS -->
- <script src="../js/api.js?v=1790422147"></script>
- <script src="../js/app.js?v=1790422147?v=1790422147"></script>
- <script src="../js/new_order.js?v=1790422147"></script>
+ <script src="../js/api.js?v=2026092606"></script>
+ <script src="../js/app.js?v=2026092606"></script>
+ <script src="../js/new_order.js?v=2026092606"></script>
 
 <!-- Mobile Bottom Navigation -->
 <nav id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-40 flex items-center justify-around px-2 border-t border-outline-variant/20">

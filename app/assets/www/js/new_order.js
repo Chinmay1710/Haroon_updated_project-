@@ -19,6 +19,7 @@ let wizardState = {
  deliveryDate: "",
  notes: "",
  advance: 0,
+ discount: 0,
  paymentMethod: "CASH"
 };
 
@@ -71,6 +72,14 @@ document.addEventListener("DOMContentLoaded", function() {
  wizardState.advance = parseFloat(e.target.value) || 0;
  updateTotals();
  });
+ 
+ const discountInput = document.getElementById('order-discount');
+ if (discountInput) {
+ discountInput.addEventListener('input', (e) => {
+ wizardState.discount = parseFloat(e.target.value) || 0;
+ updateTotals();
+ });
+ }
  
  // Attach Dictation Mic
  
@@ -393,7 +402,7 @@ function renderMeasurementFields(type, values) {
     html += `
     <div>
       <div class="relative">
-        <input type="text" inputmode="text" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
+        <input type="text" inputmode="decimal" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
       </div>
     </div>
     `;
@@ -696,7 +705,9 @@ window.duplicateItem = function(id) {
 }
 
 function updateTotals() {
- const total = wizardState.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+ const subtotal = wizardState.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+ const discount = parseFloat(wizardState.discount) || 0;
+ const total = Math.max(0, subtotal - discount);
  const rem = Math.max(0, total - wizardState.advance);
  
  document.getElementById('order-total').textContent = window.API.formatCurrency(total);
@@ -742,11 +753,14 @@ window.saveOrder = async function() {
  const sendWhatsappCheckbox = document.getElementById('order-send-whatsapp');
  const sendWhatsapp = sendWhatsappCheckbox ? sendWhatsappCheckbox.checked : false;
  
+ const discount = parseFloat(document.getElementById('order-discount') ? document.getElementById('order-discount').value : 0) || 0;
+ 
  const payload = {
  customerId: wizardState.customerId,
  items: payloadItems,
  deliveryDate: date,
  advance: advance,
+ discount: discount,
  notes: combinedNotes,
  paymentMethod: paymentMethod,
  send_whatsapp: sendWhatsapp

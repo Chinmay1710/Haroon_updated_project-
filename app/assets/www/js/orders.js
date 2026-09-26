@@ -132,10 +132,8 @@ function filterOrders(resetPage = true) {
 
  filtered.sort((a, b) => {
  if (status === 'All Orders' || status === 'Complete') {
- // Stack system: newest updated/created orders first
- const timeA = a.updated_at ? new Date(a.updated_at).getTime() : (a.id || 0);
- const timeB = b.updated_at ? new Date(b.updated_at).getTime() : (b.id || 0);
- return timeB - timeA;
+ // Bill number (id) descending
+ return (b.id || 0) - (a.id || 0);
  } else {
  // Incomplete orders: sort red alert (overdue and urgent) orders to top, then by closest delivery date
  const checkAlert = (o) => {
@@ -347,6 +345,7 @@ function renderOrders(orders) {
  <div class="flex flex-col items-end">
  <span class="font-body-md text-body-md text-on-surface-variant text-sm">Total:</span>
  <span class="font-label-lg text-label-lg text-on-surface">${window.API.formatCurrency(o.total_amount)}</span>
+                                ${o.discount > 0 ? `<span class="font-body-sm text-success text-[10px] whitespace-nowrap">- ${window.API.formatCurrency(o.discount)}</span>` : "" }
  </div>
  </div>
  <div class="col-span-2 flex justify-start">

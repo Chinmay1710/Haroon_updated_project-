@@ -31,7 +31,7 @@ VALID_TRANSITIONS = {
 class OrderService:
 
     def _save_image(self, b64_data: str) -> str:
-        """Decode base64 image and save to disk, returning relative path."""
+        """Decode base64 image and upload to Cloudinary (or save locally as fallback)."""
         if not b64_data:
             return None
             
@@ -41,26 +41,57 @@ class OrderService:
                 b64_data = b64_data.split(',')[1]
                 
             img_data = base64.b64decode(b64_data)
+            
+            # Try Cloudinary upload
+            try:
+                from app.config import CLOUDINARY_ENABLED, CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+                if CLOUDINARY_ENABLED:
+                    import cloudinary
+                    import cloudinary.uploader
+                    import io
+                    
+                    cloudinary.config(
+                        cloud_name=CLOUDINARY_CLOUD_NAME,
+                        api_key=CLOUDINARY_API_KEY,
+                        api_secret=CLOUDINARY_API_SECRET,
+                        secure=True
+                    )
+                    
+                    # Upload to Cloudinary from bytes
+                    result = cloudinary.uploader.upload(
+                        io.BytesIO(img_data),
+                        folder="haroon_tailor/items",
+                        resource_type="image",
+                        format="jpg",
+                        quality="auto:good",
+                    )
+                    
+                    cloud_url = result.get("secure_url")
+                    logger.info(f"Image uploaded to Cloudinary: {cloud_url}")
+                    return cloud_url  # Return full https:// URL
+                    
+            except Exception as cloud_err:
+                logger.warning(f"Cloudinary upload failed, saving locally: {cloud_err}")
+            
+            # Fallback: save locally
             filename = f"item_{uuid.uuid4().hex[:8]}.jpg"
-            
             from app.config import UPLOADS_DIR
-            
             upload_dir = os.path.join(UPLOADS_DIR, "items")
             os.makedirs(upload_dir, exist_ok=True)
-            
             file_path = os.path.join(upload_dir, filename)
             with open(file_path, "wb") as f:
                 f.write(img_data)
-                
-            # Return relative path for DB, but the UI will need absolute path resolution
             return f"../uploads/items/{filename}"
+            
         except Exception as e:
             logger.error(f"Failed to save image: {e}")
             return None
 
+
     def create_order(self, customer_id: int, items: list[dict],
                      order_date: date, delivery_date: date | None,
                      special_instructions: str, advance_amount: float,
+                     discount: float = 0.0,
                      payment_method: str = "Cash") -> Order:
         """
 
@@ -68,7 +99,8 @@ class OrderService:
         """
         session = get_session()
         try:
-            total_amount = sum((item.get('quantity', 1) * item.get('price', 0.0)) for item in items)
+            subtotal = sum((item.get('quantity', 1) * item.get('price', 0.0)) for item in items)
+            total_amount = max(0.0, subtotal - discount)
 
             order_repo = OrderRepository(session)
             order = order_repo.create(
@@ -77,6 +109,7 @@ class OrderService:
                 delivery_date=delivery_date,
                 total_amount=total_amount,
                 advance_amount=advance_amount,
+                discount=discount,
                 special_instructions=special_instructions,
             )
 

@@ -156,8 +156,11 @@ window.API = {
  // Remove after 3 seconds
  
 
- toast.style.opacity = '0';
- setTimeout(() => toast.remove(), 300);
+ setTimeout(() => {
+  toast.style.transition = "opacity 0.3s ease";
+  toast.style.opacity = "0";
+  setTimeout(() => toast.remove(), 300);
+ }, 3000);
  
  },
  

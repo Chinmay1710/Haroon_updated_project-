@@ -271,6 +271,7 @@ def get_order_details(order_id: int):
             "customer_address": order.customer.address if order.customer else "",
             "status": order.status,
             "total_amount": order.total_amount,
+            "discount": getattr(order, "discount", 0.0),
             "paid_amount": order.paid_amount,
             "remaining_amount": order.remaining_amount,
             "items": items

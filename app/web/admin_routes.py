@@ -421,6 +421,7 @@ def handle_get_customer_details(payload):
                 "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
                 "status": o.status,
                 "total_amount": o.total_amount,
+                "discount": getattr(o, "discount", 0.0),
                 "remaining_amount": o.remaining_amount
             })
         
@@ -631,6 +632,7 @@ def handle_create_order(payload):
         delivery_date=deliv_date,
         special_instructions=payload.get("notes", ""),
         advance_amount=float(payload.get("advance", 0)),
+        discount=float(payload.get("discount", 0)),
         payment_method=payload.get("paymentMethod", "Cash")
     )
     
@@ -706,6 +708,7 @@ def handle_get_all_orders(payload):
             "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
             "status": o.status,
             "total_amount": o.total_amount,
+                "discount": getattr(o, "discount", 0.0),
             "remaining_amount": o.remaining_amount,
             "updated_at": o.updated_at.isoformat() if hasattr(o, "updated_at") and o.updated_at else ""
         })
@@ -749,6 +752,7 @@ def handle_get_order_details(payload):
             "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
             "status": o.status,
             "total_amount": o.total_amount,
+                "discount": getattr(o, "discount", 0.0),
             "advance_amount": o.advance_amount,
             "remaining_amount": o.remaining_amount,
             "special_instructions": o.special_instructions or "",
@@ -1118,6 +1122,7 @@ def handle_get_deliveries_dashboard(payload):
                 "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
                 "status": o.status,
                 "total_amount": o.total_amount,
+                "discount": getattr(o, "discount", 0.0),
                 "advance_paid": getattr(o, "advance_amount", getattr(o, "paid_amount", 0)),
                 "remaining_amount": o.remaining_amount,
                 "updated_at": o.updated_at.isoformat() if hasattr(o, "updated_at") and o.updated_at else ""
