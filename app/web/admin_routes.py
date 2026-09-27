@@ -481,9 +481,14 @@ def handle_get_customer_details(payload):
 def handle_create_customer(payload):
     services = _get_services()
     cust_srv = services["customer"]
+    mobile = payload.get('mobile', '').strip()
+    import re
+    if not re.match(r'^\+91 [0-9]{10}$', mobile):
+        return {"status": "error", "error": "Mobile number must be exactly 10 digits (e.g. +91 9876543210)"}
+
     customer = cust_srv.create_customer(
         name=payload.get('name'),
-        mobile=payload.get('mobile'),
+        mobile=mobile,
         address=payload.get('address'),
         notes=payload.get('notes')
     )
@@ -494,10 +499,15 @@ def handle_update_customer(payload):
     services = _get_services()
     cust_srv = services["customer"]
     cust_id = payload.get("id")
+    mobile = payload.get('mobile', '').strip()
+    import re
+    if mobile and not re.match(r'^\+91 [0-9]{10}$', mobile):
+        return {"status": "error", "error": "Mobile number must be exactly 10 digits (e.g. +91 9876543210)"}
+
     cust_srv.update_customer(
         cust_id,
         name=payload.get('name'),
-        mobile=payload.get('mobile'),
+        mobile=mobile,
         address=payload.get('address'),
         notes=payload.get('notes')
     )
