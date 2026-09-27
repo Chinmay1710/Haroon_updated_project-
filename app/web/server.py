@@ -56,47 +56,6 @@ app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 def health_check():
     return {"status": "alive"}
 
-@app.get("/api/dangerous_reset_everything")
-def dangerous_reset_everything():
-    from app.database.engine import get_session, get_engine, Base
-    from app.models.customer import Customer
-    from app.models.order import Order, OrderItem, OrderMeasurement
-    from app.models.payment import Payment
-    from app.models.measurement import MeasurementProfile, MeasurementValue
-    from app.models.expense import Expense
-    from app.models.worker import Worker, WorkEntry, WorkerAdvance
-    from app.models.stock import StockItem, StockUsage
-    
-    engine = get_engine()
-    session = get_session()
-    
-    try:
-        session.query(StockUsage).delete()
-        session.query(StockItem).delete()
-        session.query(WorkerAdvance).delete()
-        session.query(WorkEntry).delete()
-        session.query(Worker).delete()
-        session.query(Expense).delete()
-        session.query(Payment).delete()
-        session.query(OrderMeasurement).delete()
-        session.query(OrderItem).delete()
-        session.query(Order).delete()
-        session.query(MeasurementValue).delete()
-        session.query(MeasurementProfile).delete()
-        session.query(Customer).delete()
-        session.commit()
-        return {"status": "success", "message": "Database successfully wiped clean! PLEASE ASK AI TO REMOVE THIS ENDPOINT NOW."}
-    except Exception as e:
-        session.rollback()
-        try:
-            Base.metadata.drop_all(engine)
-            Base.metadata.create_all(engine)
-            return {"status": "success", "message": "Database tables dropped and recreated! PLEASE ASK AI TO REMOVE THIS ENDPOINT NOW."}
-        except Exception as e2:
-            return {"status": "error", "message": str(e2)}
-    finally:
-        session.close()
-
 @app.get("/ping")
 def ping():
     return JSONResponse(content={"ok": True}, status_code=200)
