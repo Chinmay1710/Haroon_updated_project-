@@ -188,8 +188,8 @@
 
     function switchToABC() {
         if (!currentInput) return;
-        // Remove inputmode='none' so the real keyboard pops up
-        currentInput.removeAttribute('inputmode');
+        // Set inputmode='text' so the real keyboard pops up
+        currentInput.setAttribute('inputmode', 'text');
         hideKeypad();
         // Blur and focus to trigger real keyboard
         currentInput.blur();
