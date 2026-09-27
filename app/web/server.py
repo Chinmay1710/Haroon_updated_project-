@@ -30,6 +30,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.responses import RedirectResponse
+@app.middleware("http")
+async def admin_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    
+    # Protect HTML admin pages
+    if path.startswith("/app/") and not path.endswith("admin_login.html"):
+        if request.cookies.get("admin_auth") != "haroon123":
+            return RedirectResponse(url="/app/admin_login.html")
+            
+    # Protect Admin API (dispatch)
+    if path == "/dispatch" or path == "/api/dispatch":
+        if request.cookies.get("admin_auth") != "haroon123":
+            return JSONResponse({"status": "error", "error": "Unauthorized. Please login."}, status_code=401)
+            
+    response = await call_next(request)
+    return response
+
 # We will serve mobile web assets from app/assets/mobile
 mobile_assets_dir = os.path.join(ASSETS_DIR, "mobile")
 os.makedirs(mobile_assets_dir, exist_ok=True)
@@ -118,10 +136,11 @@ def serve_admin_page(page_name: str, response: Response):
 
 
 # Redirect /admin to dashboard
+@app.get("/")
 @app.get("/admin")
 def admin_redirect():
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/app/dashboard")
+    return RedirectResponse(url="/app/dashboard.html")
 
 class LoginRequest(BaseModel):
     name: str

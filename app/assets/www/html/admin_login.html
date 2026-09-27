@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Admin Login - Haroon Tailor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Public Sans', sans-serif; background-color: #f3f4f6; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-sm p-8 flex flex-col items-center">
+        <!-- Logo / Icon -->
+        <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-600/30">
+            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+        </div>
+        
+        <h1 class="text-2xl font-bold text-gray-900 mb-1">Admin Access</h1>
+        <p class="text-sm text-gray-500 mb-8">Enter your PIN to manage the shop</p>
+        
+        <div class="w-full mb-6">
+            <input type="password" id="pin-input" placeholder="Enter PIN..." class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-center text-xl tracking-[0.5em] font-semibold text-gray-800" autocomplete="off">
+            <p id="error-msg" class="text-red-500 text-sm mt-2 hidden text-center">Incorrect PIN</p>
+        </div>
+        
+        <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-blue-600/20">
+            Unlock Dashboard
+        </button>
+    </div>
+
+    <script>
+        document.getElementById('login-btn').addEventListener('click', attemptLogin);
+        document.getElementById('pin-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') attemptLogin();
+        });
+
+        function attemptLogin() {
+            const pin = document.getElementById('pin-input').value;
+            if (pin === 'haroon123') {
+                // Set cookie that expires in 30 days
+                document.cookie = "admin_auth=haroon123; path=/; max-age=" + (30*24*60*60);
+                window.location.href = "/app/dashboard.html";
+            } else {
+                document.getElementById('error-msg').classList.remove('hidden');
+                document.getElementById('pin-input').classList.add('border-red-500', 'focus:ring-red-500');
+                setTimeout(() => {
+                    document.getElementById('error-msg').classList.add('hidden');
+                    document.getElementById('pin-input').classList.remove('border-red-500', 'focus:ring-red-500');
+                }, 2000);
+            }
+        }
+    </script>
+</body>
+</html>
