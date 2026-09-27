@@ -3,149 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Secure Access - Artisan Stitch</title>
+    <title>Admin Login - Haroon Tailor</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { 
-            font-family: 'Outfit', sans-serif; 
-            background: #0f172a; /* Slate 900 */
-            margin: 0;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-        }
-        
-        /* Premium Animated Background */
-        .bg-shapes {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            overflow: hidden;
-            z-index: 0;
-        }
-        .shape {
-            position: absolute;
-            filter: blur(80px);
-            border-radius: 50%;
-            animation: float 20s infinite ease-in-out alternate;
-        }
-        .shape-1 {
-            width: 400px; height: 400px;
-            background: rgba(56, 189, 248, 0.4); /* Sky blue */
-            top: -100px; left: -100px;
-            animation-delay: 0s;
-        }
-        .shape-2 {
-            width: 500px; height: 500px;
-            background: rgba(129, 140, 248, 0.3); /* Indigo */
-            bottom: -150px; right: -100px;
-            animation-delay: -5s;
-        }
-        .shape-3 {
-            width: 300px; height: 300px;
-            background: rgba(167, 139, 250, 0.3); /* Purple */
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            animation-delay: -10s;
-        }
-        
-        @keyframes float {
-            0% { transform: translate(0, 0) scale(1); }
-            100% { transform: translate(40px, -40px) scale(1.1); }
-        }
-
-        /* Glassmorphism Panel */
+        body { font-family: 'Public Sans', sans-serif; background-color: #f3f4f6; }
         .glass-panel {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 32px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1);
-            z-index: 10;
-            position: relative;
-            transform: translateY(20px);
-            opacity: 0;
-            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-
-        @keyframes slideUp {
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .input-glass {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #fff;
-            transition: all 0.3s ease;
-        }
-        .input-glass:focus {
-            background: rgba(0, 0, 0, 0.3);
-            border-color: rgba(56, 189, 248, 0.5);
-            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
-        }
-        
-        .btn-premium {
-            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-            box-shadow: 0 10px 20px -10px rgba(99, 102, 241, 0.5);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .btn-premium:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 25px -10px rgba(99, 102, 241, 0.6);
-        }
-        .btn-premium:active {
-            transform: translateY(1px);
-        }
-        
-        .shake {
-            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
-        }
-        
-        @keyframes shake {
-            10%, 90% { transform: translate3d(-1px, 0, 0); }
-            20%, 80% { transform: translate3d(2px, 0, 0); }
-            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-            40%, 60% { transform: translate3d(4px, 0, 0); }
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
         }
     </style>
 </head>
-<body>
-    <!-- Dynamic Background -->
-    <div class="bg-shapes">
-        <div class="shape shape-1"></div>
-        <div class="shape shape-2"></div>
-        <div class="shape shape-3"></div>
-    </div>
-
-    <!-- Login Container -->
-    <div class="glass-panel w-[90%] max-w-sm p-10 flex flex-col items-center">
-        <!-- Logo -->
-        <div class="w-20 h-20 rounded-[20px] bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center mb-6 shadow-xl shadow-indigo-500/30">
-            <span class="material-symbols-outlined text-white text-[40px]">checkroom</span>
+<body class="h-screen w-screen flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-sm p-8 flex flex-col items-center">
+        <!-- Logo / Icon -->
+        <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-600/30">
+            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
         </div>
         
-        <h1 class="text-3xl font-bold text-white mb-2 tracking-tight">Artisan Stitch</h1>
-        <p class="text-sm text-slate-400 mb-10 font-medium">Please enter your secure PIN</p>
+        <h1 class="text-2xl font-bold text-gray-900 mb-1">Admin Access</h1>
+        <p class="text-sm text-gray-500 mb-8">Enter your PIN to manage the shop</p>
         
-        <div class="w-full mb-8 relative" id="input-container">
-            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">lock</span>
-            <input type="password" id="pin-input" placeholder="••••••••" 
-                class="input-glass w-full pl-12 pr-4 py-4 rounded-2xl outline-none text-center text-2xl tracking-[0.3em] font-semibold" 
-                autocomplete="off" inputmode="text">
-            
-            <!-- Error Tooltip -->
-            <div id="error-msg" class="absolute -bottom-8 left-0 w-full text-center text-red-400 text-sm font-medium opacity-0 transition-opacity duration-300">
-                Invalid credentials
-            </div>
+        <div class="w-full mb-6">
+            <input type="password" id="pin-input" placeholder="Enter PIN..." class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-center text-xl tracking-[0.5em] font-semibold text-gray-800" autocomplete="off">
+            <p id="error-msg" class="text-red-500 text-sm mt-2 hidden text-center">Incorrect PIN</p>
         </div>
         
-        <button id="login-btn" class="btn-premium w-full text-white font-semibold py-4 rounded-2xl text-lg flex items-center justify-center gap-2">
-            <span>Unlock Dashboard</span>
-            <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+        <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-md shadow-blue-600/20">
+            Unlock Dashboard
         </button>
     </div>
 
@@ -156,40 +45,20 @@
         });
 
         function attemptLogin() {
-            const inputEl = document.getElementById('pin-input');
-            const btnEl = document.getElementById('login-btn');
-            const container = document.getElementById('input-container');
-            const errorMsg = document.getElementById('error-msg');
-            const pin = inputEl.value.trim();
-            
+            const pin = document.getElementById('pin-input').value;
             if (pin === 'haroon123') {
-                // Success animation
-                btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[24px]">sync</span>';
+                // Set cookie that expires in 30 days
                 document.cookie = "admin_auth=haroon123; path=/; max-age=" + (30*24*60*60);
-                setTimeout(() => {
-                    window.location.href = "/app/dashboard.html";
-                }, 500);
+                window.location.href = "/app/dashboard.html";
             } else {
-                // Error animation
-                container.classList.add('shake');
-                inputEl.style.borderColor = 'rgba(248, 113, 113, 0.5)';
-                errorMsg.style.opacity = '1';
-                
+                document.getElementById('error-msg').classList.remove('hidden');
+                document.getElementById('pin-input').classList.add('border-red-500', 'focus:ring-red-500');
                 setTimeout(() => {
-                    container.classList.remove('shake');
-                }, 400);
-                
-                setTimeout(() => {
-                    inputEl.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                    errorMsg.style.opacity = '0';
-                    inputEl.value = '';
-                    inputEl.focus();
+                    document.getElementById('error-msg').classList.add('hidden');
+                    document.getElementById('pin-input').classList.remove('border-red-500', 'focus:ring-red-500');
                 }, 2000);
             }
         }
-        
-        // Auto-focus on load (for desktop)
-        window.onload = () => document.getElementById('pin-input').focus();
     </script>
 </body>
 </html>

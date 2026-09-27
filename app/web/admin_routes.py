@@ -481,14 +481,9 @@ def handle_get_customer_details(payload):
 def handle_create_customer(payload):
     services = _get_services()
     cust_srv = services["customer"]
-    mobile = payload.get('mobile', '').strip()
-    import re
-    if not re.match(r'^\+91 [0-9]{10}$', mobile):
-        return {"status": "error", "error": "Mobile number must be exactly 10 digits (e.g. +91 9876543210)"}
-
     customer = cust_srv.create_customer(
         name=payload.get('name'),
-        mobile=mobile,
+        mobile=payload.get('mobile'),
         address=payload.get('address'),
         notes=payload.get('notes')
     )
@@ -499,15 +494,10 @@ def handle_update_customer(payload):
     services = _get_services()
     cust_srv = services["customer"]
     cust_id = payload.get("id")
-    mobile = payload.get('mobile', '').strip()
-    import re
-    if mobile and not re.match(r'^\+91 [0-9]{10}$', mobile):
-        return {"status": "error", "error": "Mobile number must be exactly 10 digits (e.g. +91 9876543210)"}
-
     cust_srv.update_customer(
         cust_id,
         name=payload.get('name'),
-        mobile=mobile,
+        mobile=payload.get('mobile'),
         address=payload.get('address'),
         notes=payload.get('notes')
     )
@@ -940,15 +930,11 @@ def handle_get_all_payments(payload):
 def handle_get_payments_dashboard(payload):
     from app.models.payment import Payment
     from app.models.order import Order
-    from app.models.worker import Worker, WorkEntry, WorkerAdvance
-    from app.models.stock import StockItem, StockUsage
     from sqlalchemy import func
-    from sqlalchemy.orm import joinedload
     
     session = get_session()
     try:
         today = date.today()
-        # 1. Dashboard KPIs
         total_collected = session.query(func.sum(Payment.amount)).scalar() or 0.0
         today_payments = session.query(func.sum(Payment.amount)).filter(
             Payment.payment_date == today
@@ -960,164 +946,10 @@ def handle_get_payments_dashboard(payload):
             Order.total_amount > Order.paid_amount
         ).scalar() or 0.0
         
-        # 2. Recent Payments (latest 50)
-        payments = session.query(Payment).options(
-            joinedload(Payment.order),
-            joinedload(Payment.customer),
-        ).order_by(Payment.updated_at.desc().nulls_last(), Payment.id.desc()).limit(50).all()
-        
-        recent_data = []
-        for p in payments:
-            recent_data.append({
-                "id": p.id,
-                "order_id": p.order_id,
-                "order_number": p.order.order_number if p.order else "",
-                "customer_name": p.customer.name if p.customer else "",
-                "customer_mobile": p.customer.mobile if p.customer else "",
-                "amount": p.amount,
-                "payment_date": p.payment_date.isoformat() if p.payment_date else "",
-                "payment_method": p.payment_method,
-                "remaining_amount": getattr(p.order, 'remaining_amount', 0) if p.order else 0,
-                "updated_at": p.updated_at.isoformat() if hasattr(p, "updated_at") and p.updated_at else ""
-            })
-            
-        # 3. Pending Orders
-        pending_orders_query = session.query(Order).options(
-            joinedload(Order.customer),
-            joinedload(Order.items),
-        ).filter(
-            Order.status.notin_(["CANCELLED"]),
-            Order.total_amount > Order.paid_amount
-        ).order_by(Order.created_at.desc()).all()
-        
-        pending_orders_data = []
-        for o in pending_orders_query:
-            pending_orders_data.append({
-                "id": o.id,
-                "order_number": o.order_number,
-                "customer_name": o.customer.name if o.customer else "",
-                "customer_id": o.customer_id,
-                "customer_mobile": o.customer.mobile if o.customer else "",
-                "total_amount": o.total_amount,
-                "remaining_amount": o.remaining_amount,
-                "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
-                "status": o.status
-            })
-            
-        # 4. Worker Payment Summary
-        workers = session.query(Worker).filter(Worker.is_active == True).all()  # noqa: E712
-        worker_list = []
-        total_dues = 0.0
-        total_advances = 0.0
-        total_earned = 0.0
-        
-        for w in workers:
-            earned = session.query(func.sum(WorkEntry.total_amount)).filter(
-                WorkEntry.worker_id == w.id,
-                WorkEntry.status == "APPROVED",
-                WorkEntry.is_settled == False  # noqa: E712
-            ).scalar() or 0.0
-            
-            advanced = session.query(func.sum(WorkerAdvance.amount)).filter(
-                WorkerAdvance.worker_id == w.id,
-                WorkerAdvance.is_settled == False  # noqa: E712
-            ).scalar() or 0.0
-            
-            remaining = earned - advanced
-            total_earned += earned
-            total_advances += advanced
-            total_dues += remaining
-            
-            recent_advances = session.query(WorkerAdvance).filter(
-                WorkerAdvance.worker_id == w.id,
-                WorkerAdvance.is_settled == False  # noqa: E712
-            ).order_by(WorkerAdvance.date.desc()).limit(5).all()
-            
-            advances_list = [{
-                "id": a.id,
-                "amount": a.amount,
-                "date": a.date.isoformat() if a.date else "",
-                "notes": a.notes or ""
-            } for a in recent_advances]
-            
-            worker_list.append({
-                "id": w.id,
-                "name": w.name,
-                "phone": w.phone or "",
-                "worker_type": w.worker_type,
-                "total_earned": earned,
-                "total_advance": advanced,
-                "remaining_due": remaining,
-                "recent_advances": advances_list
-            })
-            
-        worker_summary = {
-            "workers": worker_list,
-            "summary": {
-                "total_earned": total_earned,
-                "total_advances": total_advances,
-                "total_dues": total_dues,
-                "worker_count": len(worker_list)
-            }
-        }
-        
-        # 5. Stock Payment Summary
-        items = session.query(StockItem).order_by(StockItem.name).all()
-        stock_list = []
-        total_stock_value = 0.0
-        low_stock_count = 0
-        
-        for item in items:
-            stock_value = item.quantity * getattr(item, 'unit_cost', 0.0)
-            total_stock_value += stock_value
-            
-            if item.quantity <= item.min_quantity:
-                low_stock_count += 1
-            
-            recent_usage = session.query(
-                StockUsage, Worker.name
-            ).join(
-                Worker, StockUsage.worker_id == Worker.id
-            ).filter(
-                StockUsage.stock_item_id == item.id
-            ).order_by(StockUsage.date.desc()).limit(3).all()
-            
-            usage_list = [{
-                "worker_name": u[1],
-                "quantity": u[0].quantity,
-                "date": u[0].date.isoformat() if u[0].date else ""
-            } for u in recent_usage]
-            
-            stock_list.append({
-                "id": item.id,
-                "name": item.name,
-                "category": item.category,
-                "quantity": item.quantity,
-                "unit": item.unit,
-                "unit_cost": getattr(item, 'unit_cost', 0.0),
-                "total_value": stock_value,
-                "min_quantity": item.min_quantity,
-                "is_low": item.quantity <= item.min_quantity,
-                "recent_usage": usage_list
-            })
-            
-        stock_summary = {
-            "items": stock_list,
-            "summary": {
-                "total_value": total_stock_value,
-                "total_items": len(stock_list),
-                "low_stock_count": low_stock_count
-            }
-        }
-        
         data = {
             "total_collected": total_collected,
             "pending_payments": pending_payments,
-            "today_payments": today_payments,
-            "recent_payments": recent_data,
-            "pending_orders": pending_orders_data,
-            "worker_summary": worker_summary,
-            "stock_summary": stock_summary
+            "today_payments": today_payments
         }
         return {"status": "success", "data": data}
     finally:

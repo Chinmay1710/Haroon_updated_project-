@@ -108,19 +108,5 @@ document.addEventListener("DOMContentLoaded", function() {
  e.target.value = '';
  }
  }
-  }
-  
-  // Sticky keyboard mode for measurement inputs
-  if (e.target.classList.contains('meas-input') || e.target.classList.contains('am-meas-input')) {
-    const val = e.target.value;
-    if (val.length > 0) {
-      const lastChar = val[val.length - 1];
-      if (/[a-zA-Z]/.test(lastChar)) {
-        document.querySelectorAll('.meas-input, .am-meas-input').forEach(el => el.setAttribute('inputmode', 'text'));
-      } else if (/[0-9]/.test(lastChar)) {
-        document.querySelectorAll('.meas-input, .am-meas-input').forEach(el => el.setAttribute('inputmode', 'decimal'));
-      }
-    }
-  }
  });
 });

@@ -134,19 +134,15 @@ class OrderService:
                 # Snapshot inline measurements for this item
                 measurements = item_data.get('measurements')
                 if measurements and isinstance(measurements, dict):
-                    # Save measurement snapshots to the order item in bulk
-                    bulk_measurements = []
+                    # Save measurement snapshots to the order item
                     for i, (field_name, field_value) in enumerate(measurements.items()):
-                        bulk_measurements.append({
-                            'order_item_id': item.id,
-                            'field_name': field_name,
-                            'field_value': str(field_value),
-                            'unit': "inches",
-                            'display_order': i
-                        })
-                    
-                    if bulk_measurements:
-                        order_repo.add_measurement_snapshots_bulk(bulk_measurements)
+                        order_repo.add_measurement_snapshot(
+                            order_item_id=item.id,
+                            field_name=field_name,
+                            field_value=str(field_value),
+                            unit="inches",
+                            display_order=i,
+                        )
                     
                     # Optionally save as a reusable measurement profile
                     if item_data.get('save_profile'):
@@ -239,19 +235,14 @@ class OrderService:
                 )
                 
                 measurements = item_data.get('measurements', {})
-                bulk_measurements = []
                 for idx, (field_name, field_value) in enumerate(measurements.items()):
                     if field_value:
-                        bulk_measurements.append({
-                            'order_item_id': item.id,
-                            'field_name': field_name,
-                            'field_value': str(field_value),
-                            'unit': "inches",
-                            'display_order': idx
-                        })
-                
-                if bulk_measurements:
-                    order_repo.add_measurement_snapshots_bulk(bulk_measurements)
+                        order_repo.add_measurement_snapshot(
+                            order_item_id=item.id,
+                            field_name=field_name,
+                            field_value=str(field_value),
+                            display_order=idx
+                        )
                 
                 if item_data.get('save_profile'):
                     meas_repo = MeasurementRepository(session)
