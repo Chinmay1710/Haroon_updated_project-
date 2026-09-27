@@ -37,12 +37,23 @@
                 
                 <!-- Main Grid -->
                 <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+                    <!-- Tailoring Shortcuts Row -->
+                    <div style="display: flex; gap: 6px; padding-bottom: 8px; flex: 1;">
+                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="1/4">1/4</button>
+                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="1/2">1/2</button>
+                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="3/4">3/4</button>
+                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="/">/</button>
+                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="R">R</button>
+                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="L">L</button>
+                    </div>
                     <!-- Row 1 -->
                     <div style="display: flex; gap: 6px; flex: 1;">
                         <button class="kp-btn num-btn" data-val="1">1</button>
                         <button class="kp-btn num-btn" data-val="2">2</button>
                         <button class="kp-btn num-btn" data-val="3">3</button>
-                        <button class="kp-btn dark-btn" data-val="%">%</button>
+                        <button class="kp-btn dark-btn action-btn" data-action="backspace">
+                            <span class="material-symbols-outlined" style="font-size:22px">backspace</span>
+                        </button>
                     </div>
                     <!-- Row 2 -->
                     <div style="display: flex; gap: 6px; flex: 1;">
@@ -56,19 +67,15 @@
                         <button class="kp-btn num-btn" data-val="7">7</button>
                         <button class="kp-btn num-btn" data-val="8">8</button>
                         <button class="kp-btn num-btn" data-val="9">9</button>
-                        <button class="kp-btn dark-btn action-btn" data-action="backspace">
-                            <span class="material-symbols-outlined" style="font-size:22px">backspace</span>
-                        </button>
+                        <button class="kp-btn action-btn" style="background-color: #424659; font-size: 16px; font-weight: 500;" data-action="abc">Gboard</button>
                     </div>
                     <!-- Row 4 -->
                     <div style="display: flex; gap: 6px; flex: 1;">
-                        <button class="kp-btn action-btn" style="background-color: #424659; font-size: 16px; font-weight: 500;" data-action="abc">ABC</button>
-                        <button class="kp-btn dark-btn" style="flex: 0.8" data-val=",">,</button>
-                        <button class="kp-btn dark-btn" style="flex: 1.2; font-size:16px;" data-val="!?#">!?#</button>
+                        <button class="kp-btn dark-btn" style="flex: 1;" data-val="M">M</button>
+                        <button class="kp-btn dark-btn" style="flex: 1;" data-val="F">F</button>
                         <button class="kp-btn num-btn" data-val="0">0</button>
-                        <button class="kp-btn dark-btn" style="flex: 0.8" data-val="=">=</button>
-                        <button class="kp-btn dark-btn" style="flex: 0.8" data-val=".">.</button>
-                        <button class="kp-btn action-btn" style="background-color: #424659;" data-action="enter">
+                        <button class="kp-btn dark-btn" style="flex: 1;" data-val=".">.</button>
+                        <button class="kp-btn action-btn" style="background-color: #3b82f6;" data-action="enter">
                             <span class="material-symbols-outlined" style="font-size:22px">keyboard_return</span>
                         </button>
                     </div>
