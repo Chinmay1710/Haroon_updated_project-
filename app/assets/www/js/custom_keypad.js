@@ -198,9 +198,8 @@
     function switchToABC() {
         if (!currentInput) return;
         isSwitchingToABC = true;
-        // Set inputmode='text' and remove readonly so the real keyboard pops up
+        // Set inputmode='text' so the real Gboard pops up
         currentInput.setAttribute('inputmode', 'text');
-        currentInput.removeAttribute('readonly');
         hideKeypad();
         // Blur and focus to trigger real keyboard
         currentInput.blur();
@@ -210,7 +209,7 @@
             }
             setTimeout(() => {
                 isSwitchingToABC = false;
-            }, 100);
+            }, 200);
         }, 50);
     }
 
@@ -226,42 +225,45 @@
     }
 
     function init() {
-        function enforceNone(e) {
-            if (e.target.classList && (e.target.classList.contains('meas-input') || e.target.classList.contains('am-meas-input'))) {
-                if (!isSwitchingToABC) {
-                    e.target.setAttribute('inputmode', 'none');
-                    // On many mobile browsers, only readonly reliably prevents the keyboard
-                    e.target.setAttribute('readonly', 'readonly');
-                }
-            }
-        }
-        
-        // Use active listeners to prevent default if needed, though readonly handles the keyboard
-        document.addEventListener('touchstart', enforceNone, {passive: true});
-        document.addEventListener('mousedown', enforceNone);
+        // Use CLICK instead of focusin — readonly inputs don't fire focusin on mobile
+        document.addEventListener('click', (e) => {
+            const el = e.target;
+            if (!el.classList) return;
+            if (!el.classList.contains('meas-input') && !el.classList.contains('am-meas-input')) return;
 
+            if (isSwitchingToABC) return; // user asked for Gboard
+
+            currentInput = el;
+            // Blur immediately to dismiss any native keyboard that pops up
+            el.blur();
+            showKeypad();
+        }, true);
+
+        // Also handle focusin as a fallback (desktop / arrow-key navigation)
         document.addEventListener('focusin', (e) => {
-            if (e.target.classList && (e.target.classList.contains('meas-input') || e.target.classList.contains('am-meas-input'))) {
-                currentInput = e.target;
-                
-                if (!isSwitchingToABC) {
-                    currentInput.setAttribute('inputmode', 'none');
-                    currentInput.setAttribute('readonly', 'readonly');
-                    showKeypad();
-                } else {
-                    hideKeypad(); // User is using normal keyboard
-                }
+            const el = e.target;
+            if (!el.classList) return;
+            if (!el.classList.contains('meas-input') && !el.classList.contains('am-meas-input')) return;
+
+            if (isSwitchingToABC) {
+                hideKeypad();
+                return;
             }
+
+            currentInput = el;
+            // On mobile, blur to kill native keyboard, then show ours
+            el.blur();
+            showKeypad();
         });
 
-        document.addEventListener('focusout', (e) => {
-            // Delay hiding to allow focus to jump to another input or keypad button
-            setTimeout(() => {
-                if (!document.activeElement || (!document.activeElement.classList.contains('meas-input') && !document.activeElement.classList.contains('am-meas-input'))) {
-                    hideKeypad();
-                    currentInput = null;
-                }
-            }, 100);
+        // When user taps outside any measurement input (and not on keypad), hide keypad
+        document.addEventListener('click', (e) => {
+            const el = e.target;
+            if (!el.closest || el.closest('#custom-keypad-container')) return; // tap on keypad itself
+            if (el.classList && (el.classList.contains('meas-input') || el.classList.contains('am-meas-input'))) return; // tap on input
+            // Tapped elsewhere — hide
+            hideKeypad();
+            currentInput = null;
         });
     }
 
