@@ -198,8 +198,9 @@
     function switchToABC() {
         if (!currentInput) return;
         isSwitchingToABC = true;
-        // Set inputmode='text' so the real keyboard pops up
+        // Set inputmode='text' and remove readonly so the real keyboard pops up
         currentInput.setAttribute('inputmode', 'text');
+        currentInput.removeAttribute('readonly');
         hideKeypad();
         // Blur and focus to trigger real keyboard
         currentInput.blur();
@@ -229,10 +230,13 @@
             if (e.target.classList && (e.target.classList.contains('meas-input') || e.target.classList.contains('am-meas-input'))) {
                 if (!isSwitchingToABC) {
                     e.target.setAttribute('inputmode', 'none');
+                    // On many mobile browsers, only readonly reliably prevents the keyboard
+                    e.target.setAttribute('readonly', 'readonly');
                 }
             }
         }
         
+        // Use active listeners to prevent default if needed, though readonly handles the keyboard
         document.addEventListener('touchstart', enforceNone, {passive: true});
         document.addEventListener('mousedown', enforceNone);
 
@@ -242,6 +246,7 @@
                 
                 if (!isSwitchingToABC) {
                     currentInput.setAttribute('inputmode', 'none');
+                    currentInput.setAttribute('readonly', 'readonly');
                     showKeypad();
                 } else {
                     hideKeypad(); // User is using normal keyboard

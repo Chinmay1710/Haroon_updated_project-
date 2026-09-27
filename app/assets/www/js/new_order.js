@@ -402,7 +402,7 @@ function renderMeasurementFields(type, values) {
     html += `
     <div>
       <div class="relative">
-        <input type="text" inputmode="none" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
+        <input type="text" inputmode="none" readonly="readonly" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
       </div>
     </div>
     `;
