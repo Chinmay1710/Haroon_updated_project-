@@ -97,9 +97,15 @@
 <h1 class="font-headline-lg text-headline-lg text-on-surface mb-2" data-i18n="sidebar.orders">Orders</h1>
 <p class="font-body-md text-body-md text-on-surface-variant">Manage and track all customer orders across production stages.</p>
 </div>
+<div class="flex items-center gap-4">
 <div class="relative w-full md:w-80">
 <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
 <input id="order-search" class="block w-full pl-10 pr-3 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/60 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow" placeholder="Search orders, customers..." type="text"/>
+</div>
+<button class="bg-primary text-on-primary border border-transparent px-5 py-2.5 rounded-lg font-label-lg text-label-lg flex items-center gap-2 hover:bg-primary/90 transition-colors whitespace-nowrap" onclick="window.API.navigate('new_order')">
+<span class="material-symbols-outlined text-[20px]" data-icon="add_circle">add_circle</span>
+ New Order
+</button>
 </div>
 <!-- Filter Tabs -->
 <div class="flex overflow-x-auto gap-2 pb-2 mb-4 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0" id="order-filter-buttons">
@@ -255,6 +261,11 @@ document.getElementById('partial-modal-save-btn').addEventListener('click', asyn
     }
 });
 </script>
+
+<!-- Mobile Floating Action Button (FAB) for New Order -->
+<button onclick="window.API.navigate('new_order')" class="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-lg shadow-primary/40 flex items-center justify-center z-50 hover:bg-primary/90 transition-transform active:scale-95">
+    <span class="material-symbols-outlined text-[28px]">add</span>
+</button>
 
 </body>
 </html>
