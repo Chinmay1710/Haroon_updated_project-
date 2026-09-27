@@ -82,32 +82,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
 async function loadPayments() {
  try {
- const data = await window.API.request('get_recent_payments');
- allPayments = data;
+ const dashboardData = await window.API.request('get_payments_dashboard');
  
- // Also fetch pending orders in the background so KPI is accurate right away
- try {
- const ordersData = await window.API.request('get_pending_orders');
- allPendingOrders = ordersData;
- } catch (e) {
- console.error("Failed to load pending balances for KPIs", e);
- }
- 
- // Pre-fetch worker payment data for KPI
- try {
- const wpData = await window.API.request('get_worker_payment_summary');
- workerPaymentData = wpData;
- } catch (e) {
- console.error("Failed to load worker payment summary", e);
- }
- 
- // Pre-fetch stock payment data for KPI
- try {
- const spData = await window.API.request('get_stock_payment_summary');
- stockPaymentData = spData;
- } catch (e) {
- console.error("Failed to load stock payment summary", e);
- }
+ allPayments = dashboardData.recent_payments || [];
+ allPendingOrders = dashboardData.pending_orders || [];
+ workerPaymentData = dashboardData.worker_summary || {workers:[], summary:{}};
+ stockPaymentData = dashboardData.stock_summary || {items:[], summary:{}};
  
  applyFilters();
  } catch (e) {

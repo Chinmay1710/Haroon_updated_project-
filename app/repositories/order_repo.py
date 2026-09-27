@@ -78,6 +78,24 @@ class OrderRepository:
         self.session.add(measurement)
         self.session.flush()
         return measurement
+        
+    def add_measurement_snapshots_bulk(self, measurements: list[dict]):
+        """Add multiple measurement snapshots in a single flush to prevent N+1 network trips."""
+        objs = []
+        for m in measurements:
+            obj = OrderMeasurement(
+                order_item_id=m['order_item_id'],
+                field_name=m['field_name'],
+                field_value=m['field_value'],
+                unit=m.get('unit', 'inches'),
+                display_order=m.get('display_order', 0),
+            )
+            self.session.add(obj)
+            objs.append(obj)
+            
+        if objs:
+            self.session.flush()
+        return objs
 
     def get_by_id(self, order_id: int) -> Order | None:
         return self.session.query(Order).options(

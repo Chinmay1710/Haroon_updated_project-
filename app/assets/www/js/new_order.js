@@ -93,15 +93,22 @@ document.addEventListener("DOMContentLoaded", function() {
 window.loadCustomers = loadCustomers;
 async function loadCustomers(initialCustomerId) {
  try {
- availableCustomers = await window.API.request('get_customers');
- 
  if (editingOrderModeId) {
- // Load existing order details
- try {
- const data = await window.API.request('get_order_details', {id: editingOrderModeId});
+ // Load customers and order details in parallel when editing
+ const [customersData, orderData] = await Promise.all([
+ window.API.request('get_customers'),
+ window.API.request('get_order_details', {id: editingOrderModeId}).catch(e => { console.error(e); return {}; })
+ ]);
+ 
+ availableCustomers = customersData;
+ const data = orderData;
+ 
  if (data.customer_id) {
  const cust = availableCustomers.find(c => c.id === data.customer_id);
  if (cust) selectCustomer(cust.id, cust.name, cust.mobile);
+ }
+ } else {
+ availableCustomers = await window.API.request('get_customers');
  }
  
  // Populate wizard state
@@ -402,7 +409,7 @@ function renderMeasurementFields(type, values) {
     html += `
     <div>
       <div class="relative">
-        <input type="text" inputmode="none" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
+        <input type="text" inputmode="decimal" id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
       </div>
     </div>
     `;

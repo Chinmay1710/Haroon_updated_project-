@@ -208,6 +208,32 @@
                     return;
                 }
 
+                // Cache get_settings since it's called on every page load
+                if (action === 'get_settings') {
+                    var cachedSettings = sessionStorage.getItem('cached_settings');
+                    if (cachedSettings) {
+                        try {
+                            resolve(JSON.parse(cachedSettings));
+                            // Optional: Still fetch in background to refresh cache for next time
+                            fetch('/admin-api/dispatch', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: action, payload: payload })
+                            })
+                            .then(function(res) { return res.json(); })
+                            .then(function(response) {
+                                if (response.status === 'success') {
+                                    sessionStorage.setItem('cached_settings', JSON.stringify(response.data));
+                                }
+                            }).catch(function() {});
+                            
+                            return;
+                        } catch (e) {
+                            sessionStorage.removeItem('cached_settings');
+                        }
+                    }
+                }
+
                 // All other actions -> REST API call
                 fetch('/admin-api/dispatch', {
                     method: 'POST',
@@ -217,6 +243,11 @@
                     .then(function (res) { return res.json(); })
                     .then(function (response) {
                         if (response.status === 'success') {
+                            if (action === 'get_settings') {
+                                sessionStorage.setItem('cached_settings', JSON.stringify(response.data));
+                            } else if (action === 'update_settings') {
+                                sessionStorage.removeItem('cached_settings'); // Invalidate on update
+                            }
                             resolve(response.data);
                         } else {
                             console.error('[Shim] API Error [' + action + ']:', response.message);
