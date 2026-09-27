@@ -186,8 +186,11 @@
         }
     }
 
+    let isSwitchingToABC = false;
+
     function switchToABC() {
         if (!currentInput) return;
+        isSwitchingToABC = true;
         // Set inputmode='text' so the real keyboard pops up
         currentInput.setAttribute('inputmode', 'text');
         hideKeypad();
@@ -197,6 +200,9 @@
             if (currentInput) {
                 currentInput.focus();
             }
+            setTimeout(() => {
+                isSwitchingToABC = false;
+            }, 100);
         }, 50);
     }
 
@@ -212,15 +218,23 @@
     }
 
     function init() {
+        function enforceNone(e) {
+            if (e.target.classList && (e.target.classList.contains('meas-input') || e.target.classList.contains('am-meas-input'))) {
+                if (!isSwitchingToABC) {
+                    e.target.setAttribute('inputmode', 'none');
+                }
+            }
+        }
+        
+        document.addEventListener('touchstart', enforceNone, {passive: true});
+        document.addEventListener('mousedown', enforceNone);
+
         document.addEventListener('focusin', (e) => {
             if (e.target.classList && (e.target.classList.contains('meas-input') || e.target.classList.contains('am-meas-input'))) {
                 currentInput = e.target;
-                // If it doesn't already have inputmode text (meaning user didn't press ABC), force none to suppress soft keyboard
-                if (currentInput.getAttribute('inputmode') !== 'text' && !currentInput.hasAttribute('inputmode')) {
-                    currentInput.setAttribute('inputmode', 'none');
-                }
                 
-                if (currentInput.getAttribute('inputmode') === 'none') {
+                if (!isSwitchingToABC) {
+                    currentInput.setAttribute('inputmode', 'none');
                     showKeypad();
                 } else {
                     hideKeypad(); // User is using normal keyboard
@@ -236,15 +250,6 @@
                     currentInput = null;
                 }
             }, 100);
-        });
-        
-        // Reset inputmode when clicking again to allow keypad to come back if they closed it? 
-        // We'll keep it simple: once they switch to ABC, they stay in ABC for that box until they blur.
-        document.addEventListener('click', (e) => {
-            if (e.target.classList && (e.target.classList.contains('meas-input') || e.target.classList.contains('am-meas-input'))) {
-                // If they click a box that has inputmode text, we can revert it to none if they want?
-                // Let's just always enforce 'none' on focus unless they explicitly asked for ABC.
-            }
         });
     }
 
