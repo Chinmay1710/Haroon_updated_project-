@@ -1591,12 +1591,14 @@ ACTION_HANDLERS = {
     "create_order": handle_create_order,
     "update_order": handle_update_order,
     "get_all_orders": handle_get_all_orders,
+    "get_pending_orders": handle_get_pending_orders,
     "get_order_details": handle_get_order_details,
     "update_order_status": handle_update_order_status,
     "generate_payment_reminder_whatsapp": handle_generate_payment_reminder_whatsapp,
     
     # Payments
     "get_all_payments": handle_get_all_payments,
+    "get_recent_payments": handle_get_recent_payments,
     "get_payments_dashboard": handle_get_payments_dashboard,
     "create_payment": handle_create_payment,
     "get_worker_payment_summary": handle_get_worker_payment_summary,

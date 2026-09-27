@@ -82,13 +82,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
 async function loadPayments() {
  try {
- const data = await window.API.request('get_all_payments');
+ const data = await window.API.request('get_recent_payments');
  allPayments = data;
  
  // Also fetch pending orders in the background so KPI is accurate right away
  try {
- const ordersData = await window.API.request('get_all_orders');
- allPendingOrders = ordersData.filter(o => o.remaining_amount > 0);
+ const ordersData = await window.API.request('get_pending_orders');
+ allPendingOrders = ordersData;
  } catch (e) {
  console.error("Failed to load pending balances for KPIs", e);
  }
@@ -198,8 +198,8 @@ function switchTab(tab) {
 
 async function loadPendingBalances() {
  try {
- const data = await window.API.request('get_all_orders');
- allPendingOrders = data.filter(o => o.remaining_amount > 0);
+ const data = await window.API.request('get_pending_orders');
+ allPendingOrders = data;
  applyFilters();
  } catch (e) {
  window.API.toast("Failed to load pending balances", "error");
@@ -380,19 +380,19 @@ function renderPendingBalances(orders) {
  
  orders.forEach(o => {
  const div = document.createElement('div');
- div.className = 'grid grid-cols-1 md:grid-cols-6 gap-4 items-center bg-white p-4 rounded-lg border border-surface-container-highest hover:shadow-md transition-shadow cursor-pointer';
+ div.className = 'grid grid-cols-1 md:grid-cols-6 gap-2 md:gap-4 items-center bg-white p-4 rounded-lg border border-surface-container-highest hover:shadow-md transition-shadow cursor-pointer';
  div.onclick = () => window.API.request('navigate_to', {page: 'order_details', id: o.id});
  
  div.innerHTML = `
- <div class="font-body-md text-body-md text-on-surface">${window.API.formatDate(o.delivery_date)}</div>
+ <div class="font-body-md text-body-md text-on-surface"><span class="md:hidden text-on-surface-variant text-sm mr-2">Due:</span>${window.API.formatDate(o.delivery_date)}</div>
  <div>
- <div class="font-label-lg text-label-lg text-primary">${o.order_number}</div>
+ <div class="font-label-lg text-label-lg text-primary"><span class="md:hidden text-on-surface-variant text-sm mr-2 font-normal">Bill No:</span>${o.order_number}</div>
  ${o.status === 'DELIVERED' ? '<span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded bg-[#fef2f2] text-error font-label-sm text-[10px] uppercase border border-[#fca5a5]"><span class="material-symbols-outlined text-[12px]">local_shipping</span> Delivered (Unpaid)</span>' : ''}
  </div>
- <div class="font-body-md text-body-md text-on-surface">${o.customer_name || 'Customer'}</div>
- <div class="flex flex-col"><div class="font-label-lg text-label-lg text-on-surface">${window.API.formatCurrency(o.total_amount)}</div>${o.discount > 0 ? `<div class="font-body-sm text-success text-[10px] whitespace-nowrap">- ${window.API.formatCurrency(o.discount)}</div>` : ""}</div>
- <div class="font-label-lg text-label-lg text-error font-bold">${window.API.formatCurrency(o.remaining_amount)}</div>
- <div class="text-right font-body-md text-body-md flex items-center justify-end gap-2">
+ <div class="font-body-md text-body-md text-on-surface"><span class="md:hidden text-on-surface-variant text-sm mr-2">Customer:</span>${o.customer_name || 'Customer'}</div>
+ <div class="flex flex-col"><div class="font-label-lg text-label-lg text-on-surface"><span class="md:hidden text-on-surface-variant text-sm mr-2 font-normal">Total:</span>${window.API.formatCurrency(o.total_amount)}</div>${o.discount > 0 ? `<div class="font-body-sm text-success text-[10px] whitespace-nowrap">- ${window.API.formatCurrency(o.discount)}</div>` : ""}</div>
+ <div class="font-label-lg text-label-lg text-error font-bold"><span class="md:hidden text-on-surface-variant text-sm mr-2 font-normal">Pending:</span>${window.API.formatCurrency(o.remaining_amount)}</div>
+ <div class="text-right font-body-md text-body-md flex items-center justify-end gap-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-outline-variant/30">
  <button onclick="event.stopPropagation(); window.API.request('generate_payment_reminder_whatsapp', {order_id: ${o.id}}).then(data=>{ window.API.request('open_whatsapp_url', {url: data.whatsapp_url}); }).catch(err=>{ window.API.toast(err, 'error'); });" class="px-3 py-1.5 bg-surface text-primary rounded-lg hover:bg-surface-container-low transition-colors text-sm font-medium border border-outline-variant flex items-center justify-center shadow-sm" title="Send WhatsApp Reminder">
  Reminder
  </button>
@@ -559,7 +559,7 @@ function renderPayments(payments) {
  
  payments.forEach(p => {
  const div = document.createElement('div');
- div.className = 'grid grid-cols-1 md:grid-cols-6 gap-4 items-center bg-white p-4 rounded-lg border border-surface-container-highest hover:shadow-md transition-shadow cursor-pointer';
+ div.className = 'grid grid-cols-1 md:grid-cols-6 gap-2 md:gap-4 items-center bg-white p-4 rounded-lg border border-surface-container-highest hover:shadow-md transition-shadow cursor-pointer';
  div.onclick = () => window.API.request('navigate_to', {page: 'order_details', id: p.order_id});
  
  const methodIcons = {
@@ -571,20 +571,20 @@ function renderPayments(payments) {
  const methodIcon = methodIcons[p.payment_method?.toUpperCase()] || 'payments';
  
  const remaining = p.remaining_amount !== undefined ? p.remaining_amount : 0;
- const remainingClass = remaining > 0 ? "text-error" : "text-on-surface-variant";
+ const remainingClass = remaining > 0 ? "text-error font-bold" : "text-on-surface-variant";
  
  div.innerHTML = `
- <div class="font-body-md text-body-md text-on-surface">${window.API.formatDate(p.payment_date)}</div>
- <div class="font-label-lg text-label-lg text-primary">${p.order_number || '#ORD'}</div>
- <div class="font-body-md text-body-md text-on-surface">${p.customer_name || 'Customer'}</div>
- <div class="font-label-lg text-label-lg text-on-surface">${window.API.formatCurrency(p.amount)}</div>
+ <div class="font-body-md text-body-md text-on-surface"><span class="md:hidden text-on-surface-variant text-sm mr-2">Date:</span>${window.API.formatDate(p.payment_date)}</div>
+ <div class="font-label-lg text-label-lg text-primary"><span class="md:hidden text-on-surface-variant text-sm mr-2 font-normal">Bill No:</span>${p.order_number || '#ORD'}</div>
+ <div class="font-body-md text-body-md text-on-surface"><span class="md:hidden text-on-surface-variant text-sm mr-2">Customer:</span>${p.customer_name || 'Customer'}</div>
+ <div class="font-label-lg text-label-lg text-on-surface"><span class="md:hidden text-on-surface-variant text-sm mr-2 font-normal">Paid:</span>${window.API.formatCurrency(p.amount)}</div>
  <div>
  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-highest text-primary font-label-sm text-[12px]">
  <span class="material-symbols-outlined text-[14px]">${methodIcon}</span> ${p.payment_method || 'CASH'}
  </span>
  </div>
- <div class="text-right font-body-md text-body-md ${remainingClass} flex items-center justify-end gap-2">
- ${window.API.formatCurrency(remaining)}
+ <div class="text-right font-body-md text-body-md ${remainingClass} flex items-center justify-between md:justify-end gap-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-outline-variant/30">
+ <div><span class="md:hidden text-on-surface-variant text-sm mr-2 font-normal">Balance:</span>${window.API.formatCurrency(remaining)}</div>
  <button onclick="event.stopPropagation(); window.API.request('print_receipt', {payment_id: ${p.id}, order_id: ${p.order_id}});" class="w-8 h-8 rounded-full hover:bg-surface-container-low text-primary flex items-center justify-center transition-colors">
  <span class="material-symbols-outlined text-[18px]">print</span>
  </button>
