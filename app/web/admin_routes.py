@@ -1549,10 +1549,13 @@ def handle_erase_all_data(payload):
 # ─── Action handler map (matches web_bridge.py dispatch action names) ─────────
 def handle_get_pending_orders(payload):
     from app.models.order import Order
+    from sqlalchemy.orm import joinedload
     session = get_session()
     try:
         # Get only orders with remaining amount > 0
-        orders = session.query(Order).filter(
+        orders = session.query(Order).options(
+            joinedload(Order.customer)
+        ).filter(
             Order.status != 'CANCELLED',
             Order.total_amount > Order.paid_amount
         ).order_by(Order.order_date.desc()).all()
@@ -1576,10 +1579,14 @@ def handle_get_pending_orders(payload):
 
 def handle_get_recent_payments(payload):
     from app.models.payment import Payment
+    from sqlalchemy.orm import joinedload
     session = get_session()
     try:
         limit = payload.get("limit", 100)
-        payments = session.query(Payment).order_by(Payment.payment_date.desc(), Payment.id.desc()).limit(limit).all()
+        payments = session.query(Payment).options(
+            joinedload(Payment.order),
+            joinedload(Payment.customer)
+        ).order_by(Payment.payment_date.desc(), Payment.id.desc()).limit(limit).all()
         data = []
         for p in payments:
             data.append({

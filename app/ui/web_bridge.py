@@ -693,10 +693,13 @@ class WebBridge(QObject):
                 
             elif action == "get_pending_orders":
                 from app.models.order import Order
+                from sqlalchemy.orm import joinedload
                 from app.database.engine import get_session
                 session = get_session()
                 try:
-                    orders = session.query(Order).filter(
+                    orders = session.query(Order).options(
+                        joinedload(Order.customer)
+                    ).filter(
                         Order.status != 'CANCELLED',
                         Order.total_amount > Order.paid_amount
                     ).order_by(Order.order_date.desc()).all()
@@ -929,10 +932,14 @@ class WebBridge(QObject):
             elif action == "get_recent_payments":
                 from app.database.engine import get_session
                 from app.models.payment import Payment
+                from sqlalchemy.orm import joinedload
                 session = get_session()
                 try:
                     limit = payload.get("limit", 100)
-                    payments = session.query(Payment).order_by(Payment.payment_date.desc(), Payment.id.desc()).limit(limit).all()
+                    payments = session.query(Payment).options(
+                        joinedload(Payment.order),
+                        joinedload(Payment.customer)
+                    ).order_by(Payment.payment_date.desc(), Payment.id.desc()).limit(limit).all()
                     data = []
                     for p in payments:
                         data.append({
