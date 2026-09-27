@@ -65,13 +65,13 @@ def dangerous_reset_everything():
     from app.models.measurement import MeasurementProfile, MeasurementValue
     from app.models.expense import Expense
     from app.models.worker import Worker, WorkEntry, WorkerAdvance
-    from app.models.stock import StockItem, StockTransaction
+    from app.models.stock import StockItem, StockUsage
     
     engine = get_engine()
     session = get_session()
     
     try:
-        session.query(StockTransaction).delete()
+        session.query(StockUsage).delete()
         session.query(StockItem).delete()
         session.query(WorkerAdvance).delete()
         session.query(WorkEntry).delete()

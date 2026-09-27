@@ -25,7 +25,7 @@ from app.models.payment import Payment
 from app.models.measurement import MeasurementProfile, MeasurementValue
 from app.models.expense import Expense
 from app.models.worker import Worker, WorkEntry, WorkerAdvance
-from app.models.stock import StockItem, StockTransaction
+from app.models.stock import StockItem, StockUsage
 
 engine = get_engine()
 session = get_session()
@@ -38,7 +38,7 @@ if confirm == 'DELETE':
     print("Deleting all data...")
     try:
         # Delete in order to respect foreign key constraints
-        session.query(StockTransaction).delete()
+        session.query(StockUsage).delete()
         session.query(StockItem).delete()
         
         session.query(WorkerAdvance).delete()
