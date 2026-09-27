@@ -72,8 +72,8 @@ async function loadAllOrdersForSelection() {
  const select = document.getElementById('ap-order-select');
  select.innerHTML = '<option value="">Loading orders...</option>';
  
- const orders = await window.API.request('get_all_orders');
- allActiveOrders = orders.filter(o => o.remaining_amount > 0);
+ const orders = await window.API.request('get_pending_orders');
+ allActiveOrders = orders;
  
  select.innerHTML = '<option value="">Select an active order...</option>';
  

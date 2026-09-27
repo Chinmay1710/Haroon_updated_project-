@@ -383,12 +383,11 @@ class OrderService:
         session = get_session()
         try:
             repo = OrderRepository(session)
-            if limit is not None:
-                orders = repo.get_all(status, limit=limit, offset=offset)
-                total = repo.count_all(status)
-                return orders, total
-            else:
-                return repo.get_all(status, limit=None, offset=None)
+            if limit is None:
+                limit = 1000 # Hard limit to prevent memory/fetch issues
+            orders = repo.get_all(status, limit=limit, offset=offset)
+            total = repo.count_all(status)
+            return orders, total
         finally:
             session.close()
 
@@ -439,9 +438,6 @@ class OrderService:
                 joinedload(Order.items),
             ).order_by(Order.updated_at.desc()).limit(5).all()
             
-            overdue_orders = order_repo.get_overdue()
-            urgent_not_started = order_repo.get_urgent_not_started(3)
-
             return {
                 "orders_today": len(today_orders),
                 "today_sales": today_sales,
@@ -450,8 +446,6 @@ class OrderService:
                 "today_deliveries_list": today_deliveries,
                 "status_counts": status_counts,
                 "recent_orders": recent_orders,
-                "overdue_orders": overdue_orders,
-                "urgent_not_started": urgent_not_started,
             }
         finally:
             session.close()
