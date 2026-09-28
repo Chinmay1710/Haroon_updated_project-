@@ -79,6 +79,13 @@ class OrderRepository:
         self.session.flush()
         return measurement
 
+    def add_measurement_snapshots_bulk(self, snapshots_data: list[dict]):
+        """Bulk add measurement snapshots (immutable copies) to an order item."""
+        snapshots = [OrderMeasurement(**data) for data in snapshots_data]
+        self.session.add_all(snapshots)
+        self.session.flush()
+
+
     def get_by_id(self, order_id: int) -> Order | None:
         return self.session.query(Order).options(
             joinedload(Order.customer),

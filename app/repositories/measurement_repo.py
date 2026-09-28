@@ -75,8 +75,16 @@ class MeasurementRepository:
             MeasurementValue.profile_id == profile_id
         ).delete()
         # Add new values
+        values = []
         for order, (field_name, field_value) in enumerate(values_dict.items()):
-            self.add_value(profile_id, field_name, field_value, order)
+            values.append(MeasurementValue(
+                profile_id=profile_id,
+                field_name=field_name,
+                field_value=field_value,
+                display_order=order,
+            ))
+        self.session.add_all(values)
+        self.session.flush()
 
     def delete_profile(self, profile_id: int) -> bool:
         profile = self.get_profile_by_id(profile_id)
