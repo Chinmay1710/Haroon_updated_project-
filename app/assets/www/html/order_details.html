@@ -267,6 +267,62 @@
 </div>
 </div>
 </main>
+<!-- Partial Complete Modal -->
+<div id="partial-complete-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50" onclick="closePartialModal()"></div>
+    
+    <!-- Modal Content -->
+    <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md relative flex flex-col max-h-[90vh]">
+        <div class="px-6 py-4 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-lowest rounded-t-2xl z-10">
+            <h3 class="font-headline-sm text-headline-sm text-on-surface">Mark Items Ready</h3>
+            <button onclick="closePartialModal()" class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-highest flex items-center justify-center text-on-surface-variant transition-colors">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto" id="partial-modal-items">
+            <!-- Checkboxes will be injected here -->
+        </div>
+        
+        <div class="px-6 py-4 border-t border-outline-variant/30 flex justify-end gap-3 bg-surface-container-lowest rounded-b-2xl">
+            <button onclick="closePartialModal()" class="px-6 py-2.5 rounded-full font-label-lg text-primary hover:bg-primary/10 transition-colors">
+                Cancel
+            </button>
+            <button id="partial-modal-save-btn" class="px-6 py-2.5 rounded-full bg-primary text-on-primary font-label-lg hover:bg-primary/90 transition-colors shadow-sm">
+                Save
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+window.closePartialModal = function() {
+    document.getElementById('partial-complete-modal').classList.add('hidden');
+    document.getElementById('partial-complete-modal').classList.remove('flex');
+}
+
+document.getElementById('partial-modal-save-btn').addEventListener('click', async () => {
+    const checkboxes = document.querySelectorAll('.partial-item-cb');
+    const readyIds = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) readyIds.push(parseInt(cb.value));
+    });
+    
+    try {
+        await window.API.request('update_order_status', {
+            order_id: orderId,
+            ready_item_ids: readyIds
+        });
+        window.API.toast("Items updated successfully", "success");
+        window.closePartialModal();
+        loadOrderDetails(orderId);
+    } catch(e) {
+        window.API.toast("Failed to update: " + e, "error");
+    }
+});
+</script>
+
 <!-- Full Screen Image Modal -->
 <div id="image-modal" class="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center hidden " onclick="closeImageModal()">
  <img id="image-modal-content" src="" class="max-w-[90vw] max-h-[90vh] object-contain rounded">

@@ -93,12 +93,27 @@ document.addEventListener("DOMContentLoaded", function() {
  window.API.request('navigate_to', {page: 'new_order', order_id: orderId, action: 'edit'});
  });
  
- document.getElementById('od-mark-partial-btn').addEventListener('click', async function() {
- if (currentOrder) {
- const ok = confirm('Mark this order as Partially Complete?');
- if (ok) {
- updateOrderStatus(orderId, 'PARTIALLY_COMPLETE');
+ document.getElementById('od-mark-partial-btn').addEventListener('click', function() {
+ if (currentOrder && currentOrder.items) {
+ const container = document.getElementById('partial-modal-items');
+ container.innerHTML = '';
+ 
+ if (currentOrder.items.length === 0) {
+ container.innerHTML = '<p class="text-on-surface-variant">No items found.</p>';
+ } else {
+ currentOrder.items.forEach(item => {
+ const isChecked = item.is_ready ? 'checked' : '';
+ container.innerHTML += `
+ <label class="flex items-center gap-3 p-3 mb-2 rounded-xl border border-outline-variant hover:bg-surface-container-lowest cursor-pointer">
+ <input type="checkbox" class="partial-item-cb w-5 h-5 rounded border-outline text-primary focus:ring-primary" value="${item.id}" ${isChecked}>
+ <span class="font-body-lg text-on-surface">${item.clothing_type || 'Custom Item'} (x${item.quantity || 1})</span>
+ </label>
+ `;
+ });
  }
+ 
+ document.getElementById('partial-complete-modal').classList.remove('hidden');
+ document.getElementById('partial-complete-modal').classList.add('flex');
  }
  });
 
