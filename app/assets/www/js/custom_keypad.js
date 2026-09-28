@@ -225,21 +225,7 @@
     }
 
     function init() {
-        // Use CLICK instead of focusin — readonly inputs don't fire focusin on mobile
-        document.addEventListener('click', (e) => {
-            const el = e.target;
-            if (!el.classList) return;
-            if (!el.classList.contains('meas-input') && !el.classList.contains('am-meas-input')) return;
-
-            if (isSwitchingToABC) return; // user asked for Gboard
-
-            currentInput = el;
-            // Blur immediately to dismiss any native keyboard that pops up
-            el.blur();
-            showKeypad();
-        }, true);
-
-        // Also handle focusin as a fallback (desktop / arrow-key navigation)
+        // Handle focusin (fires when tapped since inputs are no longer readonly)
         document.addEventListener('focusin', (e) => {
             const el = e.target;
             if (!el.classList) return;
@@ -250,20 +236,41 @@
                 return;
             }
 
+            // Always reset inputmode to none to ensure Gboard hides/doesn't open
+            el.setAttribute('inputmode', 'none');
             currentInput = el;
-            // On mobile, blur to kill native keyboard, then show ours
-            el.blur();
+            
+            // Show custom keypad
             showKeypad();
         });
+
+        // Handle click just in case focusin was already active on this element
+        // (e.g. user tapped outside then tapped back)
+        document.addEventListener('click', (e) => {
+            const el = e.target;
+            if (!el.classList) return;
+            if (!el.classList.contains('meas-input') && !el.classList.contains('am-meas-input')) return;
+
+            if (isSwitchingToABC) return;
+
+            el.setAttribute('inputmode', 'none');
+            currentInput = el;
+            showKeypad();
+        }, true);
 
         // When user taps outside any measurement input (and not on keypad), hide keypad
         document.addEventListener('click', (e) => {
             const el = e.target;
             if (!el.closest || el.closest('#custom-keypad-container')) return; // tap on keypad itself
             if (el.classList && (el.classList.contains('meas-input') || el.classList.contains('am-meas-input'))) return; // tap on input
-            // Tapped elsewhere — hide
+            
+            // Tapped elsewhere — hide keypad
             hideKeypad();
-            currentInput = null;
+            if (currentInput) {
+                // Remove focus so cursor stops blinking
+                currentInput.blur();
+                currentInput = null;
+            }
         });
     }
 
