@@ -80,33 +80,37 @@ document.addEventListener("DOMContentLoaded", function() {
  init();
 });
 
-async function loadPayments() {
+ async function loadPayments() {
  try {
- const data = await window.API.request('get_recent_payments');
- allPayments = data;
- 
- // Also fetch pending orders in the background so KPI is accurate right away
- try {
- const ordersData = await window.API.request('get_pending_orders');
- allPendingOrders = ordersData;
- } catch (e) {
- console.error("Failed to load pending balances for KPIs", e);
+ const [recentPayments, pendingOrders, workerPayments, stockPayments] = await Promise.allSettled([
+ window.API.request('get_recent_payments'),
+ window.API.request('get_pending_orders'),
+ window.API.request('get_worker_payment_summary'),
+ window.API.request('get_stock_payment_summary')
+ ]);
+
+ if (recentPayments.status === 'fulfilled') {
+ allPayments = recentPayments.value;
+ } else {
+ throw recentPayments.reason;
  }
  
- // Pre-fetch worker payment data for KPI
- try {
- const wpData = await window.API.request('get_worker_payment_summary');
- workerPaymentData = wpData;
- } catch (e) {
- console.error("Failed to load worker payment summary", e);
+ if (pendingOrders.status === 'fulfilled') {
+ allPendingOrders = pendingOrders.value;
+ } else {
+ console.error("Failed to load pending balances for KPIs", pendingOrders.reason);
  }
  
- // Pre-fetch stock payment data for KPI
- try {
- const spData = await window.API.request('get_stock_payment_summary');
- stockPaymentData = spData;
- } catch (e) {
- console.error("Failed to load stock payment summary", e);
+ if (workerPayments.status === 'fulfilled') {
+ workerPaymentData = workerPayments.value;
+ } else {
+ console.error("Failed to load worker payment summary", workerPayments.reason);
+ }
+ 
+ if (stockPayments.status === 'fulfilled') {
+ stockPaymentData = stockPayments.value;
+ } else {
+ console.error("Failed to load stock payment summary", stockPayments.reason);
  }
  
  applyFilters();

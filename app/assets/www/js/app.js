@@ -54,9 +54,25 @@ document.addEventListener("DOMContentLoaded", function() {
  try {
  // Give api.js a moment to finish its QWebChannel setup
  if (!window.API || !window.API.request) return; 
- 
+
+ // Load from cache first for instant UI response
+ const cachedSettings = localStorage.getItem('haroon_shop_settings');
+ if (cachedSettings) {
+ applySettingsToDOM(JSON.parse(cachedSettings));
+ }
+
+ // Then fetch fresh data asynchronously
  const settings = await window.API.request("get_settings");
  if (settings) {
+ localStorage.setItem('haroon_shop_settings', JSON.stringify(settings));
+ applySettingsToDOM(settings);
+ }
+ } catch (e) {
+ console.error("Failed to apply global settings:", e);
+ }
+ };
+ 
+ function applySettingsToDOM(settings) {
  document.querySelectorAll('.global-shop-name').forEach(el => {
  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.value = settings.shop_name;
  else el.textContent = settings.shop_name;
@@ -68,10 +84,6 @@ document.addEventListener("DOMContentLoaded", function() {
  el.textContent = settings.address || "";
  });
  }
- } catch (e) {
- console.error("Failed to apply global settings:", e);
- }
- };
  
  // Small delay to ensure window.API is ready
  setTimeout(window.applyGlobalSettings, 150);
