@@ -150,7 +150,9 @@ class OrderService:
                     # Optionally save as a reusable measurement profile
                     if item_data.get('save_profile'):
                         meas_repo = MeasurementRepository(session)
-                        profile_name = item_data.get('profile_name') or f"{item_data.get('clothing_type', 'Custom')} Profile"
+                        from datetime import datetime
+                        date_str = datetime.now().strftime("%d %b %Y")
+                        profile_name = item_data.get('profile_name') or f"{item_data.get('clothing_type', 'Custom')} Profile ({date_str})"
                         profile = meas_repo.create_profile(
                             customer_id=customer_id,
                             template_type=item_data.get('clothing_type', 'Custom'),
@@ -253,13 +255,15 @@ class OrderService:
                 
                 if item_data.get('save_profile'):
                     meas_repo = MeasurementRepository(session)
-                    profile_name = item_data.get('profile_name') or f"{item_data.get('clothing_type', 'Custom')} Profile"
+                    from datetime import datetime
+                    date_str = datetime.now().strftime("%d %b %Y")
+                    profile_name = item_data.get('profile_name') or f"{item_data.get('clothing_type', 'Custom')} Profile ({date_str})"
                     profile = meas_repo.create_profile(
                         customer_id=order.customer_id,
                         template_type=item_data.get('clothing_type', 'Custom'),
                         name=profile_name,
                         unit="inches",
-                        notes="Auto-saved from Order"
+                        notes="Auto-saved from Order Update"
                     )
                     meas_repo.update_values(profile.id, {k: str(v) for k, v in measurements.items()})
 
