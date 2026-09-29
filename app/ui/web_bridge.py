@@ -126,7 +126,6 @@ class WebBridge(QObject):
                         conn.execute(sqlalchemy.text("DROP SCHEMA public CASCADE;"))
                         conn.execute(sqlalchemy.text("CREATE SCHEMA public;"))
                         conn.execute(sqlalchemy.text("GRANT ALL ON SCHEMA public TO public;"))
-                        conn.execute(sqlalchemy.text("GRANT ALL ON SCHEMA public TO postgres;"))
                 else:
                     Base.metadata.drop_all(engine)
                 Base.metadata.create_all(engine)
