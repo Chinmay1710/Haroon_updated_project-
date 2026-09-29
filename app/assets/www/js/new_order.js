@@ -363,14 +363,18 @@ function populateSavedProfilesDropdown(type) {
  const sortedProfiles = [...availableProfiles].reverse();
 
  sortedProfiles.forEach(p => {
- const name = p.name || `${p.template_type} Profile`;
+ let displayName = p.name || `${p.template_type} Profile`;
+ // Remove backend-appended dates in parentheses to avoid double dates
+ displayName = displayName.replace(/\s*\([^)]+\)$/, '').trim();
+ 
  let dateStr = "";
  if (p.updated_at) {
- const dateObj = new Date(p.updated_at);
- const formattedDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
- dateStr = ` - Last: ${formattedDate}`;
+   const dateObj = new Date(p.updated_at);
+   const formattedDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+   dateStr = ` - Last: ${formattedDate}`;
  }
- html += `<option value="${p.id}">${name} (${p.template_type})${dateStr}</option>`;
+ 
+ html += `<option value="${p.id}">${displayName}${dateStr}</option>`;
  });
  
  select.innerHTML = html;
