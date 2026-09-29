@@ -600,6 +600,7 @@ def handle_get_measurements_for_customer(payload):
             vals[v.field_name] = v.field_value
         data.append({
             "id": m.id,
+            "name": m.name,
             "template_type": m.template_type,
             "values": vals,
             "updated_at": m.updated_at.isoformat()
