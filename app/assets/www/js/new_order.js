@@ -359,21 +359,10 @@ function populateSavedProfilesDropdown(type) {
  const select = document.getElementById('modal-saved-profile');
  let html = `<option value="">-- Start Fresh --</option>`;
  
- // Deduplicate profiles by template_type (keep latest/last one)
- const uniqueProfiles = [];
- const seenTypes = new Set();
- 
- for (let i = availableProfiles.length - 1; i >= 0; i--) {
- const p = availableProfiles[i];
- if (!seenTypes.has(p.template_type)) {
- uniqueProfiles.push(p);
- seenTypes.add(p.template_type);
- }
- }
- 
- uniqueProfiles.reverse(); // Restore original chronological order if desired
+ // Show all historical profiles for this customer, newest first
+ const sortedProfiles = [...availableProfiles].reverse();
 
- uniqueProfiles.forEach(p => {
+ sortedProfiles.forEach(p => {
  const name = p.name || `${p.template_type} Profile`;
  let dateStr = "";
  if (p.updated_at) {
