@@ -341,8 +341,45 @@
 <p class="font-body-md text-sm text-on-surface-variant">Recover information from a previous backup file.</p>
 </div>
 </div>
+</div>
+<div class="mt-8 pt-6 border-t border-red-500/20">
+    <h3 class="font-headline-sm text-red-600 mb-2">Danger Zone</h3>
+    <div class="border border-red-500/30 p-6 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-red-500/5">
+        <div>
+            <h4 class="font-label-lg text-on-surface">Reset Database</h4>
+            <p class="font-body-md text-sm text-on-surface-variant">Permanently delete all customers, orders, and measurements. The next order will start from #1.</p>
+        </div>
+        <button type="button" onclick="window.resetDatabase()" class="bg-red-600 text-white px-5 py-2.5 rounded-lg font-label-lg whitespace-nowrap hover:bg-red-700 transition-colors shadow-sm flex items-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">delete_forever</span> Erase All Data
+        </button>
+    </div>
+</div>
 </form>
 </section>
+
+<script>
+window.resetDatabase = async function() {
+    const confirm1 = await window.API.confirm("⚠️ WARNING: ERASE ALL DATA?", "Are you ABSOLUTELY sure? This will delete all customers, orders, payments, and measurements forever. You cannot undo this.");
+    if (!confirm1) return;
+    
+    const code = prompt("Please type 'DELETE' in all caps to confirm erasing all data:");
+    if (code !== "DELETE") {
+        window.API.toast("Reset cancelled.", "info");
+        return;
+    }
+    
+    try {
+        window.API.toast("Resetting database... please wait.", "info");
+        const res = await window.API.request("reset_database");
+        window.API.toast(res.message || "Database reset successfully!", "success");
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
+    } catch (e) {
+        window.API.toast("Failed to reset: " + e, "error");
+    }
+}
+</script>
 </div>
 </div>
 </div>

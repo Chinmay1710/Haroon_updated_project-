@@ -117,6 +117,21 @@ class WebBridge(QObject):
                 self.navigate_requested.emit(page)
                 response = {"status": "success"}
 
+            elif action == "reset_database":
+                from app.database.engine import get_engine, Base
+                import sqlalchemy
+                engine = get_engine()
+                if engine.name == 'postgresql':
+                    with engine.begin() as conn:
+                        conn.execute(sqlalchemy.text("DROP SCHEMA public CASCADE;"))
+                        conn.execute(sqlalchemy.text("CREATE SCHEMA public;"))
+                        conn.execute(sqlalchemy.text("GRANT ALL ON SCHEMA public TO public;"))
+                        conn.execute(sqlalchemy.text("GRANT ALL ON SCHEMA public TO postgres;"))
+                else:
+                    Base.metadata.drop_all(engine)
+                Base.metadata.create_all(engine)
+                response = {"status": "success", "message": "Database completely reset. All data cleared!"}
+
             elif action == "copy_to_clipboard":
                 text = payload.get("text", "")
                 from PySide6.QtGui import QGuiApplication

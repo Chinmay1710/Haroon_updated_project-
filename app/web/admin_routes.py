@@ -1605,7 +1605,43 @@ def handle_get_recent_payments(payload):
     finally:
         session.close()
 
+def handle_reset_database(payload: dict) -> dict:
+    try:
+        from app.database.engine import get_engine, Base
+        import sqlalchemy
+        
+        # Import all models to ensure they are registered with Base
+        import app.models.customer
+        import app.models.measurement
+        import app.models.order
+        import app.models.payment
+        import app.models.expense
+        import app.models.settings
+        import app.models.worker
+        import app.models.stock
+
+        engine = get_engine()
+        
+        if engine.name == 'postgresql':
+            with engine.begin() as conn:
+                conn.execute(sqlalchemy.text("DROP SCHEMA public CASCADE;"))
+                conn.execute(sqlalchemy.text("CREATE SCHEMA public;"))
+                conn.execute(sqlalchemy.text("GRANT ALL ON SCHEMA public TO public;"))
+                conn.execute(sqlalchemy.text("GRANT ALL ON SCHEMA public TO postgres;"))
+        else:
+            Base.metadata.drop_all(engine)
+            
+        Base.metadata.create_all(engine)
+        
+        return {"status": "success", "message": "Database completely reset. All data cleared!"}
+    except Exception as e:
+        logger.error(f"Error resetting database: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
 ACTION_HANDLERS = {
+    # Danger Zone
+    "reset_database": handle_reset_database,
+    
     # Navigation / Desktop-only
     "navigate_to": handle_navigate_to,
     "copy_to_clipboard": handle_copy_to_clipboard,
