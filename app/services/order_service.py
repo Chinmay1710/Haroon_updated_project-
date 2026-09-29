@@ -150,17 +150,36 @@ class OrderService:
                     # Optionally save as a reusable measurement profile
                     if item_data.get('save_profile'):
                         meas_repo = MeasurementRepository(session)
-                        from datetime import datetime
-                        date_str = datetime.now().strftime("%d %b %Y")
-                        profile_name = item_data.get('profile_name') or f"{item_data.get('clothing_type', 'Custom')} Profile ({date_str})"
-                        profile = meas_repo.create_profile(
-                            customer_id=customer_id,
-                            template_type=item_data.get('clothing_type', 'Custom'),
-                            name=profile_name,
-                            unit="inches",
-                            notes="Auto-saved from Order"
-                        )
-                        meas_repo.update_values(profile.id, {k: str(v) for k, v in measurements.items()})
+                        clothing_type = item_data.get('clothing_type', 'Custom')
+                        
+                        # Check for existing duplicate
+                        existing_profiles = meas_repo.get_profiles_by_customer(customer_id)
+                        is_duplicate = False
+                        new_vals = {k: str(v) for k, v in measurements.items() if str(v)}
+                        
+                        for p in existing_profiles:
+                            if p.template_type == clothing_type:
+                                p_vals_clean = {v.field_name: v.field_value for v in p.values if v.field_value}
+                                if p_vals_clean == new_vals:
+                                    is_duplicate = True
+                                    # Just update the date of the existing one
+                                    from datetime import datetime, timezone
+                                    p.updated_at = datetime.now(timezone.utc)
+                                    session.flush()
+                                    break
+                        
+                        if not is_duplicate:
+                            from datetime import datetime
+                            date_str = datetime.now().strftime("%d %b %Y")
+                            profile_name = item_data.get('profile_name') or f"{clothing_type} Profile ({date_str})"
+                            profile = meas_repo.create_profile(
+                                customer_id=customer_id,
+                                template_type=clothing_type,
+                                name=profile_name,
+                                unit="inches",
+                                notes="Auto-saved from Order"
+                            )
+                            meas_repo.update_values(profile.id, {k: str(v) for k, v in measurements.items()})
 
             # Record advance payment if > 0
             if advance_amount > 0:
@@ -255,17 +274,36 @@ class OrderService:
                 
                 if item_data.get('save_profile'):
                     meas_repo = MeasurementRepository(session)
-                    from datetime import datetime
-                    date_str = datetime.now().strftime("%d %b %Y")
-                    profile_name = item_data.get('profile_name') or f"{item_data.get('clothing_type', 'Custom')} Profile ({date_str})"
-                    profile = meas_repo.create_profile(
-                        customer_id=order.customer_id,
-                        template_type=item_data.get('clothing_type', 'Custom'),
-                        name=profile_name,
-                        unit="inches",
-                        notes="Auto-saved from Order Update"
-                    )
-                    meas_repo.update_values(profile.id, {k: str(v) for k, v in measurements.items()})
+                    clothing_type = item_data.get('clothing_type', 'Custom')
+                    
+                    # Check for existing duplicate
+                    existing_profiles = meas_repo.get_profiles_by_customer(order.customer_id)
+                    is_duplicate = False
+                    new_vals = {k: str(v) for k, v in measurements.items() if str(v)}
+                    
+                    for p in existing_profiles:
+                        if p.template_type == clothing_type:
+                            p_vals_clean = {v.field_name: v.field_value for v in p.values if v.field_value}
+                            if p_vals_clean == new_vals:
+                                is_duplicate = True
+                                # Just update the date of the existing one
+                                from datetime import datetime, timezone
+                                p.updated_at = datetime.now(timezone.utc)
+                                session.flush()
+                                break
+                    
+                    if not is_duplicate:
+                        from datetime import datetime
+                        date_str = datetime.now().strftime("%d %b %Y")
+                        profile_name = item_data.get('profile_name') or f"{clothing_type} Profile ({date_str})"
+                        profile = meas_repo.create_profile(
+                            customer_id=order.customer_id,
+                            template_type=clothing_type,
+                            name=profile_name,
+                            unit="inches",
+                            notes="Auto-saved from Order Update"
+                        )
+                        meas_repo.update_values(profile.id, {k: str(v) for k, v in measurements.items()})
 
             session.commit()
             logger.info(f"Order updated: {order.order_number}")
