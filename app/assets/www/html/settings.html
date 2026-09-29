@@ -362,8 +362,8 @@ window.resetDatabase = async function() {
     const confirm1 = await window.API.confirm("⚠️ WARNING: ERASE ALL DATA?", "Are you ABSOLUTELY sure? This will delete all customers, orders, payments, and measurements forever. You cannot undo this.");
     if (!confirm1) return;
     
-    const code = prompt("Please type 'DELETE' in all caps to confirm erasing all data:");
-    if (code !== "DELETE") {
+    const confirm2 = await window.API.confirm("🛑 FINAL WARNING", "Click OK to permanently erase everything and start from Order #1. There is no going back!");
+    if (!confirm2) {
         window.API.toast("Reset cancelled.", "info");
         return;
     }
