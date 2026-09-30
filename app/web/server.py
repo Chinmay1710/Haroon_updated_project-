@@ -136,7 +136,6 @@ def serve_admin_page(page_name: str, response: Response):
 
 
 # Redirect /admin to dashboard
-@app.get("/")
 @app.get("/admin")
 def admin_redirect():
     from fastapi.responses import RedirectResponse
