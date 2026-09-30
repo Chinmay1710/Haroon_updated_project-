@@ -169,7 +169,7 @@
         // Logic specific to new_order.html and add_measurement.html
         const idx = parseInt(currentInput.dataset.idx);
         if (!isNaN(idx)) {
-            const nextInput = document.querySelector(\`input[data-idx="\${idx + 1}"]\`);
+            const nextInput = document.querySelector(`input[data-idx="${idx + 1}"]`);
             if (nextInput) {
                 nextInput.focus();
             } else {
