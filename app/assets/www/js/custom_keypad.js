@@ -24,11 +24,10 @@
         // 4 5 6 -
         // 7 8 9 ⌫
         // ABC , 0 = . ↵
-        
         keypadEl.innerHTML = `
-            <div style="display: flex; gap: 6px; max-width: 600px; margin: 0 auto; height: 260px;">
-                <!-- Left Sidebar -->
-                <div style="display: flex; flex-direction: column; gap: 6px; width: 50px; background-color: #353846; border-radius: 8px; padding: 4px;">
+            <div style="display: flex; gap: 8px; max-width: 600px; margin: 0 auto; height: 260px;">
+                <!-- Left Sidebar (Math Ops) -->
+                <div style="display: flex; flex-direction: column; gap: 8px; width: 50px; background-color: #383944; border-radius: 8px; padding: 4px;">
                     <button class="kp-btn math-btn" data-val="+">+</button>
                     <button class="kp-btn math-btn" data-val="-">-</button>
                     <button class="kp-btn math-btn" data-val="*">*</button>
@@ -36,46 +35,36 @@
                 </div>
                 
                 <!-- Main Grid -->
-                <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
-                    <!-- Tailoring Shortcuts Row -->
-                    <div style="display: flex; gap: 6px; padding-bottom: 8px; flex: 1;">
-                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="1/4">1/4</button>
-                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="1/2">1/2</button>
-                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="3/4">3/4</button>
-                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="/">/</button>
-                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="R">R</button>
-                        <button class="kp-btn dark-btn" style="font-size: 18px;" data-val="L">L</button>
-                    </div>
+                <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
                     <!-- Row 1 -->
-                    <div style="display: flex; gap: 6px; flex: 1;">
+                    <div style="display: flex; gap: 8px; flex: 1;">
                         <button class="kp-btn num-btn" data-val="1">1</button>
                         <button class="kp-btn num-btn" data-val="2">2</button>
                         <button class="kp-btn num-btn" data-val="3">3</button>
+                        <button class="kp-btn dark-btn" data-val="%">%</button>
+                    </div>
+                    <!-- Row 2 -->
+                    <div style="display: flex; gap: 8px; flex: 1;">
+                        <button class="kp-btn num-btn" data-val="4">4</button>
+                        <button class="kp-btn num-btn" data-val="5">5</button>
+                        <button class="kp-btn num-btn" data-val="6">6</button>
+                        <button class="kp-btn dark-btn" data-val=" ">␣</button>
+                    </div>
+                    <!-- Row 3 -->
+                    <div style="display: flex; gap: 8px; flex: 1;">
+                        <button class="kp-btn num-btn" data-val="7">7</button>
+                        <button class="kp-btn num-btn" data-val="8">8</button>
+                        <button class="kp-btn num-btn" data-val="9">9</button>
                         <button class="kp-btn dark-btn action-btn" data-action="backspace">
                             <span class="material-symbols-outlined" style="font-size:22px">backspace</span>
                         </button>
                     </div>
-                    <!-- Row 2 -->
-                    <div style="display: flex; gap: 6px; flex: 1;">
-                        <button class="kp-btn num-btn" data-val="4">4</button>
-                        <button class="kp-btn num-btn" data-val="5">5</button>
-                        <button class="kp-btn num-btn" data-val="6">6</button>
-                        <button class="kp-btn dark-btn" data-val="-">-</button>
-                    </div>
-                    <!-- Row 3 -->
-                    <div style="display: flex; gap: 6px; flex: 1;">
-                        <button class="kp-btn num-btn" data-val="7">7</button>
-                        <button class="kp-btn num-btn" data-val="8">8</button>
-                        <button class="kp-btn num-btn" data-val="9">9</button>
-                        <button class="kp-btn action-btn" style="background-color: #424659; font-size: 16px; font-weight: 500;" data-action="abc">Gboard</button>
-                    </div>
                     <!-- Row 4 -->
-                    <div style="display: flex; gap: 6px; flex: 1;">
-                        <button class="kp-btn dark-btn" style="flex: 1;" data-val="M">M</button>
-                        <button class="kp-btn dark-btn" style="flex: 1;" data-val="F">F</button>
+                    <div style="display: flex; gap: 8px; flex: 1;">
                         <button class="kp-btn num-btn" data-val="0">0</button>
-                        <button class="kp-btn dark-btn" style="flex: 1;" data-val=".">.</button>
-                        <button class="kp-btn action-btn" style="background-color: #3b82f6;" data-action="enter">
+                        <button class="kp-btn dark-btn" data-val="=">=</button>
+                        <button class="kp-btn dark-btn" data-val=".">.</button>
+                        <button class="kp-btn action-btn" style="background-color: #383944;" data-action="enter">
                             <span class="material-symbols-outlined" style="font-size:22px">keyboard_return</span>
                         </button>
                     </div>
@@ -225,6 +214,17 @@
     }
 
     function init() {
+        // Intercept touch/click early to forcefully hide native keyboard if switching from Price to Measurement
+        document.addEventListener('pointerdown', (e) => {
+            const el = e.target;
+            if (el && el.classList && (el.classList.contains('meas-input') || el.classList.contains('am-meas-input'))) {
+                const active = document.activeElement;
+                if (active && active.tagName === 'INPUT' && active !== el && !active.classList.contains('meas-input') && !active.classList.contains('am-meas-input')) {
+                    active.blur(); // Hide native keyboard immediately
+                }
+            }
+        }, { capture: true });
+
         // Handle focusin (fires when tapped since inputs are no longer readonly)
         document.addEventListener('focusin', (e) => {
             const el = e.target;
@@ -238,6 +238,13 @@
 
             // Always reset inputmode to none to ensure Gboard hides/doesn't open
             el.setAttribute('inputmode', 'none');
+            
+            // Extra safety to force native keyboard close on iOS/Android
+            if (document.activeElement === el) {
+                // If keyboard is glitching, sometimes a quick blur/focus helps, but usually inputmode=none is enough
+                // if we blurred the previous element in pointerdown.
+            }
+
             currentInput = el;
             
             // Show custom keypad
