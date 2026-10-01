@@ -63,7 +63,6 @@ class OrderService:
                         folder="haroon_tailor/items",
                         resource_type="image",
                         format="jpg",
-                        quality="auto:good",
                     )
                     
                     cloud_url = result.get("secure_url")

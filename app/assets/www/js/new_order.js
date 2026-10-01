@@ -589,7 +589,7 @@ window.capturePhoto = function() {
  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
  
  // Convert to base64 jpeg
- const imgData = canvas.toDataURL('image/jpeg', 0.8);
+ const imgData = canvas.toDataURL('image/jpeg', 1.0);
  currentImagesBase64.push(imgData);
  
  // Stop camera and show preview
