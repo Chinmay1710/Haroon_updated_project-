@@ -554,7 +554,13 @@ let currentCameraStream = null;
 
 window.startCamera = async function() {
  try {
- currentCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+ currentCameraStream = await navigator.mediaDevices.getUserMedia({ 
+    video: { 
+        facingMode: "environment",
+        width: { ideal: 1920 },
+        height: { ideal: 1920 }
+    } 
+ });
  const video = document.getElementById('live-camera-feed');
  video.srcObject = currentCameraStream;
  document.getElementById('live-camera-container').classList.remove('hidden');
