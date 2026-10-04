@@ -585,13 +585,27 @@ window.capturePhoto = function() {
  const canvas = document.getElementById('live-camera-canvas');
  if (!currentCameraStream || !video.videoWidth) return;
  
- canvas.width = video.videoWidth;
- canvas.height = video.videoHeight;
+ const MAX_DIMENSION = 1920;
+ let targetWidth = video.videoWidth;
+ let targetHeight = video.videoHeight;
+ 
+ if (targetWidth > MAX_DIMENSION || targetHeight > MAX_DIMENSION) {
+     if (targetWidth > targetHeight) {
+         targetHeight = Math.round((targetHeight / targetWidth) * MAX_DIMENSION);
+         targetWidth = MAX_DIMENSION;
+     } else {
+         targetWidth = Math.round((targetWidth / targetHeight) * MAX_DIMENSION);
+         targetHeight = MAX_DIMENSION;
+     }
+ }
+ 
+ canvas.width = targetWidth;
+ canvas.height = targetHeight;
  const ctx = canvas.getContext('2d');
  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
  
- // Convert to base64 jpeg
- const imgData = canvas.toDataURL('image/jpeg', 1.0);
+ // Convert to base64 jpeg with 0.85 quality to save space but keep text clear
+ const imgData = canvas.toDataURL('image/jpeg', 0.85);
  currentImagesBase64.push(imgData);
  
  // Stop camera and show preview
