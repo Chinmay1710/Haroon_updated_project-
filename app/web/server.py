@@ -508,27 +508,6 @@ def index(response: Response):
             return HTMLResponse(content, headers=response.headers)
     return "<h1>Worker Portal not found</h1>"
 
-@app.get("/api/reset-everything")
-def api_reset_everything(pin: str = ""):
-    if pin != "haroon123":
-        return {"status": "error", "message": "Invalid PIN"}
-    try:
-        from app.database.engine import get_engine, Base
-        import app.models.customer
-        import app.models.measurement
-        import app.models.order
-        import app.models.payment
-        import app.models.expense
-        import app.models.settings
-        import app.models.worker
-        import app.models.stock
-        engine = get_engine()
-        Base.metadata.drop_all(engine)
-        Base.metadata.create_all(engine)
-        return {"status": "success", "message": "Database wiped successfully! Sequences reset to 1. Go back and refresh."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
 class WebServerThread(Thread):
     def __init__(self, host="0.0.0.0", port=8000):
         super().__init__(daemon=True)
