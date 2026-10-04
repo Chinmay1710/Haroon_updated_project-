@@ -15,10 +15,17 @@ class CustomerService:
                         address: str = "", notes: str = "") -> Customer:
         if not name or name.strip() == "":
             raise ValueError("Customer name cannot be empty")
+        
         session = get_session()
         try:
+            mobile_clean = mobile.strip() if mobile else ""
+            if mobile_clean:
+                existing = session.query(Customer).filter(Customer.mobile == mobile_clean, Customer.is_active == True).first()
+                if existing:
+                    raise ValueError(f"This number is already exist in our system for customer '{existing.name}'.")
+            
             repo = CustomerRepository(session)
-            customer = repo.create(name=name, mobile=mobile, address=address, notes=notes)
+            customer = repo.create(name=name, mobile=mobile_clean, address=address, notes=notes)
             session.commit()
             logger.info(f"Customer created: {customer.name} (ID: {customer.id})")
             return customer
@@ -32,6 +39,13 @@ class CustomerService:
     def update_customer(self, customer_id: int, **kwargs) -> Customer | None:
         session = get_session()
         try:
+            if "mobile" in kwargs and kwargs["mobile"]:
+                mobile_clean = kwargs["mobile"].strip()
+                kwargs["mobile"] = mobile_clean
+                existing = session.query(Customer).filter(Customer.mobile == mobile_clean, Customer.id != customer_id, Customer.is_active == True).first()
+                if existing:
+                    raise ValueError(f"This number is already exist in our system for customer '{existing.name}'.")
+            
             repo = CustomerRepository(session)
             customer = repo.update(customer_id, **kwargs)
             session.commit()
