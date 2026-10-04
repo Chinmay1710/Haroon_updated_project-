@@ -17,9 +17,16 @@ class OrderRepository:
 
     def _generate_order_number(self) -> str:
         """Generate the next sequential order number."""
+        from sqlalchemy import desc
+        last_order = self.session.query(Order.order_number).order_by(desc(Order.id)).first()
+        last_seq = 0
+        if last_order and last_order[0]:
+            try:
+                last_seq = int(last_order[0].split('-')[-1])
+            except (IndexError, ValueError):
+                last_seq = self.session.query(func.max(Order.id)).scalar() or 0
 
-        last = self.session.query(func.max(Order.id)).scalar() or 0
-        return ORDER_NUMBER_FORMAT.format(prefix=ORDER_NUMBER_PREFIX, seq=last + 1)
+        return ORDER_NUMBER_FORMAT.format(prefix=ORDER_NUMBER_PREFIX, seq=last_seq + 1)
 
     def create(self, customer_id: int, order_date: date = None,
                delivery_date: date = None, total_amount: float = 0.0,
