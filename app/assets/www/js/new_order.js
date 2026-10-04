@@ -497,10 +497,6 @@ window.saveModalItem = function() {
  }
  });
  
- if (Object.keys(measurements).length === 0) {
- window.API.toast("Please enter at least one measurement", "error");
- return;
- }
  
  if (editItemId) {
  // Update existing
