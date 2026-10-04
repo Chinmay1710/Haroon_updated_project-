@@ -1,77 +1,42 @@
 import os
 import sys
 
-# Try to get database URL from environment or prompt
-db_url = os.environ.get("DATABASE_URL")
-if not db_url:
-    print("No DATABASE_URL found in environment variables.")
-    print("If you want to clear the REMOTE database, run this script like this:")
-    print('DATABASE_URL="your-render-postgresql-url" python3 reset_db.py')
-    print("\nIf you want to clear your LOCAL database, just press ENTER.")
-    print("To abort, press CTRL+C.")
-    
-    choice = input("\nContinue with local database? (y/N): ")
-    if choice.lower() != 'y':
-        sys.exit(0)
+# Add the project root to the python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Set it so engine.py picks it up
-if db_url:
-    os.environ["DATABASE_URL"] = db_url
+from app.database.engine import get_engine, Base
 
-from app.database.engine import get_session, get_engine, Base
-from app.models.customer import Customer
-from app.models.order import Order, OrderItem, OrderMeasurement
-from app.models.payment import Payment
-from app.models.measurement import MeasurementProfile, MeasurementValue
-from app.models.expense import Expense
-from app.models.worker import Worker, WorkEntry, WorkerAdvance
-from app.models.stock import StockItem, StockUsage
+# Import all models to ensure they are registered with Base.metadata
+import app.models.customer      # noqa: F401
+import app.models.measurement   # noqa: F401
+import app.models.order         # noqa: F401
+import app.models.payment       # noqa: F401
+import app.models.expense       # noqa: F401
+import app.models.settings      # noqa: F401
+import app.models.worker        # noqa: F401
+import app.models.stock         # noqa: F401
 
-engine = get_engine()
-session = get_session()
-
-print("\nWARNING: This will PERMANENTLY DELETE all data from the database.")
-print(f"Connected to: {engine.url}")
-confirm = input("Type 'DELETE' to confirm: ")
-
-if confirm == 'DELETE':
-    print("Deleting all data...")
+def reset_database():
     try:
-        # Delete in order to respect foreign key constraints
-        session.query(StockUsage).delete()
-        session.query(StockItem).delete()
+        engine = get_engine()
+        print(f"Connected to database: {engine.url.render_as_string(hide_password=True)}")
         
-        session.query(WorkerAdvance).delete()
-        session.query(WorkEntry).delete()
-        session.query(Worker).delete()
+        print("Dropping all tables...")
+        Base.metadata.drop_all(engine)
         
-        session.query(Expense).delete()
+        print("Creating all tables from scratch...")
+        Base.metadata.create_all(engine)
         
-        session.query(Payment).delete()
-        session.query(OrderMeasurement).delete()
-        session.query(OrderItem).delete()
-        session.query(Order).delete()
-        
-        session.query(MeasurementValue).delete()
-        session.query(MeasurementProfile).delete()
-        
-        session.query(Customer).delete()
-        
-        session.commit()
-        print("✅ Database successfully wiped clean!")
+        print("✅ Successfully reset database! All orders and customers will now start from 1.")
     except Exception as e:
-        session.rollback()
-        print(f"❌ Error while deleting data: {e}")
-        
-        # Fallback to dropping all tables and recreating them
-        print("Attempting to drop and recreate all tables instead...")
-        try:
-            Base.metadata.drop_all(engine)
-            Base.metadata.create_all(engine)
-            print("✅ Database tables dropped and recreated fresh!")
-        except Exception as e2:
-            print(f"❌ Failed to drop/recreate tables: {e2}")
-    finally:
-        session.close()
-else:
-    print("Aborted.")
+        print(f"❌ Error resetting database: {e}")
+
+if __name__ == "__main__":
+    print("\n" + "="*50)
+    print("DANGER: WIPE ENTIRE DATABASE")
+    print("="*50)
+    confirm = input("⚠️ Are you sure you want to DELETE ALL DATA? This cannot be undone! (yes/no): ")
+    if confirm.strip().lower() == "yes":
+        reset_database()
+    else:
+        print("Cancelled.")
