@@ -810,6 +810,22 @@ def handle_get_order_details(payload):
         session.close()
 
 
+def handle_delete_order(payload):
+    services = _get_services()
+    order_srv = services["order"]
+    order_id = payload.get("id")
+    if not order_id:
+        return {"status": "error", "message": "Order ID is required"}
+    try:
+        success = order_srv.delete_order(order_id)
+        if success:
+            return {"status": "success", "message": f"Order {order_id} deleted successfully"}
+        else:
+            return {"status": "error", "message": f"Order {order_id} not found"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 def handle_update_order_status(payload):
     services = _get_services()
     order_srv = services["order"]
@@ -1683,6 +1699,7 @@ ACTION_HANDLERS = {
     # Orders
     "create_order": handle_create_order,
     "update_order": handle_update_order,
+    "delete_order": handle_delete_order,
     "get_all_orders": handle_get_all_orders,
     "get_pending_orders": handle_get_pending_orders,
     "get_order_details": handle_get_order_details,

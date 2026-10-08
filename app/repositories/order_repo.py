@@ -16,17 +16,22 @@ class OrderRepository:
         self.session = session
 
     def _generate_order_number(self) -> str:
-        """Generate the next sequential order number."""
-        from sqlalchemy import desc
-        last_order = self.session.query(Order.order_number).order_by(desc(Order.id)).first()
-        last_seq = 0
-        if last_order and last_order[0]:
-            try:
-                last_seq = int(last_order[0].split('-')[-1])
-            except (IndexError, ValueError):
-                last_seq = self.session.query(func.max(Order.id)).scalar() or 0
-
-        return ORDER_NUMBER_FORMAT.format(prefix=ORDER_NUMBER_PREFIX, seq=last_seq + 1)
+        """Generate the next sequential order number, filling any gaps."""
+        orders = self.session.query(Order.order_number).all()
+        existing_seqs = set()
+        for o in orders:
+            if o[0]:
+                try:
+                    seq = int(o[0].split('-')[-1])
+                    existing_seqs.add(seq)
+                except (IndexError, ValueError, AttributeError):
+                    pass
+                    
+        next_seq = 1
+        while next_seq in existing_seqs:
+            next_seq += 1
+            
+        return ORDER_NUMBER_FORMAT.format(prefix=ORDER_NUMBER_PREFIX, seq=next_seq)
 
     def create(self, customer_id: int, order_date: date = None,
                delivery_date: date = None, total_amount: float = 0.0,
@@ -56,6 +61,15 @@ class OrderRepository:
         for item in items:
             self.session.delete(item)
         self.session.flush()
+
+    def delete(self, order_id: int) -> bool:
+        """Delete an order and all its associated data."""
+        order = self.get_by_id(order_id)
+        if order:
+            self.session.delete(order)
+            self.session.flush()
+            return True
+        return False
 
     def add_item(self, order_id: int, clothing_type: str,
                  quantity: int = 1, price: float = 0.0, notes: str = "", image_path: str = None) -> OrderItem:

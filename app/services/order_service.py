@@ -315,6 +315,24 @@ class OrderService:
         finally:
             session.close()
 
+    def delete_order(self, order_id: int) -> bool:
+        """Delete an order completely."""
+        session = get_session()
+        try:
+            repo = OrderRepository(session)
+            success = repo.delete(order_id)
+            session.commit()
+            if success:
+                logger.info(f"Order deleted: ID {order_id}")
+            return success
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to delete order {order_id}: {e}")
+            raise
+        finally:
+            session.close()
+
+
     def update_status(self, order_id: int, new_status: str) -> Order | None:
         """Change order status with transition validation."""
         session = get_session()

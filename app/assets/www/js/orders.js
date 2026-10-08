@@ -388,6 +388,10 @@ function renderOrders(orders) {
  Complete
  </button>
  ` : ''}
+ <button class="delete-order-btn px-2 py-1 w-full rounded bg-error/10 text-error font-label-sm text-[10px] hover:bg-error hover:text-on-error shadow-sm border border-error/20 flex items-center justify-center gap-1 mt-1" title="Delete Order">
+ <span class="material-symbols-outlined text-[12px]">delete</span>
+ Delete
+ </button>
  <button class="w-8 h-8 rounded-full absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center text-on-surface-variant hover:${isOverdue ? 'bg-error-container hover:text-error' : 'bg-surface-container-highest hover:text-primary'} transition-colors">
  <span class="material-symbols-outlined text-[20px]">chevron_right</span>
  </button>
@@ -395,6 +399,23 @@ function renderOrders(orders) {
  `;
  
  container.appendChild(card);
+ 
+ const deleteBtn = card.querySelector('.delete-order-btn');
+ if (deleteBtn) {
+     deleteBtn.onclick = (e) => {
+         e.stopPropagation();
+         if (confirm(`Are you sure you want to delete order ${o.order_number}? This cannot be undone.`)) {
+             window.API.request('delete_order', { id: o.id }).then(res => {
+                 if(res.status === 'success') {
+                     window.API.toast(res.message, 'success');
+                     loadOrders();
+                 } else {
+                     window.API.toast(res.message, 'error');
+                 }
+             });
+         }
+     };
+ }
  
  const partialBtn = card.querySelector('.mark-partial-btn');
  if (partialBtn) {
