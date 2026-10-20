@@ -142,10 +142,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
             final custName = o['customer_name'] ?? 'Grahak';
             final shopSettings = await ApiService.getShopSettings();
             final shopName = shopSettings['shop_name'] ?? 'Haroon Tailor';
-            final items = (o['items'] as List<dynamic>?) ?? [];
-            final itemsStr = items.isNotEmpty
-                ? items.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ')
-                : 'Kapde';
+            final dynamic itemsRaw = o['items'];
+            final String itemsStr = itemsRaw is String
+                ? (itemsRaw.isNotEmpty ? itemsRaw : 'Kapde')
+                : (itemsRaw is List && itemsRaw.isNotEmpty
+                    ? itemsRaw.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ')
+                    : 'Kapde');
 
             final msg =
                 '🎉 $custName! 🎉\n\n'
@@ -170,35 +172,58 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   // 2. PARTIAL BUTTON WITH CHECKBOXES MODAL (Point 1 - Website Flow)
-  void _handlePartial(Map<String, dynamic> o) {
+  Future<void> _handlePartial(Map<String, dynamic> o) async {
     final orderId = o['id'] as int;
-    final items = (o['items'] as List<dynamic>?) ?? [];
-    final rawItems = (o['raw_items'] as List<dynamic>?) ?? [];
+    final dynamic rawItemsVal = o['raw_items'];
+    final dynamic itemsVal = o['items'];
 
     final List<Map<String, dynamic>> itemList = [];
 
-    if (rawItems.isNotEmpty) {
-      for (var it in rawItems) {
-        itemList.add({
-          'id': it['id'] ?? 0,
-          'name': it['name'] ?? 'Item',
-          'is_ready': it['is_ready'] == true,
-        });
+    if (rawItemsVal is List && rawItemsVal.isNotEmpty) {
+      for (var it in rawItemsVal) {
+        if (it is Map) {
+          itemList.add({
+            'id': it['id'] ?? 0,
+            'name': (it['name'] ?? 'Item').toString(),
+            'is_ready': it['is_ready'] == true,
+          });
+        }
       }
-    } else if (items.isNotEmpty) {
-      for (var it in items) {
-        itemList.add({
-          'id': it['id'] ?? 0,
-          'name': '${it['clothing_type'] ?? 'Custom Item'} (x${it['quantity'] ?? 1})',
-          'is_ready': it['is_ready'] == true,
-        });
+    } else if (itemsVal is List && itemsVal.isNotEmpty) {
+      for (var it in itemsVal) {
+        if (it is Map) {
+          itemList.add({
+            'id': it['id'] ?? 0,
+            'name': '${it['clothing_type'] ?? 'Custom Item'} (x${it['quantity'] ?? 1})',
+            'is_ready': it['is_ready'] == true,
+          });
+        }
       }
+    } else {
+      // If raw_items was not in summary list, fetch full order details
+      try {
+        final details = await ApiService.getOrderDetails(orderId);
+        final detItems = details['items'];
+        if (detItems is List && detItems.isNotEmpty) {
+          for (var it in detItems) {
+            if (it is Map) {
+              itemList.add({
+                'id': it['id'] ?? 0,
+                'name': '${it['clothing_type'] ?? 'Custom Item'} (x${it['quantity'] ?? 1})',
+                'is_ready': it['is_ready'] == true,
+              });
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     if (itemList.isEmpty) {
       _quickStatusUpdate(orderId, 'PARTIALLY_COMPLETE');
       return;
     }
+
+    if (!mounted) return;
 
     showDialog(
       context: context,

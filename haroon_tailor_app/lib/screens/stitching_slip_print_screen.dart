@@ -34,7 +34,12 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final o = widget.initialOrder ?? await ApiService.getOrderDetails(widget.orderId);
+      Map<String, dynamic> o;
+      if (widget.initialOrder != null && widget.initialOrder!['items'] is List) {
+        o = widget.initialOrder!;
+      } else {
+        o = await ApiService.getOrderDetails(widget.orderId);
+      }
       final settings = await ApiService.getShopSettings();
       setState(() {
         _order = o;
@@ -89,7 +94,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     final delivDate = _order['delivery_date'] != null
         ? _order['delivery_date'].toString().split('T')[0]
         : '-';
-    final items = (_order['items'] as List<dynamic>?) ?? [];
+    final dynamic rawItems = _order['items'];
+    final List<dynamic> items = rawItems is List ? rawItems : [];
     final nowStr = DateFormat('dd/MM/yyyy hh:mm a').format(DateTime.now());
 
     // Roll 58mm
@@ -208,7 +214,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     final delivDate = _order['delivery_date'] != null
         ? _order['delivery_date'].toString().split('T')[0]
         : '-';
-    final items = (_order['items'] as List<dynamic>?) ?? [];
+    final dynamic rawItems = _order['items'];
+    final List<dynamic> items = rawItems is List ? rawItems : [];
     final nowStr = DateFormat('dd/MM/yyyy hh:mm a').format(DateTime.now());
 
     return Scaffold(

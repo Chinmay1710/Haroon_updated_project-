@@ -407,6 +407,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'customers_add_fab',
         backgroundColor: const Color(0xFF0F172A),
         icon: const Icon(Icons.person_add, color: Colors.white),
         label: const Text('Add Customer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),

@@ -121,10 +121,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             final custName = _order!['customer_name'] ?? 'Grahak';
             final shopSettings = await ApiService.getShopSettings();
             final shopName = shopSettings['shop_name'] ?? 'Haroon Tailor';
-            final items = (_order!['items'] as List<dynamic>?) ?? [];
-            final itemsStr = items.isNotEmpty
-                ? items.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ')
-                : 'Kapde';
+            final dynamic itemsRaw = _order!['items'];
+            final String itemsStr = itemsRaw is String
+                ? (itemsRaw.isNotEmpty ? itemsRaw : 'Kapde')
+                : (itemsRaw is List && itemsRaw.isNotEmpty
+                    ? itemsRaw.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ')
+                    : 'Kapde');
 
             final msg =
                 '🎉 $custName! 🎉\n\n'
@@ -152,27 +154,31 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   // 2. PARTIAL BUTTON WITH CHECKBOXES MODAL (Point 1 - Website Flow)
   void _handlePartial() {
     if (_order == null) return;
-    final items = (_order!['items'] as List<dynamic>?) ?? [];
-    final rawItems = (_order!['raw_items'] as List<dynamic>?) ?? [];
+    final dynamic rawItemsVal = _order!['raw_items'];
+    final dynamic itemsVal = _order!['items'];
 
     // Extract item list with id, name, is_ready
     final List<Map<String, dynamic>> itemList = [];
 
-    if (rawItems.isNotEmpty) {
-      for (var it in rawItems) {
-        itemList.add({
-          'id': it['id'] ?? 0,
-          'name': it['name'] ?? 'Item',
-          'is_ready': it['is_ready'] == true,
-        });
+    if (rawItemsVal is List && rawItemsVal.isNotEmpty) {
+      for (var it in rawItemsVal) {
+        if (it is Map) {
+          itemList.add({
+            'id': it['id'] ?? 0,
+            'name': (it['name'] ?? 'Item').toString(),
+            'is_ready': it['is_ready'] == true,
+          });
+        }
       }
-    } else if (items.isNotEmpty) {
-      for (var it in items) {
-        itemList.add({
-          'id': it['id'] ?? 0,
-          'name': '${it['clothing_type'] ?? 'Custom Item'} (x${it['quantity'] ?? 1})',
-          'is_ready': it['is_ready'] == true,
-        });
+    } else if (itemsVal is List && itemsVal.isNotEmpty) {
+      for (var it in itemsVal) {
+        if (it is Map) {
+          itemList.add({
+            'id': it['id'] ?? 0,
+            'name': '${it['clothing_type'] ?? 'Custom Item'} (x${it['quantity'] ?? 1})',
+            'is_ready': it['is_ready'] == true,
+          });
+        }
       }
     }
 
@@ -541,7 +547,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       name: _order!['customer_name'] ?? '',
       mobile: _order!['customer_mobile'] ?? '',
     );
-    final items = (_order!['items'] as List<dynamic>?) ?? [];
+    final dynamic itemsRaw = _order!['items'];
+    final List<dynamic> items = itemsRaw is List ? itemsRaw : [];
     Map<String, dynamic> measurements = {};
     String clothingType = 'Shirt';
 
@@ -713,7 +720,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final phone = (o['customer_mobile'] ?? '').toString();
     final address = (o['customer_address'] ?? '').toString();
     final status = (o['status'] ?? 'NEW').toString();
-    final items = (o['items'] as List<dynamic>?) ?? [];
+    final dynamic itemsRaw = o['items'];
+    final List<dynamic> items = itemsRaw is List ? itemsRaw : [];
     final payments = (o['payments'] as List<dynamic>?) ?? [];
 
     return Scaffold(

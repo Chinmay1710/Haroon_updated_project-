@@ -75,6 +75,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         children: screens,
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'main_new_order_fab',
         backgroundColor: const Color(0xFF2563EB),
         elevation: 4,
         shape: const CircleBorder(),
