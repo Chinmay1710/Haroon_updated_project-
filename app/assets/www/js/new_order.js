@@ -85,6 +85,7 @@ document.addEventListener("DOMContentLoaded", function() {
  
 
  window.API.attachMic('modal-special-instructions');
+ window.API.attachMic('order-notes');
  
  }
  init();
@@ -107,6 +108,10 @@ async function loadCustomers(initialCustomerId) {
  // Populate wizard state
  if (data.delivery_date) {
  document.getElementById('order-date').value = data.delivery_date.split('T')[0];
+ }
+ if (data.special_instructions) {
+ const notesEl = document.getElementById('order-notes');
+ if (notesEl) notesEl.value = data.special_instructions;
  }
  document.getElementById('order-advance').value = data.advance_amount || 0;
  wizardState.advance = data.advance_amount || 0;
@@ -200,15 +205,118 @@ function renderCustomerSelect() {
  }
  };
  
- document.getElementById('search-cust').addEventListener('input', (e) => {
- const q = e.target.value.toLowerCase();
- const cards = listDiv.querySelectorAll('.customer-card');
- cards.forEach(card => {
- const text = card.textContent.toLowerCase();
- card.style.display = text.includes(q) ? 'flex' : 'none';
- });
- });
+  const searchCustInput = document.getElementById('search-cust');
+  if (searchCustInput) {
+    searchCustInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      const cards = listDiv.querySelectorAll('.customer-card');
+      cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        card.style.display = text.includes(q) ? 'flex' : 'none';
+      });
+
+      // Duplicate phone check
+      const cleanQ = cleanMobile(q);
+      const alertBox = document.getElementById('duplicate-search-alert');
+      if (cleanQ.length === 10) {
+        const match = availableCustomers.find(c => cleanMobile(c.mobile) === cleanQ);
+        if (match) {
+          const nameEl = document.getElementById('dup-alert-name');
+          const phoneEl = document.getElementById('dup-alert-phone');
+          const btn = document.getElementById('dup-alert-btn');
+          if (nameEl) nameEl.textContent = `Grahak Mila: ${match.name}`;
+          if (phoneEl) phoneEl.textContent = match.mobile || '';
+          if (btn) btn.onclick = () => selectCustomer(match.id, match.name, match.mobile);
+          if (alertBox) alertBox.classList.remove('hidden');
+        } else {
+          if (alertBox) alertBox.classList.add('hidden');
+        }
+      } else {
+        if (alertBox) alertBox.classList.add('hidden');
+      }
+    });
+  }
 }
+
+function cleanMobile(num) {
+  if (!num) return '';
+  return num.replace(/\D/g, '').slice(-10);
+}
+
+window.openQuickAddCustomer = function() {
+  const modal = document.getElementById('quick-add-cust-modal');
+  if (modal) {
+    document.getElementById('quick-cust-name').value = '';
+    document.getElementById('quick-cust-mobile').value = '';
+    const warn = document.getElementById('duplicate-cust-warning');
+    if (warn) warn.classList.add('hidden');
+    const btn = document.getElementById('btn-save-quick-cust');
+    if (btn) btn.disabled = false;
+    modal.classList.remove('hidden');
+  }
+};
+
+window.closeQuickAddCustomer = function() {
+  const modal = document.getElementById('quick-add-cust-modal');
+  if (modal) modal.classList.add('hidden');
+};
+
+window.checkDuplicateCustomerNumber = function(val) {
+  const clean = cleanMobile(val);
+  const warn = document.getElementById('duplicate-cust-warning');
+  const warnText = document.getElementById('duplicate-warning-text');
+  const btn = document.getElementById('btn-save-quick-cust');
+  
+  if (clean.length === 10) {
+    const match = availableCustomers.find(c => cleanMobile(c.mobile) === clean);
+    if (match) {
+      if (warnText) warnText.textContent = `Yeh number pehle se "${match.name}" ke naam se darj hai! Duplicate allow nahi hai.`;
+      if (warn) warn.classList.remove('hidden');
+      if (btn) btn.disabled = true;
+      return;
+    }
+  }
+  if (warn) warn.classList.add('hidden');
+  if (btn) btn.disabled = false;
+};
+
+window.saveQuickCustomer = async function() {
+  const name = (document.getElementById('quick-cust-name').value || '').trim();
+  const mobile = (document.getElementById('quick-cust-mobile').value || '').trim();
+  const clean = cleanMobile(mobile);
+
+  if (!name) {
+    window.API.toast("Grahak ka naam zaroori hai", "error");
+    return;
+  }
+  if (clean.length !== 10) {
+    window.API.toast("Mobile number 10 digits ka hona chahiye", "error");
+    return;
+  }
+
+  // Duplicate check
+  const match = availableCustomers.find(c => cleanMobile(c.mobile) === clean);
+  if (match) {
+    window.API.toast(`Yeh number pehle se "${match.name}" ke paas hai! Duplicate nahi ban sakta.`, "error");
+    return;
+  }
+
+  try {
+    const formattedMobile = `+91 ${clean}`;
+    const res = await window.API.request('create_customer', {
+      name: name,
+      mobile: formattedMobile,
+      address: "",
+      notes: ""
+    });
+    window.API.toast("Grahak save ho gaya!", "success");
+    closeQuickAddCustomer();
+    availableCustomers.push(res);
+    selectCustomer(res.id, res.name, res.mobile);
+  } catch (err) {
+    window.API.toast(err.toString(), "error");
+  }
+};
 
 async function selectCustomer(id, name, mobile) {
  wizardState.customerId = id;
@@ -311,7 +419,14 @@ window.openAddItemModal = function(itemId = null) {
  
  const type = document.getElementById('modal-item-type').value;
  populateSavedProfilesDropdown(type);
- renderMeasurementFields(type, {});
+ if (availableProfiles && availableProfiles.length > 0) {
+   const latest = availableProfiles[availableProfiles.length - 1];
+   document.getElementById('modal-saved-profile').value = latest.id;
+   document.getElementById('modal-item-type').value = latest.template_type;
+   renderMeasurementFields(latest.template_type, latest.values || {});
+ } else {
+   renderMeasurementFields(type, {});
+ }
  }
  if (modal) {
  modal.classList.remove('hidden');
@@ -382,9 +497,10 @@ function populateSavedProfilesDropdown(type) {
 
 function renderMeasurementFields(type, values) {
   const container = document.getElementById('modal-measurements-grid');
+  if (!container) return;
   
-  // Use 6 columns layout on all devices as requested (6x4 grid)
-  container.className = "grid grid-cols-6 gap-2 md:gap-4";
+  // Responsive: 4 columns on mobile, 6 columns on desktop/tablet
+  container.className = "grid grid-cols-4 sm:grid-cols-6 gap-2 sm:gap-3";
   
   let html = '';
   for (let i = 1; i <= 24; i++) {
@@ -393,10 +509,9 @@ function renderMeasurementFields(type, values) {
     const val = values[field] || "";
     
     html += `
-    <div>
-      <div class="relative">
-        <input type="text" inputmode="none" readonly id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" oninput="window.markProfileChanged()" class="meas-input w-full p-2 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary outline-none font-body-lg text-center px-1">
-      </div>
+    <div class="flex flex-col items-center">
+      <span class="text-[11px] font-bold text-on-surface-variant mb-0.5">Box ${i}</span>
+      <input type="text" inputmode="none" readonly id="${safeId}" data-field="${field}" data-idx="${i}" value="${val}" placeholder="—" oninput="window.markProfileChanged()" class="meas-input w-full h-11 bg-surface-container-lowest border border-outline-variant rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-base font-bold text-center text-on-surface">
     </div>
     `;
   }
@@ -411,8 +526,8 @@ function renderMeasurementFields(type, values) {
       if (!currentInput.classList.contains('meas-input')) return;
       
       const currentIdx = parseInt(currentInput.dataset.idx);
-      const cols = 6;
-      const rows = 4;
+      const cols = window.innerWidth >= 640 ? 6 : 4;
+      const rows = Math.ceil(24 / cols);
       let nextIdx = null;
 
       if (e.key === 'ArrowRight') {
@@ -752,8 +867,10 @@ window.saveOrder = async function() {
  const advance = parseFloat(document.getElementById('order-advance').value) || 0;
  const paymentMethod = document.getElementById('order-payment-method').value;
  
- // Combine item notes into order notes since order-level notes are removed
- const combinedNotes = wizardState.items.map(item => item.notes).filter(n => n).join(" | ");
+ // Combine order instructions and item notes so nothing is lost
+ const orderNotes = (document.getElementById('order-notes') ? document.getElementById('order-notes').value : '').trim();
+ const itemNotes = wizardState.items.map(item => item.notes).filter(n => n).join(" | ");
+ const combinedNotes = [orderNotes, itemNotes].filter(n => n).join(" | ");
  
  const payloadItems = wizardState.items.map(i => ({
  clothing_type: i.clothing_type,

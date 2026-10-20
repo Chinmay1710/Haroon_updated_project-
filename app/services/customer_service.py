@@ -20,9 +20,16 @@ class CustomerService:
         try:
             mobile_clean = mobile.strip() if mobile else ""
             if mobile_clean:
-                existing = session.query(Customer).filter(Customer.mobile == mobile_clean, Customer.is_active == True).first()
+                digits = "".join(filter(str.isdigit, mobile_clean))[-10:]
+                if len(digits) == 10:
+                    existing = session.query(Customer).filter(
+                        Customer.is_active == True,
+                        Customer.mobile.like(f"%{digits}")
+                    ).first()
+                else:
+                    existing = session.query(Customer).filter(Customer.mobile == mobile_clean, Customer.is_active == True).first()
                 if existing:
-                    raise ValueError(f"This number is already exist in our system for customer '{existing.name}'.")
+                    raise ValueError(f"Yeh number pehle se '{existing.name}' ke naam par darj hai! Duplicate customer allow nahi hai.")
             
             repo = CustomerRepository(session)
             customer = repo.create(name=name, mobile=mobile_clean, address=address, notes=notes)
@@ -42,9 +49,21 @@ class CustomerService:
             if "mobile" in kwargs and kwargs["mobile"]:
                 mobile_clean = kwargs["mobile"].strip()
                 kwargs["mobile"] = mobile_clean
-                existing = session.query(Customer).filter(Customer.mobile == mobile_clean, Customer.id != customer_id, Customer.is_active == True).first()
+                digits = "".join(filter(str.isdigit, mobile_clean))[-10:]
+                if len(digits) == 10:
+                    existing = session.query(Customer).filter(
+                        Customer.is_active == True,
+                        Customer.id != customer_id,
+                        Customer.mobile.like(f"%{digits}")
+                    ).first()
+                else:
+                    existing = session.query(Customer).filter(
+                        Customer.mobile == mobile_clean,
+                        Customer.id != customer_id,
+                        Customer.is_active == True
+                    ).first()
                 if existing:
-                    raise ValueError(f"This number is already exist in our system for customer '{existing.name}'.")
+                    raise ValueError(f"Yeh number pehle se '{existing.name}' ke naam par darj hai! Duplicate customer allow nahi hai.")
             
             repo = CustomerRepository(session)
             customer = repo.update(customer_id, **kwargs)

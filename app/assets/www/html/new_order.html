@@ -58,18 +58,6 @@
  <span class="material-symbols-outlined" style="font-size:25px;">local_shipping</span>
  <span data-i18n="sidebar.deliveries">Deliveries</span>
  </a>
- <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
- <span class="material-symbols-outlined" style="font-size:25px;">receipt_long</span>
- <span data-i18n="sidebar.expenses">Expenses</span>
- </a>
- <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
- <span class="material-symbols-outlined" style="font-size:25px;">engineering</span>
- <span data-i18n="sidebar.workers">Workers</span>
- </a>
- <a href="#" data-nav="stock_list" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
- <span class="material-symbols-outlined" style="font-size:25px;">inventory_2</span>
- <span data-i18n="sidebar.stock">Stock</span>
- </a>
 <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
  <span class="material-symbols-outlined" style="font-size:25px;">settings</span>
  <span data-i18n="sidebar.settings">Settings</span>
@@ -126,11 +114,23 @@
  <div id="customer-select-view" class="relative">
  <div class="relative">
  <span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-outline" data-icon="search">search</span>
- <input id="search-cust" class="w-full pl-10 pr-4 py-3 bg-surface rounded-lg border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="Search by name or phone..." type="text"/>
+ <input id="search-cust" class="w-full pl-10 pr-4 py-3 bg-surface rounded-lg border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="Search by name or 10-digit phone..." type="text"/>
+ </div>
+
+ <div id="duplicate-search-alert" class="hidden mt-3 p-3 bg-primary/10 border border-primary/30 rounded-xl flex items-center justify-between">
+   <div class="flex items-center gap-2">
+     <span class="material-symbols-outlined text-primary text-[22px]">check_circle</span>
+     <div>
+       <p class="font-label-md text-primary font-bold" id="dup-alert-name"></p>
+       <p class="text-xs text-on-surface-variant" id="dup-alert-phone"></p>
+     </div>
+   </div>
+   <button type="button" id="dup-alert-btn" class="px-4 py-2 bg-primary text-on-primary rounded-lg text-xs font-bold shadow-sm">Select</button>
  </div>
  
- <div class="mt-4 border-2 border-dashed border-outline-variant rounded-lg p-4 flex justify-center hover:bg-surface-container-low transition-colors cursor-pointer" onclick="window.API.request('navigate_to', {page: 'add_customer'})">
- <span class="text-primary font-label-lg">+ Add New Customer</span>
+ <div class="mt-3 border-2 border-dashed border-primary/40 bg-primary/5 rounded-xl p-3 flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors cursor-pointer" onclick="openQuickAddCustomer()">
+ <span class="material-symbols-outlined text-primary text-[20px]">person_add</span>
+ <span class="text-primary font-bold">+ Add New Customer (Naya Grahak)</span>
  </div>
 
  <div id="cust-list" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2">
@@ -173,6 +173,10 @@
  <div>
  <label class="block font-label-lg text-on-surface mb-2"><span data-i18n="new_order.delivery_date">Delivery Date</span> <span class="text-error">*</span></label>
  <input id="order-date" type="date" class="w-full p-3 bg-surface rounded-lg border border-outline-variant focus:border-primary outline-none">
+ </div>
+ <div>
+ <label class="block font-label-lg text-on-surface mb-2">Order Instructions / Khaas Hidayat</label>
+ <textarea id="order-notes" rows="2" placeholder="Jaise: Urgent delivery, kapde ki matching, customer fabric..." class="w-full p-3 bg-surface rounded-lg border border-outline-variant focus:border-primary outline-none resize-none font-body-md text-on-surface"></textarea>
  </div>
  </div>
  </section>
@@ -244,7 +248,7 @@
  </button>
  </div>
  
- <div class="p-6 overflow-y-auto flex-1 space-y-6">
+ <div class="p-4 md:p-6 pb-72 md:pb-6 overflow-y-auto flex-1 space-y-6">
  <!-- Basic Info -->
  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
  <div>
@@ -364,10 +368,41 @@
  </button>
  </div>
 
+ <!-- Quick Add Customer Modal -->
+ <div id="quick-add-cust-modal" class="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center hidden p-4">
+ <div class="bg-surface w-full max-w-md rounded-2xl shadow-2xl p-6 border border-outline-variant space-y-4">
+   <div class="flex justify-between items-center border-b border-outline-variant pb-3">
+     <div class="flex items-center gap-2">
+       <span class="material-symbols-outlined text-primary text-[24px]">person_add</span>
+       <h3 class="font-headline-sm text-primary font-bold">Naya Grahak (New Customer)</h3>
+     </div>
+     <button onclick="closeQuickAddCustomer()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant">
+       <span class="material-symbols-outlined text-[20px]">close</span>
+     </button>
+   </div>
+   <div>
+     <label class="block font-label-sm text-on-surface-variant mb-1">Grahak ka Naam (Full Name) *</label>
+     <input id="quick-cust-name" type="text" placeholder="e.g. Rahul Sharma" class="w-full p-3 bg-surface-container-lowest border border-outline-variant rounded-xl focus:border-primary outline-none font-body-md text-on-surface">
+   </div>
+   <div>
+     <label class="block font-label-sm text-on-surface-variant mb-1">Mobile Number (10 Digits) *</label>
+     <input id="quick-cust-mobile" type="tel" maxlength="10" placeholder="e.g. 9876543210" class="w-full p-3 bg-surface-container-lowest border border-outline-variant rounded-xl focus:border-primary outline-none font-body-md text-on-surface" oninput="checkDuplicateCustomerNumber(this.value)">
+     <div id="duplicate-cust-warning" class="hidden mt-2 p-3 bg-error-container/30 border border-error/40 rounded-xl text-error text-xs font-semibold flex items-center gap-2">
+       <span class="material-symbols-outlined text-[18px]">warning</span>
+       <span id="duplicate-warning-text"></span>
+     </div>
+   </div>
+   <div class="flex gap-3 pt-2">
+     <button onclick="closeQuickAddCustomer()" class="flex-1 py-3 bg-surface border border-outline-variant rounded-xl font-label-md text-on-surface-variant hover:bg-surface-container">Cancel</button>
+     <button id="btn-save-quick-cust" onclick="saveQuickCustomer()" class="flex-1 py-3 bg-primary text-on-primary rounded-xl font-label-md font-bold hover:bg-primary/90 shadow-md">Save Customer</button>
+   </div>
+ </div>
+ </div>
+
  <!-- JS -->
  <script src="../js/api.js?v=1790454674"></script>
  <script src="../js/app.js?v=1790454674"></script>
- <script src="../js/new_order.js?v=1790454680"></script>
+ <script src="../js/new_order.js?v=1790454681"></script>
  <script src="../js/custom_keypad.js?v=2"></script>
 
 <!-- Mobile Bottom Navigation -->
@@ -380,18 +415,20 @@
         <span class="material-symbols-outlined text-[24px]">receipt_long</span>
         <span class="text-[10px] font-medium">Orders</span>
     </a>
+    <a href="javascript:window.API.navigate('new_order')" class="flex flex-col items-center gap-1 p-1 text-primary">
+        <div class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md">
+            <span class="material-symbols-outlined text-[22px]">add</span>
+        </div>
+        <span class="text-[10px] font-bold text-primary">Naya Order</span>
+    </a>
+    <a href="javascript:window.API.navigate('deliveries')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">local_shipping</span>
+        <span class="text-[10px] font-medium">Deliveries</span>
+    </a>
     <a href="javascript:window.API.navigate('customers_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
         <span class="material-symbols-outlined text-[24px]">group</span>
         <span class="text-[10px] font-medium">Customers</span>
     </a>
-    <a href="javascript:window.API.navigate('payments')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
-        <span class="material-symbols-outlined text-[24px]">payments</span>
-        <span class="text-[10px] font-medium">Payments</span>
-    </a>
-    <button onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden'); event.stopPropagation();" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
-        <span class="material-symbols-outlined text-[24px]">menu</span>
-        <span class="text-[10px] font-medium">More</span>
-    </button>
 </nav>
 
 </body>
