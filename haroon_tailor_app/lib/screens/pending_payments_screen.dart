@@ -33,18 +33,18 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
     setState(() => _isLoading = true);
     try {
       final data = await ApiService.getPendingOrders();
+      if (!mounted) return;
       setState(() {
         _allPending = data;
         _filterList();
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load pending payments: $e'), backgroundColor: Colors.red),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load pending payments: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
