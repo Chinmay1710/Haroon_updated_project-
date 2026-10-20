@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<script src="../js/web_api_shim.js"></script>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Orders List - Tailor Manager</title>
+
+
+
+<style>
+ body { font-family: 'Public Sans', sans-serif; background-color: #f8f9ff; }
+ .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+ .icon-fill { font-variation-settings: 'FILL' 1; }
+ </style>
+<link href="../css/fonts.css" rel="stylesheet"/>
+ <link rel="stylesheet" href="../css/compiled.css">
+  <link rel="manifest" href="../manifest.json">
+</head>
+<body class="bg-surface text-on-surface flex w-full min-h-screen">
+<!-- SideNavBar -->
+<!-- Mobile Sidebar Overlay -->
+<div id="sidebar-overlay" class="fixed inset-0 hidden md:hidden" style="z-index:9998; background:rgba(0,0,0,0.5);" onclick="document.getElementById('sidebar').classList.remove('left-0'); document.getElementById('sidebar').classList.add('-left-[290px]'); this.classList.add('hidden'); var mb=document.getElementById('mobile-menu-btn'); if(mb){mb.style.opacity='1'; mb.style.pointerEvents='auto';}"></div>
+<!-- SideNavBar -->
+<nav id="sidebar" class="fixed top-0 bottom-0 -left-[290px] md:left-0 transition-all duration-300 z-[9999] md:z-40 flex flex-col shadow-md" style="width:280px; background:#091426; color:#ffffff;">
+ <div style="padding:24px; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; gap:8px;">
+ <div style="width:40px; height:40px; border-radius:50%; background:#1e293b; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+ <img src="../img/logo.png" alt="Logo" style="width:100%; height:100%; object-fit:cover;" />
+ </div>
+ <div>
+ <h2 style="font-size:18px; font-weight:700; color:#ffffff; line-height:1.2; margin:0;"><span class="global-shop-name">Artisan Stitch</span></h2>
+ <p style="font-size:13px; color:rgba(255,255,255,0.7); margin:0;" data-i18n="sidebar.premium_tailoring">Premium Tailoring</p>
+ </div>
+ </div>
+ <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.1); display:flex; gap:8px; justify-content:center;">
+ <button onclick="window.I18n && window.I18n.setLang('en')" id="lang-btn-en" style="flex:1; padding:6px 0; border-radius:4px; font-size:11px; font-weight:700; border:1px solid #1e293b; background:#1e293b; color:#8590a6; cursor:pointer;">English</button>
+ <button onclick="window.I18n && window.I18n.setLang('hi')" id="lang-btn-hi" style="flex:1; padding:6px 0; border-radius:4px; font-size:11px; font-weight:700; border:1px solid rgba(255,255,255,0.2); background:transparent; color:rgba(255,255,255,0.7); cursor:pointer;">हिन्दी</button>
+ </div>
+ <div style="flex:1; overflow-y:auto; padding:16px 12px; display:flex; flex-direction:column; gap:4px;">
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">dashboard</span>
+ <span data-i18n="sidebar.dashboard">Dashboard</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">person</span>
+ <span data-i18n="sidebar.customers">Customers</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:#ffffff; font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; background:rgba(211,228,254,0.1); border-left:4px solid #d3e4fe; opacity:0.9;">
+ <span class="material-symbols-outlined" style="font-size:25px; font-variation-settings: 'FILL' 1;">shopping_bag</span>
+ <span data-i18n="sidebar.orders">Orders</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">payments</span>
+ <span data-i18n="sidebar.payments">Payments</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">local_shipping</span>
+ <span data-i18n="sidebar.deliveries">Deliveries</span>
+ </a>
+<a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">settings</span>
+ <span data-i18n="sidebar.settings">Settings</span>
+ </a>
+ 
+ </div>
+ </nav>
+<!-- TopAppBar & Main Content Wrapper -->
+<div class="flex-1 ml-0 md:ml-[280px] flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-0 md:left-[280px] h-[72px] flex justify-between items-center px-gutter z-30 bg-surface text-primary shadow-sm docked top-0 full-width h-[72px]">
+<div class="flex items-center gap-stack_md flex-1">
+<button id="mobile-menu-btn" class="md:hidden mr-3 w-10 h-10 flex items-center justify-center text-on-surface rounded-lg relative z-[10000]" onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden'); this.style.opacity='0'; this.style.pointerEvents='none'; event.stopPropagation();">
+    <span class="material-symbols-outlined" style="font-size:24px;">menu</span>
+</button>
+<h2 class="font-headline-md text-headline-md text-primary font-bold tracking-tight">Tailor Manager</h2>
+
+</div>
+<div class="flex items-center gap-stack_md">
+
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 mt-[72px] p-container_padding max-w-7xl overflow-auto mx-auto w-full">
+<div class="mb-stack_lg flex flex-col md:flex-row md:items-end justify-between gap-stack_md">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-2" data-i18n="sidebar.orders">Orders</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Manage and track all customer orders across production stages.</p>
+</div>
+<div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+<div class="relative w-full md:w-80 flex-1 md:flex-none">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input id="order-search" class="block w-full pl-10 pr-3 py-2.5 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md text-on-surface placeholder-on-surface-variant/60 focus:ring-2 focus:ring-primary focus:border-primary transition-shadow" placeholder="Search orders, customers..." type="text"/>
+</div>
+<button class="bg-primary text-on-primary border border-transparent px-5 py-2.5 rounded-lg font-label-lg text-label-lg flex items-center gap-2 hover:bg-primary/90 transition-colors whitespace-nowrap" onclick="window.API.navigate('new_order')">
+<span class="material-symbols-outlined text-[20px]" data-icon="add_circle">add_circle</span>
+ New Order
+</button>
+</div>
+<!-- Filter Tabs -->
+<div class="flex overflow-x-auto gap-2 pb-2 mb-4 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0" id="order-filter-buttons">
+<button class="px-5 py-2.5 rounded-full bg-primary text-on-primary font-label-lg shadow-sm whitespace-nowrap " data-filter="All Orders">All Orders</button>
+<button class="px-5 py-2.5 rounded-full bg-surface-container border border-outline-variant/50 text-on-surface-variant font-label-lg hover:bg-surface-container-high whitespace-nowrap " data-filter="Incomplete">Incomplete Orders</button>
+<button class="px-5 py-2.5 rounded-full bg-surface-container border border-outline-variant/50 text-on-surface-variant font-label-lg hover:bg-surface-container-high whitespace-nowrap " data-filter="Cutting Complete">Cutting Complete</button>
+<button class="px-5 py-2.5 rounded-full bg-surface-container border border-outline-variant/50 text-on-surface-variant font-label-lg hover:bg-surface-container-high whitespace-nowrap " data-filter="Stitching & Press Complete">Stitching & Press Complete</button>
+<button class="px-5 py-2.5 rounded-full bg-surface-container border border-outline-variant/50 text-on-surface-variant font-label-lg hover:bg-surface-container-high whitespace-nowrap " data-filter="Complete">Complete Orders</button>
+</div>
+</div>
+
+
+<!-- List Cards Wrapper -->
+<div class="flex flex-col gap-stack_sm" id="orders-container">
+<!-- Headers (Hidden on small, shown on md up) -->
+<div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+<div class="col-span-2" data-i18n="orders.order_info">Order Info</div>
+<div class="col-span-3" data-i18n="orders.customer_item">Customer &amp; Item</div>
+<div class="col-span-2" data-i18n="orders.dates">Dates</div>
+<div class="col-span-1" data-i18n="orders.financials">Financials</div>
+<div class="col-span-2" data-i18n="common.status">Status</div>
+<div class="col-span-2 text-right" data-i18n="common.actions">Action</div>
+</div>
+</div>
+
+<!-- Pagination Controls -->
+<div id="pagination-container" class="flex justify-between items-center mt-6 px-4 py-3 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm">
+ <div class="text-on-surface-variant font-label-sm" id="pagination-info">
+ Showing 0 to 0 of 0 orders
+ </div>
+ <div class="flex gap-2" id="pagination-buttons">
+ <button id="btn-prev-page" class="w-8 h-8 rounded-full flex items-center justify-center border border-outline-variant/50 text-on-surface hover:bg-surface-container-highest disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+ <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+ </button>
+ <button id="btn-next-page" class="w-8 h-8 rounded-full flex items-center justify-center border border-outline-variant/50 text-on-surface hover:bg-surface-container-highest disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+ <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+ </button>
+ </div>
+</div>
+</main>
+</div>
+<script src="../js/i18n.js?v=1790454674"></script>
+<script src="../js/api.js?v=1790454674"></script>
+<script src="../js/app.js?v=1790454674"></script>
+<script src="../js/orders.js?v=1790454685"></script>
+
+<!-- Mobile Bottom Navigation -->
+<nav id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-40 flex items-center justify-around px-2 border-t border-outline-variant/20">
+    <a href="javascript:window.API.navigate('dashboard')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">home</span>
+        <span class="text-[10px] font-medium">Home</span>
+    </a>
+    <a href="javascript:window.API.navigate('orders_list')" class="flex flex-col items-center gap-1 p-2 text-primary hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">receipt_long</span>
+        <span class="text-[10px] font-bold">Orders</span>
+    </a>
+    <a href="javascript:window.API.navigate('new_order')" class="flex flex-col items-center gap-1 p-1 text-primary">
+        <div class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md">
+            <span class="material-symbols-outlined text-[22px]">add</span>
+        </div>
+        <span class="text-[10px] font-bold text-primary">Naya Order</span>
+    </a>
+    <a href="javascript:window.API.navigate('deliveries')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">local_shipping</span>
+        <span class="text-[10px] font-medium">Deliveries</span>
+    </a>
+    <a href="javascript:window.API.navigate('customers_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">group</span>
+        <span class="text-[10px] font-medium">Customers</span>
+    </a>
+</nav>
+
+<!-- Partial Complete Modal -->
+<div id="partial-complete-modal" class="fixed inset-0 z-[10000] hidden items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50" onclick="closePartialModal()"></div>
+    
+    <!-- Modal Content -->
+    <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md relative flex flex-col max-h-[90vh]">
+        <div class="px-6 py-4 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-lowest rounded-t-2xl z-10">
+            <h3 class="font-headline-sm text-headline-sm text-on-surface">Mark Items Ready</h3>
+            <button onclick="closePartialModal()" class="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-highest flex items-center justify-center text-on-surface-variant transition-colors">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto" id="partial-modal-items">
+            <!-- Checkboxes will be injected here -->
+        </div>
+        
+        <div class="px-6 py-4 border-t border-outline-variant/30 flex justify-end gap-3 bg-surface-container-lowest rounded-b-2xl">
+            <button onclick="closePartialModal()" class="px-6 py-2.5 rounded-full font-label-lg text-primary hover:bg-primary/10 transition-colors">
+                Cancel
+            </button>
+            <button id="partial-modal-save-btn" class="px-6 py-2.5 rounded-full bg-primary text-on-primary font-label-lg hover:bg-primary/90 transition-colors shadow-sm">
+                Save
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPartialOrderId = null;
+
+window.closePartialModal = function() {
+    document.getElementById('partial-complete-modal').classList.add('hidden');
+    document.getElementById('partial-complete-modal').classList.remove('flex');
+}
+
+window.openPartialModal = function(orderId, rawItemsRaw) {
+    currentPartialOrderId = orderId;
+    const container = document.getElementById('partial-modal-items');
+    container.innerHTML = '';
+    
+    // Parse if it's a string, otherwise use directly
+    const rawItems = typeof rawItemsRaw === 'string' ? JSON.parse(decodeURIComponent(rawItemsRaw)) : rawItemsRaw;
+    
+    if (!rawItems || rawItems.length === 0) {
+        container.innerHTML = '<p class="text-on-surface-variant">No items found.</p>';
+    } else {
+        rawItems.forEach(item => {
+            const isChecked = item.is_ready ? 'checked' : '';
+            container.innerHTML += `
+                <label class="flex items-center gap-3 p-3 mb-2 rounded-xl border border-outline-variant hover:bg-surface-container-lowest cursor-pointer">
+                    <input type="checkbox" class="partial-item-cb w-5 h-5 rounded border-outline text-primary focus:ring-primary" value="${item.id}" ${isChecked}>
+                    <span class="font-body-lg text-on-surface">${item.name}</span>
+                </label>
+            `;
+        });
+    }
+    
+    document.getElementById('partial-complete-modal').classList.remove('hidden');
+    document.getElementById('partial-complete-modal').classList.add('flex');
+}
+
+document.getElementById('partial-modal-save-btn').addEventListener('click', async () => {
+    if (!currentPartialOrderId) return;
+    
+    const checkboxes = document.querySelectorAll('.partial-item-cb');
+    const readyIds = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) readyIds.push(parseInt(cb.value));
+    });
+    
+    try {
+        await window.API.request('update_order_status', {
+            order_id: currentPartialOrderId,
+            ready_item_ids: readyIds
+        });
+        window.API.toast("Items updated successfully", "success");
+        window.closePartialModal();
+        if (typeof loadOrders === 'function') loadOrders();
+    } catch(e) {
+        window.API.toast("Failed to update: " + e, "error");
+    }
+});
+</script>
+
+<!-- Mobile Floating Action Button (FAB) for New Order -->
+<button onclick="window.API.navigate('new_order')" class="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-primary text-on-primary rounded-2xl shadow-lg shadow-primary/40 flex items-center justify-center z-50 hover:bg-primary/90 transition-transform active:scale-95">
+    <span class="material-symbols-outlined text-[28px]">add</span>
+</button>
+
+</body>
+</html>

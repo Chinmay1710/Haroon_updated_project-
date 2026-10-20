@@ -1,0 +1,9 @@
+{
+  "appId": "com.haroon.tailor",
+  "appName": "Haroon Tailor",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}
