@@ -56,6 +56,18 @@
  <span class="material-symbols-outlined" style="font-size:25px;">local_shipping</span>
  <span data-i18n="sidebar.deliveries">Deliveries</span>
  </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">receipt_long</span>
+ <span data-i18n="sidebar.expenses">Expenses</span>
+ </a>
+ <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">engineering</span>
+ <span data-i18n="sidebar.workers">Workers</span>
+ </a>
+ <a href="#" data-nav="stock_list" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
+ <span class="material-symbols-outlined" style="font-size:25px;">inventory_2</span>
+ <span data-i18n="sidebar.stock">Stock</span>
+ </a>
 <a href="#" style="display:flex; align-items:center; gap:16px; padding:12px 16px; border-radius:8px; color:rgba(255,255,255,0.7); font-size:16px; font-weight:600; letter-spacing:0.02em; text-decoration:none; transition:all 0.2s;" onmouseover="this.style.color='#ffffff'; this.style.background='rgba(30,41,59,0.2)'" onmouseout="this.style.color='rgba(255,255,255,0.7)'; this.style.background='transparent'">
  <span class="material-symbols-outlined" style="font-size:25px;">settings</span>
  <span data-i18n="sidebar.settings">Settings</span>
@@ -148,22 +160,20 @@
     </a>
     <a href="javascript:window.API.navigate('orders_list')" class="flex flex-col items-center gap-1 p-2 text-primary hover:text-primary transition-colors">
         <span class="material-symbols-outlined text-[24px]">receipt_long</span>
-        <span class="text-[10px] font-bold">Orders</span>
-    </a>
-    <a href="javascript:window.API.navigate('new_order')" class="flex flex-col items-center gap-1 p-1 text-primary">
-        <div class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md">
-            <span class="material-symbols-outlined text-[22px]">add</span>
-        </div>
-        <span class="text-[10px] font-bold text-primary">Naya Order</span>
-    </a>
-    <a href="javascript:window.API.navigate('deliveries')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
-        <span class="material-symbols-outlined text-[24px]">local_shipping</span>
-        <span class="text-[10px] font-medium">Deliveries</span>
+        <span class="text-[10px] font-medium">Orders</span>
     </a>
     <a href="javascript:window.API.navigate('customers_list')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
         <span class="material-symbols-outlined text-[24px]">group</span>
         <span class="text-[10px] font-medium">Customers</span>
     </a>
+    <a href="javascript:window.API.navigate('payments')" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">payments</span>
+        <span class="text-[10px] font-medium">Payments</span>
+    </a>
+    <button onclick="var sb=document.getElementById('sidebar'); var ov=document.getElementById('sidebar-overlay'); sb.classList.remove('-left-[290px]'); sb.classList.add('left-0'); ov.classList.remove('hidden'); event.stopPropagation();" class="flex flex-col items-center gap-1 p-2 text-on-surface-variant hover:text-primary transition-colors">
+        <span class="material-symbols-outlined text-[24px]">menu</span>
+        <span class="text-[10px] font-medium">More</span>
+    </button>
 </nav>
 
 <!-- Partial Complete Modal -->

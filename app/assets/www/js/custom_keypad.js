@@ -268,7 +268,7 @@
         // When user taps outside any measurement input (and not on keypad), hide keypad
         document.addEventListener('click', (e) => {
             const el = e.target;
-            if (!el.closest || el.closest('#custom-meas-keypad') || el.closest('#custom-keypad-container')) return; // tap on keypad itself
+            if (!el.closest || el.closest('#custom-keypad-container')) return; // tap on keypad itself
             if (el.classList && (el.classList.contains('meas-input') || el.classList.contains('am-meas-input'))) return; // tap on input
             
             // Tapped elsewhere — hide keypad
