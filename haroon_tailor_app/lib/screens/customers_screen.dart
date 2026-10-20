@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/customer.dart';
+import 'customer_details_screen.dart';
 
 class CustomersScreen extends StatefulWidget {
   final Function(Customer)? onSelectCustomer;
@@ -218,7 +219,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                     address: addressCtrl.text.trim(),
                                     notes: notesCtrl.text.trim(),
                                   );
-                                  Navigator.pop(ctx);
+                                  if (ctx.mounted) {
+                                    Navigator.pop(ctx);
+                                  }
                                   _loadCustomers();
                                   if (mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -230,9 +233,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   }
                                 } catch (err) {
                                   setModalState(() => isSaving = false);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
-                                  );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
+                                    );
+                                  }
                                 }
                               },
                         child: isSaving
@@ -313,9 +318,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 side: BorderSide(color: Colors.grey.shade200),
                               ),
                               child: ListTile(
-                                onTap: widget.onSelectCustomer != null
-                                    ? () => widget.onSelectCustomer!(c)
-                                    : null,
+                                onTap: () {
+                                  if (widget.onSelectCustomer != null) {
+                                    widget.onSelectCustomer!(c);
+                                  } else {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => CustomerDetailsScreen(customerId: c.id),
+                                      ),
+                                    );
+                                  }
+                                },
                                 leading: CircleAvatar(
                                   backgroundColor: const Color(0xFF0F172A).withOpacity(0.08),
                                   child: Text(

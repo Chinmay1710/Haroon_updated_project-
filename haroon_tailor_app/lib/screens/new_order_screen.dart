@@ -1,8 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/customer.dart';
 import '../services/api_service.dart';
+import '../utils/phone_utils.dart';
+import '../widgets/measurement_grid.dart';
 import 'customers_screen.dart';
 
 class NewOrderScreen extends StatefulWidget {
@@ -29,8 +33,13 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   bool _sendWhatsapp = true;
   bool _isSubmitting = false;
 
-  // 24 Measurement Boxes Controllers
-  final Map<int, TextEditingController> _boxControllers = {};
+  // 24 Measurement Controllers: 'Box 1' to 'Box 24'
+  final Map<String, TextEditingController> _measurementControllers = {};
+
+  // Photo management
+  final ImagePicker _picker = ImagePicker();
+  final List<Uint8List> _imageBytesList = [];
+  final List<String> _imageBase64List = [];
 
   final List<String> _garmentTypes = [
     'Shirt',
@@ -47,7 +56,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   void initState() {
     super.initState();
     for (int i = 1; i <= 24; i++) {
-      _boxControllers[i] = TextEditingController();
+      _measurementControllers['Box $i'] = TextEditingController();
     }
     if (widget.preSelectedCustomer != null) {
       _selectCustomer(widget.preSelectedCustomer!);
@@ -62,135 +71,188 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     _orderNotesCtrl.dispose();
     _advanceCtrl.dispose();
     _discountCtrl.dispose();
-    for (var c in _boxControllers.values) {
-      c.dispose();
+    for (var ctrl in _measurementControllers.values) {
+      ctrl.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _selectCustomer(Customer cust) async {
+  void _selectCustomer(Customer cust) async {
     setState(() => _customer = cust);
+
+    // Auto-fetch historical measurements for this customer
     try {
       final profiles = await ApiService.getMeasurementsForCustomer(cust.id);
       if (profiles.isNotEmpty) {
         final latest = profiles.last;
-        final Map<String, dynamic> vals = latest['values'] ?? {};
-        setState(() {
-          for (int i = 1; i <= 24; i++) {
-            final key = 'Box $i';
-            if (vals.containsKey(key)) {
-              _boxControllers[i]?.text = vals[key]?.toString() ?? '';
-            }
+        final vals = latest['values'] ?? {};
+        vals.forEach((k, v) {
+          if (_measurementControllers.containsKey(k)) {
+            _measurementControllers[k]!.text = v.toString();
           }
         });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✓ Grahak ke purane naap (measurements) auto-fill ho gaye!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
+        if (mounted) setState(() {});
       }
     } catch (_) {}
   }
 
-  double get _totalPrice {
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        final base64Str = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        setState(() {
+          _imageBytesList.add(bytes);
+          _imageBase64List.add(base64Str);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not attach photo: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      _imageBytesList.removeAt(index);
+      _imageBase64List.removeAt(index);
+    });
+  }
+
+  void _viewFullImage(Uint8List bytes) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.memory(bytes, fit: BoxFit.contain),
+            ),
+            IconButton(
+              icon: const CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.close, color: Colors.white),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  double get _totalAmount {
     final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 1;
-    final price = double.tryParse(_priceCtrl.text.trim()) ?? 0;
-    final discount = double.tryParse(_discountCtrl.text.trim()) ?? 0;
-    return (qty * price) - discount;
+    final price = double.tryParse(_priceCtrl.text.trim()) ?? 0.0;
+    return qty * price;
+  }
+
+  double get _discount {
+    return double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+  }
+
+  double get _advance {
+    return double.tryParse(_advanceCtrl.text.trim()) ?? 0.0;
   }
 
   double get _remainingBalance {
-    final advance = double.tryParse(_advanceCtrl.text.trim()) ?? 0;
-    final remaining = _totalPrice - advance;
-    return remaining < 0 ? 0 : remaining;
+    final total = _totalAmount - _discount;
+    final bal = total - _advance;
+    return bal < 0 ? 0.0 : bal;
   }
 
-  Future<void> _submitOrder() async {
+  void _saveOrder() async {
     if (_customer == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya pehle grahak (customer) chunein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Pehle grahak (customer) select karein!'), backgroundColor: Colors.orange),
       );
       return;
     }
 
-    final price = double.tryParse(_priceCtrl.text.trim()) ?? 0;
-    if (price <= 0) {
+    final price = double.tryParse(_priceCtrl.text.trim());
+    if (price == null || price <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kripya valid rate / price daalein!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Kripya sahi kapde ka rate (price) bharein!'), backgroundColor: Colors.orange),
       );
       return;
     }
-
-    // Collect 24 measurement boxes
-    final Map<String, String> measurements = {};
-    for (int i = 1; i <= 24; i++) {
-      final val = _boxControllers[i]?.text.trim() ?? '';
-      if (val.isNotEmpty) {
-        measurements['Box $i'] = val;
-      }
-    }
-
-    final itemNotes = _itemNotesCtrl.text.trim();
-    final orderNotes = _orderNotesCtrl.text.trim();
-    final combinedNotes = [orderNotes, itemNotes].where((s) => s.isNotEmpty).join(' | ');
-
-    final payload = {
-      'customerId': _customer!.id,
-      'items': [
-        {
-          'clothing_type': _clothingType,
-          'quantity': int.tryParse(_qtyCtrl.text.trim()) ?? 1,
-          'price': price,
-          'measurements': measurements,
-          'save_profile': true,
-          'notes': itemNotes,
-        }
-      ],
-      'deliveryDate': DateFormat('yyyy-MM-dd').format(_deliveryDate),
-      'advance': double.tryParse(_advanceCtrl.text.trim()) ?? 0,
-      'discount': double.tryParse(_discountCtrl.text.trim()) ?? 0,
-      'notes': combinedNotes,
-      'paymentMethod': 'Cash',
-      'send_whatsapp': _sendWhatsapp,
-    };
 
     setState(() => _isSubmitting = true);
 
     try {
+      // Gather non-empty measurements
+      final Map<String, String> measurements = {};
+      _measurementControllers.forEach((k, ctrl) {
+        final txt = ctrl.text.trim();
+        if (txt.isNotEmpty) {
+          measurements[k] = txt;
+        }
+      });
+
+      final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 1;
+
+      final payload = {
+        'customer_id': _customer!.id,
+        'customer_name': _customer!.name,
+        'customer_mobile': _customer!.mobile,
+        'delivery_date': DateFormat('yyyy-MM-dd').format(_deliveryDate),
+        'advance_amount': _advance,
+        'discount': _discount,
+        'special_instructions': _orderNotesCtrl.text.trim(),
+        'send_whatsapp': _sendWhatsapp,
+        'items': [
+          {
+            'clothing_type': _clothingType,
+            'quantity': qty,
+            'price': price,
+            'measurements': measurements,
+            'notes': _itemNotesCtrl.text.trim(),
+            'save_profile': true,
+            'image_base64': _imageBase64List,
+          }
+        ]
+      };
+
       final res = await ApiService.createOrder(payload);
-      setState(() => _isSubmitting = false);
 
       if (mounted) {
+        setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Order ${res['order_number'] ?? ''} successfully ban gaya!'),
+            content: Text('Order ${res['order_number'] ?? ''} safaltapoorvak save ho gaya!'),
             backgroundColor: Colors.green,
           ),
         );
 
-        // Open WhatsApp if URL returned
+        // Open WhatsApp bill if returned
         if (res['whatsapp_url'] != null) {
-          final urlStr = res['whatsapp_url'].toString();
-          final uri = Uri.parse(urlStr.startsWith('whatsapp://')
-              ? urlStr.replaceFirst('whatsapp://send?', 'https://wa.me/').replaceAll('&text=', '?text=')
-              : urlStr);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
+          await PhoneUtils.openBackendWhatsAppUrl(res['whatsapp_url'].toString());
         }
 
         widget.onOrderCreated?.call();
-        Navigator.pop(context);
+        if (mounted) {
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       setState(() => _isSubmitting = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save order: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Order save nahi hua: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -213,7 +275,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 1. CUSTOMER SELECTION CARD
-            _buildSectionHeader(Icons.person, 'Grahak (Customer)'),
+            _buildSectionHeader(Icons.person, '1. Grahak (Customer) Details'),
             const SizedBox(height: 8),
             Card(
               elevation: 0,
@@ -233,7 +295,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         icon: const Icon(Icons.person_search, color: Colors.white),
-                        label: const Text('Grahak Select / Search Karein', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        label: const Text('Grahak Select / Search Karein',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -252,20 +315,27 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                       Row(
                         children: [
                           CircleAvatar(
+                            radius: 24,
                             backgroundColor: const Color(0xFF0F172A).withOpacity(0.1),
-                            child: const Icon(Icons.person, color: Color(0xFF0F172A)),
+                            child: const Icon(Icons.person, color: Color(0xFF0F172A), size: 28),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(_customer!.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                Text(_customer!.mobile, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                Text(_customer!.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                Text(_customer!.mobile,
+                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                               ],
                             ),
                           ),
-                          TextButton(
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF0F172A)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
                             onPressed: () {
                               Navigator.push(
                                 context,
@@ -279,7 +349,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                 ),
                               );
                             },
-                            child: const Text('Change'),
+                            child: const Text('Change', style: TextStyle(color: Color(0xFF0F172A))),
                           ),
                         ],
                       ),
@@ -287,10 +357,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
             // 2. GARMENT & PRICING
-            _buildSectionHeader(Icons.checkroom, 'Kapda & Rate (Garment)'),
+            _buildSectionHeader(Icons.checkroom, '2. Kapda & Rate (Garment)'),
             const SizedBox(height: 8),
             Card(
               elevation: 0,
@@ -305,7 +375,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                     DropdownButtonFormField<String>(
                       value: _clothingType,
                       decoration: InputDecoration(
-                        labelText: 'Garment Type',
+                        labelText: 'Clothing Type',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       items: _garmentTypes
@@ -348,10 +418,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // 3. 24 MEASUREMENT BOXES
-            _buildSectionHeader(Icons.straighten, '24 Measurement Boxes (Naap)'),
+            // 3. PHOTO ATTACHMENT SECTION (Point 1)
+            _buildSectionHeader(Icons.photo_camera, '3. Photo(s) Attach Karein'),
             const SizedBox(height: 8),
             Card(
               elevation: 0,
@@ -362,59 +432,121 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 4,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                        childAspectRatio: 1.1,
-                      ),
-                      itemCount: 24,
-                      itemBuilder: (context, index) {
-                        final boxNum = index + 1;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Box $boxNum',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
-                            const SizedBox(height: 2),
-                            Expanded(
-                              child: TextField(
-                                controller: _boxControllers[boxNum],
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                decoration: InputDecoration(
-                                  contentPadding: EdgeInsets.zero,
-                                  filled: true,
-                                  fillColor: const Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: Colors.grey.shade300),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(color: Colors.grey.shade300),
+                            icon: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                            label: const Text('Camera', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            onPressed: () => _pickImage(ImageSource.camera),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF0F172A)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.photo_library, color: Color(0xFF0F172A), size: 20),
+                            label: const Text('Gallery', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
+                            onPressed: () => _pickImage(ImageSource.gallery),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_imageBytesList.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        'Attached Photos (${_imageBytesList.length}):',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 90,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _imageBytesList.length,
+                          itemBuilder: (context, idx) {
+                            return Stack(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 10, top: 4),
+                                  child: InkWell(
+                                    onTap: () => _viewFullImage(_imageBytesList[idx]),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Container(
+                                        width: 80,
+                                        height: 80,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey.shade300),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Image.memory(
+                                          _imageBytesList[idx],
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                                Positioned(
+                                  top: 0,
+                                  right: 4,
+                                  child: InkWell(
+                                    onTap: () => _removePhoto(idx),
+                                    child: const CircleAvatar(
+                                      radius: 11,
+                                      backgroundColor: Colors.red,
+                                      child: Icon(Icons.close, size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // 4. INSTRUCTIONS & NOTES
-            _buildSectionHeader(Icons.edit_note, 'Instructions & Khaas Hidayat'),
+            // 4. 24 MEASUREMENT BOXES (Point 2 - Website 6x4 Grid)
+            _buildSectionHeader(Icons.straighten, '4. Naap (24 Measurement Boxes - 6x4)'),
+            const SizedBox(height: 8),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: MeasurementGrid(
+                  controllers: _measurementControllers,
+                  isReadOnly: false,
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // 5. DESIGN & DELIVERY INSTRUCTIONS
+            _buildSectionHeader(Icons.edit_note, '5. Instructions (Design & Delivery)'),
             const SizedBox(height: 8),
             Card(
               elevation: 0,
@@ -430,8 +562,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                       controller: _itemNotesCtrl,
                       maxLines: 2,
                       decoration: InputDecoration(
-                        labelText: 'Design / Item Instructions',
-                        hintText: 'Jaise: Slim fit, collar stiffness, no pocket...',
+                        labelText: 'Special Design Notes (Item level)',
+                        hintText: 'e.g. Slim fit, 1 pocket, Chinese collar, Matching button...',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
@@ -440,8 +572,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                       controller: _orderNotesCtrl,
                       maxLines: 2,
                       decoration: InputDecoration(
-                        labelText: 'Delivery / Order Notes',
-                        hintText: 'Jaise: Urgent delivery, kapda grahak ka hai...',
+                        labelText: 'Delivery Instructions / Extra Note',
+                        hintText: 'e.g. Urgent deliver by evening, customer will pickup...',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
@@ -449,10 +581,39 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // 5. DELIVERY & PAYMENT
-            _buildSectionHeader(Icons.payment, 'Delivery Date & Payment'),
+            // 6. DELIVERY DATE
+            _buildSectionHeader(Icons.local_shipping, '6. Delivery Date'),
+            const SizedBox(height: 8),
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.event, color: Color(0xFF0F172A)),
+                title: const Text('Due Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(DateFormat('dd MMMM yyyy (EEEE)').format(_deliveryDate)),
+                trailing: const Icon(Icons.edit_calendar, color: Color(0xFF0F172A)),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _deliveryDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (picked != null) {
+                    setState(() => _deliveryDate = picked);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // 7. PAYMENT DETAILS
+            _buildSectionHeader(Icons.payments, '7. Payment & Advance'),
             const SizedBox(height: 8),
             Card(
               elevation: 0,
@@ -464,22 +625,6 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Delivery Date', style: TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(DateFormat('dd MMMM yyyy').format(_deliveryDate)),
-                      trailing: const Icon(Icons.calendar_month, color: Color(0xFF0F172A)),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _deliveryDate,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
-                        );
-                        if (picked != null) setState(() => _deliveryDate = picked);
-                      },
-                    ),
-                    const Divider(),
                     Row(
                       children: [
                         Expanded(
@@ -489,6 +634,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                             onChanged: (_) => setState(() {}),
                             decoration: InputDecoration(
                               labelText: 'Discount (₹)',
+                              prefixText: '₹ ',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
@@ -501,6 +647,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                             onChanged: (_) => setState(() {}),
                             decoration: InputDecoration(
                               labelText: 'Advance Paid (₹)',
+                              prefixText: '₹ ',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
@@ -509,9 +656,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                     ),
                     const SizedBox(height: 16),
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
+                        color: const Color(0xFF0F172A).withOpacity(0.04),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -520,15 +667,34 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('Total Bill:', style: TextStyle(fontWeight: FontWeight.w600)),
-                              Text(currency.format(_totalPrice), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text(currency.format(_totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                             ],
                           ),
-                          const SizedBox(height: 6),
+                          if (_discount > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Discount:', style: TextStyle(color: Colors.green)),
+                                Text('- ${currency.format(_discount)}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 4),
+                            Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Advance Rakam:'),
+                              Text(currency.format(_advance), style: const TextStyle(fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                          const Divider(height: 16),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Remaining Balance:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
-                              Text(currency.format(_remainingBalance), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+                              const Text('Baqaya (Balance Due):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.red)),
+                              Text(currency.format(_remainingBalance),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.red)),
                             ],
                           ),
                         ],
@@ -537,8 +703,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                     const SizedBox(height: 12),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Send WhatsApp Bill', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Grahak ko WhatsApp par seedha message bhejega'),
+                      title: const Text('Send WhatsApp Bill Receipt', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Grahak ko WhatsApp par seedha receipt bhejega'),
                       value: _sendWhatsapp,
                       activeColor: const Color(0xFF25D366),
                       onChanged: (val) => setState(() => _sendWhatsapp = val),
@@ -550,25 +716,27 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             const SizedBox(height: 24),
 
             // SUBMIT BUTTON
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                icon: _isSubmitting
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.check_circle, color: Colors.white),
-                label: Text(
-                  _isSubmitting ? 'Saving Order...' : 'SAVE & CREATE ORDER',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                onPressed: _isSubmitting ? null : _submitOrder,
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 4,
               ),
+              onPressed: _isSubmitting ? null : _saveOrder,
+              child: _isSubmitting
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white, size: 24),
+                        SizedBox(width: 8),
+                        Text('SAVE ORDER & BILL',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+                      ],
+                    ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 40),
           ],
         ),
       ),
@@ -580,7 +748,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       children: [
         Icon(icon, size: 20, color: const Color(0xFF0F172A)),
         const SizedBox(width: 8),
-        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F172A),
+          ),
+        ),
       ],
     );
   }

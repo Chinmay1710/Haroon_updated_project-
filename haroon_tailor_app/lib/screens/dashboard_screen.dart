@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import 'order_details_screen.dart';
+import 'pending_payments_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Function(int) onTabChange;
@@ -65,6 +67,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.account_balance_wallet_outlined, color: Colors.amberAccent),
+            tooltip: 'Pending Payments List',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PendingPaymentsScreen()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadDashboard,
           ),
@@ -106,11 +118,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 12),
                     _buildKpiCard(
-                      title: 'Total Pending Balance',
+                      title: 'Total Pending Balance (Tap for List)',
                       value: currency.format(_stats['pending_payments'] ?? 0),
                       icon: Icons.account_balance_wallet,
                       color: const Color(0xFF059669),
                       isFullWidth: true,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const PendingPaymentsScreen()),
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
 
@@ -151,6 +169,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         itemBuilder: (context, index) {
                           final o = _recentOrders[index];
                           final status = o['status']?.toString() ?? 'NEW';
+                          final orderId = o['id'] as int;
+
                           return Card(
                             elevation: 0,
                             shape: RoundedRectangleBorder(
@@ -158,6 +178,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               side: BorderSide(color: Colors.grey.shade200),
                             ),
                             child: ListTile(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrderDetailsScreen(
+                                      orderId: orderId,
+                                      onOrderUpdated: _loadDashboard,
+                                    ),
+                                  ),
+                                );
+                              },
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               leading: CircleAvatar(
                                 backgroundColor: _getStatusColor(status).withOpacity(0.12),

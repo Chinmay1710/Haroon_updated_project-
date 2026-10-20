@@ -85,17 +85,52 @@ class ApiService {
     return Map<String, dynamic>.from(res ?? {});
   }
 
-  static Future<void> updateOrderStatus({
+  // Customer Details & Order History
+  static Future<Map<String, dynamic>> getCustomerDetails(int customerId) async {
+    final res = await dispatch('get_customer_details', {'id': customerId});
+    return Map<String, dynamic>.from(res ?? {});
+  }
+
+  // Pending Payments / Orders
+  static Future<List<dynamic>> getPendingOrders() async {
+    final res = await dispatch('get_pending_orders');
+    return List<dynamic>.from(res ?? []);
+  }
+
+  // Delete Order (Frees bill number for reuse)
+  static Future<Map<String, dynamic>> deleteOrder(int orderId) async {
+    final res = await dispatch('delete_order', {'id': orderId});
+    return Map<String, dynamic>.from(res ?? {});
+  }
+
+  // Create Payment
+  static Future<Map<String, dynamic>> createPayment({
+    required int orderId,
+    required double amount,
+    String paymentMethod = 'Cash',
+    bool sendWhatsapp = true,
+  }) async {
+    final res = await dispatch('create_payment', {
+      'order_id': orderId,
+      'amount': amount,
+      'payment_method': paymentMethod,
+      'send_whatsapp': sendWhatsapp,
+    });
+    return Map<String, dynamic>.from(res ?? {});
+  }
+
+  static Future<Map<String, dynamic>> updateOrderStatus({
     required int orderId,
     required String status,
     bool sendWhatsapp = false,
     List<int>? deliveredItemIds,
   }) async {
-    await dispatch('update_order_status', {
+    final res = await dispatch('update_order_status', {
       'order_id': orderId,
       'status': status,
       'send_whatsapp': sendWhatsapp,
       'delivered_item_ids': deliveredItemIds,
     });
+    return Map<String, dynamic>.from(res ?? {});
   }
 }
