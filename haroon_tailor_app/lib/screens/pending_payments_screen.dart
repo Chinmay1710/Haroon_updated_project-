@@ -82,7 +82,7 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
         'Aapka order ($billNo) ka baqaya bhugtan ₹$remaining pending hai.\n'
         'Kripya suvidhanusar jama karein. Shukriya!';
 
-    PhoneUtils.openWhatsApp(phone: phone, message: msg);
+    PhoneUtils.openWhatsApp(phone, msg);
   }
 
   void _collectPayment(Map<String, dynamic> order) {

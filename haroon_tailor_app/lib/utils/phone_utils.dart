@@ -22,6 +22,11 @@ class PhoneUtils {
       return '91$digits';
     }
 
+    // If it starts with duplicate 9191 (e.g. 91919876543210), strip the first 91
+    if (digits.startsWith('9191') && digits.length >= 14) {
+      return digits.substring(2);
+    }
+
     // If it's more than 10 digits and starts with 91
     if (digits.startsWith('91')) {
       return digits;
@@ -32,24 +37,39 @@ class PhoneUtils {
   }
 
   /// Launches WhatsApp safely with proper encoding
-  static Future<bool> openWhatsApp({
-    required String phone,
-    required String message,
-  }) async {
+  static Future<bool> openWhatsApp(String phone, [String message = '']) async {
     final cleanPhone = formatWhatsAppPhone(phone);
     if (cleanPhone.isEmpty) return false;
 
     final encodedMsg = Uri.encodeComponent(message);
-    final url = Uri.parse('https://wa.me/$cleanPhone?text=$encodedMsg');
+    final urlStr = message.isNotEmpty
+        ? 'https://wa.me/$cleanPhone?text=$encodedMsg'
+        : 'https://wa.me/$cleanPhone';
+    final url = Uri.parse(urlStr);
 
     try {
       return await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
       // Fallback
-      final fallbackUrl = Uri.parse('whatsapp://send?phone=$cleanPhone&text=$encodedMsg');
+      final fallbackUrlStr = message.isNotEmpty
+          ? 'whatsapp://send?phone=$cleanPhone&text=$encodedMsg'
+          : 'whatsapp://send?phone=$cleanPhone';
+      final fallbackUrl = Uri.parse(fallbackUrlStr);
       if (await canLaunchUrl(fallbackUrl)) {
         return await launchUrl(fallbackUrl, mode: LaunchMode.externalApplication);
       }
+      return false;
+    }
+  }
+
+  /// Calls customer phone via dialer
+  static Future<bool> callCustomer(String phone) async {
+    final clean = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    if (clean.isEmpty) return false;
+    final url = Uri.parse('tel:$clean');
+    try {
+      return await launchUrl(url);
+    } catch (_) {
       return false;
     }
   }
@@ -72,7 +92,7 @@ class PhoneUtils {
       }
 
       if (phone.isNotEmpty) {
-        return await openWhatsApp(phone: phone, message: text);
+        return await openWhatsApp(phone, text);
       }
 
       // If parsing didn't find phone, launch directly

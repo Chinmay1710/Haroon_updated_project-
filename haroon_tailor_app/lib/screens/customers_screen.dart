@@ -4,8 +4,14 @@ import '../models/customer.dart';
 import 'customer_details_screen.dart';
 
 class CustomersScreen extends StatefulWidget {
+  final bool isSelectMode;
   final Function(Customer)? onSelectCustomer;
-  const CustomersScreen({super.key, this.onSelectCustomer});
+
+  const CustomersScreen({
+    super.key,
+    this.isSelectMode = false,
+    this.onSelectCustomer,
+  });
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
@@ -255,6 +261,142 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
+  void _showEditCustomerDialog(Customer c) {
+    final nameCtrl = TextEditingController(text: c.name);
+    String rawMobile = c.mobile.replaceAll('+91', '').replaceAll(' ', '').trim();
+    final mobileCtrl = TextEditingController(text: rawMobile);
+    final addressCtrl = TextEditingController(text: c.address);
+    final notesCtrl = TextEditingController(text: c.notes);
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Edit Customer',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A)),
+                      ),
+                      IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                  const Divider(height: 20),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Customer Name *',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: mobileCtrl,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 10,
+                    decoration: InputDecoration(
+                      prefixText: '+91 ',
+                      labelText: 'Mobile Number *',
+                      counterText: '',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: addressCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Address',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Notes',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final name = nameCtrl.text.trim();
+                              final mobile = mobileCtrl.text.trim();
+                              if (name.isEmpty || mobile.length < 10) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Kripya naam aur 10-digit mobile number bharein.'), backgroundColor: Colors.orange),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSaving = true);
+                              try {
+                                await ApiService.updateCustomer(
+                                  id: c.id,
+                                  name: name,
+                                  mobile: '+91 $mobile',
+                                  address: addressCtrl.text.trim(),
+                                  notes: notesCtrl.text.trim(),
+                                );
+                                if (ctx.mounted) {
+                                  Navigator.pop(ctx);
+                                }
+                                _loadCustomers();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Customer details updated!'), backgroundColor: Colors.green),
+                                  );
+                                }
+                              } catch (e) {
+                                setModalState(() => isSaving = false);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Update fail: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              }
+                            },
+                      child: isSaving
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('Save Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -281,10 +423,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Search by name or mobile number...',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                 prefixIcon: const Icon(Icons.search, color: Colors.white70),
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.12),
+                fillColor: Colors.white.withValues(alpha: 0.12),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -321,6 +463,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 onTap: () {
                                   if (widget.onSelectCustomer != null) {
                                     widget.onSelectCustomer!(c);
+                                  } else if (widget.isSelectMode) {
+                                    Navigator.pop(context, c);
                                   } else {
                                     Navigator.push(
                                       context,
@@ -331,7 +475,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   }
                                 },
                                 leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFF0F172A).withOpacity(0.08),
+                                  backgroundColor: const Color(0xFF0F172A).withValues(alpha: 0.08),
                                   child: Text(
                                     c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
                                     style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold),
@@ -342,9 +486,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   c.mobile.isNotEmpty ? c.mobile : 'No phone number',
                                   style: TextStyle(color: Colors.grey.shade600),
                                 ),
-                                trailing: widget.onSelectCustomer != null
+                                trailing: (widget.onSelectCustomer != null || widget.isSelectMode)
                                     ? const Icon(Icons.check_circle_outline, color: Color(0xFF0F172A))
-                                    : const Icon(Icons.chevron_right, color: Colors.grey),
+                                    : Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
+                                            tooltip: 'Edit Customer',
+                                            onPressed: () => _showEditCustomerDialog(c),
+                                          ),
+                                          const Icon(Icons.chevron_right, color: Colors.grey),
+                                        ],
+                                      ),
                               ),
                             );
                           },
@@ -353,6 +507,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
         ],
       ),
+
     );
   }
 }

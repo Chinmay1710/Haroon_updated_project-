@@ -390,7 +390,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
                                                       'Haroon Tailor se aapka order ($billNo) taiyar hai.\n'
                                                       'Baqaya Rakam: ₹$remaining\n'
                                                       'Shukriya!';
-                                                  PhoneUtils.openWhatsApp(phone: phone, message: msg);
+                                                  PhoneUtils.openWhatsApp(phone, msg);
                                                 },
                                               ),
                                               if (!isDelivered)

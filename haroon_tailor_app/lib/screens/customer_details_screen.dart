@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/customer.dart';
 import '../services/api_service.dart';
 import '../utils/phone_utils.dart';
@@ -47,9 +46,164 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     }
   }
 
+  // EDIT CUSTOMER MODAL (Point 4)
+  void _showEditCustomerModal(Map<String, dynamic> c) {
+    final nameCtrl = TextEditingController(text: c['name'] ?? '');
+    String rawMobile = (c['mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+    final mobileCtrl = TextEditingController(text: rawMobile);
+    final addressCtrl = TextEditingController(text: c['address'] ?? '');
+    final notesCtrl = TextEditingController(text: c['notes'] ?? '');
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Edit Customer Profile',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A)),
+                      ),
+                      IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                  const Divider(height: 20),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Customer Name *',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: mobileCtrl,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 10,
+                    decoration: InputDecoration(
+                      prefixText: '+91 ',
+                      labelText: 'Mobile Number *',
+                      counterText: '',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: addressCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Address',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Notes',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final name = nameCtrl.text.trim();
+                              final mobile = mobileCtrl.text.trim();
+                              if (name.isEmpty || mobile.length < 10) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Kripya naam aur 10-digit mobile number bharein.'), backgroundColor: Colors.orange),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSaving = true);
+                              try {
+                                await ApiService.updateCustomer(
+                                  id: widget.customerId,
+                                  name: name,
+                                  mobile: '+91 $mobile',
+                                  address: addressCtrl.text.trim(),
+                                  notes: notesCtrl.text.trim(),
+                                );
+                                if (ctx.mounted) {
+                                  Navigator.pop(ctx);
+                                }
+                                _loadCustomerDetails();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Customer details updated!'), backgroundColor: Colors.green),
+                                  );
+                                }
+                              } catch (e) {
+                                setModalState(() => isSaving = false);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Update fail: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              }
+                            },
+                      child: isSaving
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('Save Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // USE PROFILE IN NEW ORDER (Point 3)
+  void _useProfileInNewOrder(Customer cust, Map<String, dynamic> profile) {
+    final type = profile['template_type'] ?? 'Shirt';
+    final vals = (profile['values'] as Map<String, dynamic>?) ?? {};
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NewOrderScreen(
+          preSelectedCustomer: cust,
+          initialMeasurements: vals,
+          initialClothingType: type,
+          onOrderCreated: _loadCustomerDetails,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ', decimalDigits: 0);
 
     if (_isLoading) {
       return Scaffold(
@@ -110,6 +264,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         elevation: 0,
         actions: [
           IconButton(
+            icon: const Icon(Icons.edit, color: Colors.white),
+            tooltip: 'Edit Customer',
+            onPressed: () => _showEditCustomerModal(c),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadCustomerDetails,
           ),
@@ -136,7 +295,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                       children: [
                         CircleAvatar(
                           radius: 26,
-                          backgroundColor: const Color(0xFF0F172A).withOpacity(0.1),
+                          backgroundColor: const Color(0xFF0F172A).withValues(alpha: 0.1),
                           child: Text(
                             custName.isNotEmpty ? custName[0].toUpperCase() : 'C',
                             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
@@ -148,87 +307,79 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(custName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                              const SizedBox(height: 2),
-                              Text(custMobile.isNotEmpty ? custMobile : 'No phone number',
-                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                              if (custMobile.isNotEmpty)
+                                Text(custMobile, style: TextStyle(color: Colors.grey.shade700, fontSize: 14)),
+                              if (custAddress.isNotEmpty)
+                                Text(custAddress, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                             ],
                           ),
                         ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Color(0xFF0F172A)),
+                          tooltip: 'Edit Customer Details',
+                          onPressed: () => _showEditCustomerModal(c),
+                        ),
                       ],
                     ),
-                    if (custAddress.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(Icons.location_on_outlined, size: 16, color: Colors.grey.shade600),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(custAddress, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
-                          ),
-                        ],
-                      ),
-                    ],
                     if (custNotes.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Icon(Icons.notes_outlined, size: 16, color: Colors.grey.shade600),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(custNotes, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
-                          ),
-                        ],
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.note_alt_outlined, color: Colors.amber, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(custNotes, style: TextStyle(color: Colors.amber.shade900, fontSize: 13)),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
-                    const Divider(height: 20),
-                    // Quick Action Buttons
+                    const Divider(height: 24),
+                    // Contact action buttons
                     Row(
                       children: [
                         Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.call, size: 16),
+                            label: const Text('Call'),
+                            onPressed: () => PhoneUtils.callCustomer(custMobile),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              backgroundColor: const Color(0xFF25D366),
                             ),
-                            icon: const Icon(Icons.add, color: Colors.white, size: 18),
-                            label: const Text('Naya Order', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => NewOrderScreen(
-                                    preSelectedCustomer: customerObj,
-                                    onOrderCreated: _loadCustomerDetails,
-                                  ),
-                                ),
-                              );
-                            },
+                            icon: const Icon(Icons.chat, size: 16, color: Colors.white),
+                            label: const Text('WhatsApp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            onPressed: () => PhoneUtils.openWhatsApp(custMobile),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xFF25D366).withOpacity(0.1),
+                        const SizedBox(width: 10),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
                           ),
-                          icon: const Icon(Icons.chat, color: Color(0xFF25D366)),
+                          icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                          label: const Text('New Order', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           onPressed: () {
-                            PhoneUtils.openWhatsApp(
-                              phone: custMobile,
-                              message: 'Assalam-o-Alaikum $custName ji, Haroon Tailor se sampark kar rahe hain.',
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NewOrderScreen(
+                                  preSelectedCustomer: customerObj,
+                                  onOrderCreated: _loadCustomerDetails,
+                                ),
+                              ),
                             );
-                          },
-                        ),
-                        IconButton(
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.blue.withOpacity(0.1),
-                          ),
-                          icon: const Icon(Icons.phone, color: Colors.blue),
-                          onPressed: () async {
-                            if (custMobile.isNotEmpty) {
-                              final uri = Uri.parse('tel:$custMobile');
-                              if (await canLaunchUrl(uri)) launchUrl(uri);
-                            }
                           },
                         ),
                       ],
@@ -290,7 +441,72 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             ),
             const SizedBox(height: 20),
 
-            // 3. ORDER HISTORY (Point 7)
+            // 3. SAVED MEASUREMENT PROFILES (Point 3 - Use Old Measurements)
+            if (profiles.isNotEmpty) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Saved Naap (Profiles)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                  Text('${profiles.length} profile(s)', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...profiles.map((p) {
+                final pName = p['name'] ?? '${p['template_type'] ?? 'Garment'} Profile';
+                final pType = p['template_type'] ?? '';
+                final vals = Map<String, dynamic>.from(p['values'] ?? {});
+
+                return Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('$pName ($pType)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A))),
+                            ElevatedButton.icon(
+                              onPressed: () => _useProfileInNewOrder(customerObj, p),
+                              icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                              label: const Text('Use in New Order', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0F172A),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: vals.entries.where((e) => e.value.toString().trim().isNotEmpty).map((e) {
+                            return Chip(
+                              backgroundColor: const Color(0xFFEEF2F6),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                              label: Text('${e.key}: ${e.value}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+            ],
+
+            // 4. ORDER HISTORY
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -338,7 +554,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
                       onTap: () {
-                        // Open Order Details (Point 8)
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -386,48 +601,6 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   );
                 },
               ),
-
-            // 4. SAVED MEASUREMENTS (IF ANY)
-            if (profiles.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              const Text('Saved Measurement Profiles', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-              const SizedBox(height: 8),
-              ...profiles.map((p) {
-                final pName = p['name'] ?? '${p['template_type'] ?? 'Garment'} Profile';
-                final pType = p['template_type'] ?? '';
-                final vals = Map<String, dynamic>.from(p['values'] ?? {});
-
-                return Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('$pName ($pType)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A))),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: vals.entries.where((e) => e.value.toString().trim().isNotEmpty).map((e) {
-                            return Chip(
-                              backgroundColor: const Color(0xFFEEF2F6),
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                              label: Text('${e.key}: ${e.value}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-            ],
             const SizedBox(height: 40),
           ],
         ),

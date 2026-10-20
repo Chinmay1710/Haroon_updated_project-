@@ -119,18 +119,62 @@ class ApiService {
     return Map<String, dynamic>.from(res ?? {});
   }
 
+  static Future<Map<String, dynamic>> updateCustomer({
+    required int id,
+    required String name,
+    required String mobile,
+    String address = '',
+    String notes = '',
+  }) async {
+    final res = await dispatch('update_customer', {
+      'id': id,
+      'name': name,
+      'mobile': mobile,
+      'address': address,
+      'notes': notes,
+    });
+    return Map<String, dynamic>.from(res ?? {});
+  }
+
+  static Future<Map<String, dynamic>> updateOrder({
+    required int orderId,
+    required List<Map<String, dynamic>> items,
+    String? deliveryDate,
+    String notes = '',
+  }) async {
+    final res = await dispatch('update_order', {
+      'orderId': orderId,
+      'deliveryDate': deliveryDate,
+      'items': items,
+      'notes': notes,
+    });
+    return Map<String, dynamic>.from(res ?? {});
+  }
+
+  static Future<Map<String, dynamic>> getShopSettings() async {
+    try {
+      final res = await dispatch('get_settings');
+      return Map<String, dynamic>.from(res ?? {});
+    } catch (_) {
+      return {'shop_name': 'Haroon Tailor', 'currency_symbol': '₹'};
+    }
+  }
+
   static Future<Map<String, dynamic>> updateOrderStatus({
     required int orderId,
     required String status,
     bool sendWhatsapp = false,
     List<int>? deliveredItemIds,
+    List<int>? readyItemIds,
   }) async {
-    final res = await dispatch('update_order_status', {
+    final payload = <String, dynamic>{
       'order_id': orderId,
       'status': status,
       'send_whatsapp': sendWhatsapp,
-      'delivered_item_ids': deliveredItemIds,
-    });
+    };
+    if (deliveredItemIds != null) payload['delivered_item_ids'] = deliveredItemIds;
+    if (readyItemIds != null) payload['ready_item_ids'] = readyItemIds;
+    final res = await dispatch('update_order_status', payload);
     return Map<String, dynamic>.from(res ?? {});
   }
 }
