@@ -1,0 +1,44 @@
+name: Build Android APK (Flutter)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - 'haroon_tailor_app/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.x'
+        channel: 'stable'
+
+    - name: Get dependencies
+      run: |
+        cd haroon_tailor_app
+        flutter pub get
+
+    - name: Build APK
+      run: |
+        cd haroon_tailor_app
+        flutter build apk --release
+
+    - name: Upload Android APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: Haroon_Tailor_Android_App
+        path: haroon_tailor_app/build/app/outputs/flutter-apk/app-release.apk
