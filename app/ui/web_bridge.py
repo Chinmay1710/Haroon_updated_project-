@@ -728,6 +728,7 @@ class WebBridge(QObject):
                             "customer_mobile": o.customer.mobile if o.customer else "",
                             "total_amount": o.total_amount,
                             "remaining_amount": o.remaining_amount,
+                            "status": o.status,
                             "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
                             "updated_at": o.updated_at.isoformat() if hasattr(o, "updated_at") and o.updated_at else ""
                         })
