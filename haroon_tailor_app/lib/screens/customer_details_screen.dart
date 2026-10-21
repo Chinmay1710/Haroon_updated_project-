@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/customer.dart';
 import '../services/api_service.dart';
@@ -50,9 +51,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   void _showEditCustomerModal(Map<String, dynamic> c) {
     final nameCtrl = TextEditingController(text: c['name'] ?? '');
     String rawMobile = (c['mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+    rawMobile = rawMobile.replaceAll(RegExp(r'\D'), '');
     final mobileCtrl = TextEditingController(text: rawMobile);
     final addressCtrl = TextEditingController(text: c['address'] ?? '');
     final notesCtrl = TextEditingController(text: c['notes'] ?? '');
+    String? phoneError;
+    String? phoneHelper = '10 ank ka mobile number dalein';
+    bool isPhoneValid = rawMobile.length == 10 && ['6', '7', '8', '9'].contains(rawMobile[0]);
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -64,6 +69,30 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
+            void validatePhone(String val) {
+              final clean = val.replaceAll(RegExp(r'\D'), '');
+              if (clean.isEmpty) {
+                phoneError = null;
+                phoneHelper = '10 ank ka mobile number dalein';
+                isPhoneValid = false;
+              } else if (!['6', '7', '8', '9'].contains(clean[0])) {
+                phoneError = 'Mobile number 6, 7, 8 ya 9 se shuru hona chahiye';
+                phoneHelper = null;
+                isPhoneValid = false;
+              } else if (clean.length < 10) {
+                phoneError = null;
+                phoneHelper = '${clean.length}/10 ank darj kiye (10 ank zaroori)';
+                isPhoneValid = false;
+              } else {
+                phoneError = null;
+                phoneHelper = 'Sahi mobile number ✓';
+                isPhoneValid = true;
+              }
+              setModalState(() {});
+            }
+
+            final canSave = !isSaving && isPhoneValid && nameCtrl.text.trim().isNotEmpty && phoneError == null;
+
             return Padding(
               padding: EdgeInsets.only(
                 left: 20,
@@ -88,20 +117,47 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   const Divider(height: 20),
                   TextField(
                     controller: nameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'[0-9]')),
+                    ],
+                    onChanged: (_) => setModalState(() {}),
                     decoration: InputDecoration(
                       labelText: 'Customer Name *',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   TextField(
                     controller: mobileCtrl,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
+                    onChanged: validatePhone,
                     decoration: InputDecoration(
                       prefixText: '+91 ',
+                      prefixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 16),
                       labelText: 'Mobile Number *',
-                      counterText: '',
+                      errorText: phoneError,
+                      errorMaxLines: 2,
+                      helperText: phoneError == null ? phoneHelper : null,
+                      helperStyle: TextStyle(
+                        color: isPhoneValid ? Colors.green.shade700 : Colors.grey.shade600,
+                        fontWeight: isPhoneValid ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      suffixIcon: isPhoneValid
+                          ? const Icon(Icons.check_circle, color: Colors.green)
+                          : (phoneError != null
+                              ? const Icon(Icons.error_outline, color: Colors.red)
+                              : Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                                  child: Text(
+                                    '${mobileCtrl.text.replaceAll(RegExp(r"\D"), "").length}/10',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                  ),
+                                )),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
@@ -127,15 +183,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     height: 50,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
+                        backgroundColor: canSave ? const Color(0xFF0F172A) : Colors.grey.shade400,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: isSaving
+                      onPressed: !canSave
                           ? null
                           : () async {
                               final name = nameCtrl.text.trim();
-                              final mobile = mobileCtrl.text.trim();
-                              if (name.isEmpty || mobile.length < 10) {
+                              final cleanMobile = mobileCtrl.text.replaceAll(RegExp(r'\D'), '');
+                              if (name.isEmpty || cleanMobile.length != 10) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Kripya naam aur 10-digit mobile number bharein.'), backgroundColor: Colors.orange),
                                 );
@@ -147,7 +203,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                                 await ApiService.updateCustomer(
                                   id: widget.customerId,
                                   name: name,
-                                  mobile: '+91 $mobile',
+                                  mobile: '+91 $cleanMobile',
                                   address: addressCtrl.text.trim(),
                                   notes: notesCtrl.text.trim(),
                                 );

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../models/customer.dart';
@@ -340,6 +341,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                         child: TextFormField(
                                           controller: qtyCtrl,
                                           keyboardType: TextInputType.number,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.digitsOnly,
+                                            LengthLimitingTextInputFormatter(3),
+                                          ],
                                           decoration: InputDecoration(
                                             labelText: 'Quantity (Sankhya)',
                                             prefixIcon: const Icon(Icons.tag, size: 20),
@@ -354,6 +359,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                         child: TextFormField(
                                           controller: priceCtrl,
                                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                                          ],
                                           decoration: InputDecoration(
                                             labelText: 'Rate / Price (Rs.)',
                                             prefixText: 'Rs. ',
@@ -606,7 +614,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                         ),
                         onPressed: () {
                           final parsedPrice = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
-                          final parsedQty = int.tryParse(qtyCtrl.text.trim()) ?? 1;
+                          final parsedQty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+
+                          if (parsedQty <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Quantity kam se kam 1 honi chahiye!'), backgroundColor: Colors.orange),
+                            );
+                            return;
+                          }
 
                           if (parsedPrice <= 0) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -814,6 +829,31 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
         const SnackBar(content: Text('Kripya kam se kam ek kapda jodein!'), backgroundColor: Colors.orange),
       );
       _openGarmentEditor();
+      return;
+    }
+
+    if (_discount < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Discount 0 ya usse zyada hona chahiye!'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (_discount > _subtotal) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Discount (Rs. ${_discount.toStringAsFixed(0)}) kul bill (Rs. ${_subtotal.toStringAsFixed(0)}) se zyada nahi ho sakta!'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (_advance < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Advance 0 ya usse zyada hona chahiye!'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    if (_advance > _totalAmount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Advance (Rs. ${_advance.toStringAsFixed(0)}) total bill (Rs. ${_totalAmount.toStringAsFixed(0)}) se zyada nahi ho sakta!'), backgroundColor: Colors.orange),
+      );
       return;
     }
 
@@ -1324,6 +1364,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                           child: TextFormField(
                             controller: _discountCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                            ],
                             decoration: InputDecoration(
                               labelText: 'Chhoot (Discount)',
                               prefixText: 'Rs. ',
@@ -1337,6 +1380,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                           child: TextFormField(
                             controller: _advanceCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                            ],
                             decoration: InputDecoration(
                               labelText: 'Advance (Jama Rashi)',
                               prefixText: 'Rs. ',

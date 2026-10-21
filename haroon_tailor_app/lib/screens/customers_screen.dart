@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../models/customer.dart';
 import 'customer_details_screen.dart';
@@ -71,7 +72,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final phoneCtrl = TextEditingController();
     final addressCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
-    String? duplicateWarning;
+    String? phoneError;
+    String? phoneHelper = '10 ank ka mobile number dalein';
+    bool isPhoneValid = false;
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -81,24 +84,40 @@ class _CustomersScreenState extends State<CustomersScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
-            void checkDuplicate(String val) {
+            void validatePhone(String val) {
               final clean = val.replaceAll(RegExp(r'\D'), '');
-              if (clean.length == 10) {
+              if (clean.isEmpty) {
+                phoneError = null;
+                phoneHelper = '10 ank ka mobile number dalein';
+                isPhoneValid = false;
+              } else if (!['6', '7', '8', '9'].contains(clean[0])) {
+                phoneError = 'Mobile number 6, 7, 8 ya 9 se shuru hona chahiye';
+                phoneHelper = null;
+                isPhoneValid = false;
+              } else if (clean.length < 10) {
+                phoneError = null;
+                phoneHelper = '${clean.length}/10 ank darj kiye (10 ank zaroori)';
+                isPhoneValid = false;
+              } else {
+                // Exactly 10 digits starting with 6-9
                 final match = _allCustomers.firstWhere(
                   (c) => c.cleanMobile == clean,
                   orElse: () => Customer(id: 0, name: '', mobile: ''),
                 );
                 if (match.id != 0) {
-                  setModalState(() {
-                    duplicateWarning = 'Yeh number pehle se "${match.name}" ke paas hai! Duplicate allow nahi hai.';
-                  });
-                  return;
+                  phoneError = 'Yeh number pehle se "${match.name}" ke paas hai! Duplicate allow nahi hai.';
+                  phoneHelper = null;
+                  isPhoneValid = false;
+                } else {
+                  phoneError = null;
+                  phoneHelper = 'Sahi mobile number ✓';
+                  isPhoneValid = true;
                 }
               }
-              setModalState(() {
-                duplicateWarning = null;
-              });
+              setModalState(() {});
             }
+
+            final canSave = !isSaving && isPhoneValid && nameCtrl.text.trim().isNotEmpty && phoneError == null;
 
             return Container(
               padding: EdgeInsets.only(
@@ -132,45 +151,53 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     const SizedBox(height: 16),
                     TextField(
                       controller: nameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r'[0-9]')),
+                      ],
+                      onChanged: (_) => setModalState(() {}),
                       decoration: InputDecoration(
                         labelText: 'Customer Full Name *',
+                        hintText: 'Jaise: Mohammad Rashid',
                         prefixIcon: const Icon(Icons.person_outline),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: phoneCtrl,
-                      keyboardType: TextInputType.phone,
-                      onChanged: checkDuplicate,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
+                      onChanged: validatePhone,
                       decoration: InputDecoration(
                         labelText: '10-Digit Mobile Number *',
+                        prefixText: '+91 ',
+                        prefixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 16),
                         prefixIcon: const Icon(Icons.phone_outlined),
+                        errorText: phoneError,
+                        errorMaxLines: 2,
+                        helperText: phoneError == null ? phoneHelper : null,
+                        helperStyle: TextStyle(
+                          color: isPhoneValid ? Colors.green.shade700 : Colors.grey.shade600,
+                          fontWeight: isPhoneValid ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        suffixIcon: isPhoneValid
+                            ? const Icon(Icons.check_circle, color: Colors.green)
+                            : (phoneError != null
+                                ? const Icon(Icons.error_outline, color: Colors.red)
+                                : Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                                    child: Text(
+                                      '${phoneCtrl.text.replaceAll(RegExp(r"\D"), "").length}/10',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                    ),
+                                  )),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
-                    if (duplicateWarning != null)
-                      Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                duplicateWarning!,
-                                style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: addressCtrl,
@@ -198,15 +225,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
                             height: 48,
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+                                side: BorderSide(
+                                  color: canSave ? const Color(0xFF0F172A) : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
-                              onPressed: duplicateWarning != null || isSaving
+                              onPressed: !canSave
                                   ? null
                                   : () async {
                                       final name = nameCtrl.text.trim();
-                                      final rawPhone = phoneCtrl.text.trim();
-                                      final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '');
+                                      final cleanPhone = phoneCtrl.text.replaceAll(RegExp(r'\D'), '');
 
                                       if (name.isEmpty) {
                                         ScaffoldMessenger.of(context).showSnackBar(
@@ -265,9 +294,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                     },
                               child: isSaving
                                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : const Text(
+                                  : Text(
                                       'Save Customer',
-                                      style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                        color: canSave ? const Color(0xFF0F172A) : Colors.grey.shade400,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                             ),
                           ),
@@ -284,16 +317,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2563EB),
+                                backgroundColor: canSave ? const Color(0xFF2563EB) : Colors.grey.shade400,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                elevation: 2,
+                                elevation: canSave ? 2 : 0,
                               ),
-                              onPressed: duplicateWarning != null || isSaving
+                              onPressed: !canSave
                                   ? null
                                   : () async {
                                       final name = nameCtrl.text.trim();
-                                      final rawPhone = phoneCtrl.text.trim();
-                                      final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '');
+                                      final cleanPhone = phoneCtrl.text.replaceAll(RegExp(r'\D'), '');
 
                                       if (name.isEmpty) {
                                         ScaffoldMessenger.of(context).showSnackBar(
@@ -375,9 +407,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
   void _showEditCustomerDialog(Customer c) {
     final nameCtrl = TextEditingController(text: c.name);
     String rawMobile = c.mobile.replaceAll('+91', '').replaceAll(' ', '').trim();
+    rawMobile = rawMobile.replaceAll(RegExp(r'\D'), '');
     final mobileCtrl = TextEditingController(text: rawMobile);
     final addressCtrl = TextEditingController(text: c.address);
     final notesCtrl = TextEditingController(text: c.notes);
+    String? phoneError;
+    String? phoneHelper = '10 ank ka mobile number dalein';
+    bool isPhoneValid = rawMobile.length == 10 && ['6', '7', '8', '9'].contains(rawMobile[0]);
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -389,6 +425,41 @@ class _CustomersScreenState extends State<CustomersScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
+            void validatePhone(String val) {
+              final clean = val.replaceAll(RegExp(r'\D'), '');
+              if (clean.isEmpty) {
+                phoneError = null;
+                phoneHelper = '10 ank ka mobile number dalein';
+                isPhoneValid = false;
+              } else if (!['6', '7', '8', '9'].contains(clean[0])) {
+                phoneError = 'Mobile number 6, 7, 8 ya 9 se shuru hona chahiye';
+                phoneHelper = null;
+                isPhoneValid = false;
+              } else if (clean.length < 10) {
+                phoneError = null;
+                phoneHelper = '${clean.length}/10 ank darj kiye (10 ank zaroori)';
+                isPhoneValid = false;
+              } else {
+                // Exactly 10 digits starting with 6-9
+                final match = _allCustomers.firstWhere(
+                  (cust) => cust.id != c.id && cust.cleanMobile == clean,
+                  orElse: () => Customer(id: 0, name: '', mobile: ''),
+                );
+                if (match.id != 0) {
+                  phoneError = 'Yeh number pehle se "${match.name}" ke paas hai! Duplicate allow nahi hai.';
+                  phoneHelper = null;
+                  isPhoneValid = false;
+                } else {
+                  phoneError = null;
+                  phoneHelper = 'Sahi mobile number ✓';
+                  isPhoneValid = true;
+                }
+              }
+              setModalState(() {});
+            }
+
+            final canSave = !isSaving && isPhoneValid && nameCtrl.text.trim().isNotEmpty && phoneError == null;
+
             return Padding(
               padding: EdgeInsets.only(
                 left: 20,
@@ -413,20 +484,47 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   const Divider(height: 20),
                   TextField(
                     controller: nameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'[0-9]')),
+                    ],
+                    onChanged: (_) => setModalState(() {}),
                     decoration: InputDecoration(
                       labelText: 'Customer Name *',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   TextField(
                     controller: mobileCtrl,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
+                    onChanged: validatePhone,
                     decoration: InputDecoration(
                       prefixText: '+91 ',
+                      prefixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 16),
                       labelText: 'Mobile Number *',
-                      counterText: '',
+                      errorText: phoneError,
+                      errorMaxLines: 2,
+                      helperText: phoneError == null ? phoneHelper : null,
+                      helperStyle: TextStyle(
+                        color: isPhoneValid ? Colors.green.shade700 : Colors.grey.shade600,
+                        fontWeight: isPhoneValid ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      suffixIcon: isPhoneValid
+                          ? const Icon(Icons.check_circle, color: Colors.green)
+                          : (phoneError != null
+                              ? const Icon(Icons.error_outline, color: Colors.red)
+                              : Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                                  child: Text(
+                                    '${mobileCtrl.text.replaceAll(RegExp(r"\D"), "").length}/10',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                  ),
+                                )),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
@@ -452,15 +550,15 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     height: 50,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
+                        backgroundColor: canSave ? const Color(0xFF0F172A) : Colors.grey.shade400,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: isSaving
+                      onPressed: !canSave
                           ? null
                           : () async {
                               final name = nameCtrl.text.trim();
-                              final mobile = mobileCtrl.text.trim();
-                              if (name.isEmpty || mobile.length < 10) {
+                              final cleanMobile = mobileCtrl.text.replaceAll(RegExp(r'\D'), '');
+                              if (name.isEmpty || cleanMobile.length != 10) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Kripya naam aur 10-digit mobile number bharein.'), backgroundColor: Colors.orange),
                                 );
@@ -472,7 +570,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 await ApiService.updateCustomer(
                                   id: c.id,
                                   name: name,
-                                  mobile: '+91 $mobile',
+                                  mobile: '+91 $cleanMobile',
                                   address: addressCtrl.text.trim(),
                                   notes: notesCtrl.text.trim(),
                                 );

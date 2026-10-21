@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../utils/phone_utils.dart';
@@ -120,7 +121,10 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
                   const Divider(height: 24),
                   TextField(
                     controller: amtCtrl,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                    ],
                     decoration: InputDecoration(
                       prefixText: '₹ ',
                       labelText: 'Payment Rakam (Amount)',
@@ -152,7 +156,18 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
                     ),
                     onPressed: () async {
                       final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
-                      if (amt <= 0) return;
+                      if (amt <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Kripya 0 se zyada payment rashi bharein!'), backgroundColor: Colors.orange),
+                        );
+                        return;
+                      }
+                      if (amt > remaining) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Payment baqaya rashi (₹${remaining.toStringAsFixed(0)}) se zyada nahi ho sakta!'), backgroundColor: Colors.orange),
+                        );
+                        return;
+                      }
                       Navigator.pop(ctx);
 
                       try {

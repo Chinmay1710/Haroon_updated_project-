@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../utils/phone_utils.dart';
@@ -115,7 +116,10 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: amtCtrl,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                      ],
                       decoration: InputDecoration(
                         prefixText: '₹ ',
                         labelText: 'Payment Amount',
@@ -167,17 +171,27 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
                             ),
                             onPressed: () async {
                               final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
-                              Navigator.pop(ctx);
-                              if (amt > 0) {
-                                try {
-                                  await ApiService.createPayment(
-                                    orderId: orderId,
-                                    amount: amt,
-                                    paymentMethod: payMethod,
-                                    sendWhatsapp: true,
-                                  );
-                                } catch (_) {}
+                              if (amt <= 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Kripya 0 se zyada payment rashi bharein!'), backgroundColor: Colors.orange),
+                                );
+                                return;
                               }
+                              if (amt > remaining) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Payment baqaya amount (${currency.format(remaining)}) se zyada nahi ho sakta!'), backgroundColor: Colors.orange),
+                                );
+                                return;
+                              }
+                              Navigator.pop(ctx);
+                              try {
+                                await ApiService.createPayment(
+                                  orderId: orderId,
+                                  amount: amt,
+                                  paymentMethod: payMethod,
+                                  sendWhatsapp: true,
+                                );
+                              } catch (_) {}
                               await _markDeliveredApi(orderId);
                             },
                             child: const Text('Payment Jama & Deliver',
