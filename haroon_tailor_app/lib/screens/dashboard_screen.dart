@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/local_storage_service.dart';
 import 'order_details_screen.dart';
 import 'pending_payments_screen.dart';
 
@@ -23,8 +24,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadDashboard();
   }
 
-  Future<void> _loadDashboard() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadDashboard({bool showLoading = true}) async {
+    // 1. Instant local cache load (0 milliseconds delay!)
+    final cached = await LocalStorageService.getCachedDashboardStats();
+    if (cached != null && cached.isNotEmpty && mounted) {
+      setState(() {
+        _stats = cached;
+        _recentOrders = cached['recent_orders'] ?? [];
+        _isLoading = false;
+      });
+    } else if (showLoading && _stats.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+
+    // 2. Fetch fresh updates from server in background
     try {
       final data = await ApiService.getDashboardStats();
       if (!mounted) return;
@@ -36,9 +49,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load dashboard: $e'), backgroundColor: Colors.red),
-      );
+      if (_stats.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load dashboard: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 

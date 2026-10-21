@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
 import 'order_details_screen.dart';
 
@@ -30,8 +31,20 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadPendingOrders() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadPendingOrders({bool showLoading = true}) async {
+    // 1. Instant local cache load (0 milliseconds delay!)
+    final cached = await LocalStorageService.getCachedPendingOrders();
+    if (cached != null && cached.isNotEmpty && mounted) {
+      setState(() {
+        _allPending = cached;
+        _filterList();
+        _isLoading = false;
+      });
+    } else if (showLoading && _allPending.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+
+    // 2. Fetch fresh updates from server in background
     try {
       final data = await ApiService.getPendingOrders();
       if (!mounted) return;
@@ -43,9 +56,11 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load pending payments: $e'), backgroundColor: Colors.red),
-      );
+      if (_allPending.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load pending payments: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/customer.dart';
 import '../services/api_service.dart';
+import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
 import '../widgets/measurement_grid.dart';
 import 'new_order_screen.dart';
@@ -35,20 +36,35 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     _loadOrder();
   }
 
-  Future<void> _loadOrder() async {
-    setState(() => _isLoading = true);
-    try {
-      final data = await ApiService.getOrderDetails(widget.orderId);
+  Future<void> _loadOrder({bool showLoading = true}) async {
+    // 1. Instant local cache load (0 milliseconds delay!)
+    final cached = await LocalStorageService.getCachedOrderDetails(widget.orderId);
+    if (cached != null && cached.isNotEmpty && mounted) {
       setState(() {
-        _order = data;
+        _order = cached;
         _isLoading = false;
       });
-    } catch (e) {
-      setState(() => _isLoading = false);
+    } else if (showLoading && _order == null) {
+      setState(() => _isLoading = true);
+    }
+
+    // 2. Fetch fresh updates from server in background
+    try {
+      final data = await ApiService.getOrderDetails(widget.orderId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Order load nahi hua: $e'), backgroundColor: Colors.red),
-        );
+        setState(() {
+          _order = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (_order == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Order load nahi hua: $e'), backgroundColor: Colors.red),
+          );
+        }
       }
     }
   }

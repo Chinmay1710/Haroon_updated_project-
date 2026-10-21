@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
+import '../services/local_storage_service.dart';
 import '../models/customer.dart';
 import 'customer_details_screen.dart';
 import 'new_order_screen.dart';
@@ -31,22 +32,39 @@ class _CustomersScreenState extends State<CustomersScreen> {
     _loadCustomers();
   }
 
-  Future<void> _loadCustomers() async {
-    setState(() => _isLoading = true);
-    try {
-      final data = await ApiService.getCustomers();
-      final list = data.map((c) => Customer.fromJson(c)).toList();
+  Future<void> _loadCustomers({bool showLoading = true}) async {
+    // 1. Instant local cache load (0 milliseconds delay!)
+    final cached = await LocalStorageService.getCachedCustomers();
+    if (cached != null && cached.isNotEmpty && mounted) {
+      final list = cached.map((c) => Customer.fromJson(c)).toList();
       setState(() {
         _allCustomers = list;
         _filteredCustomers = list;
         _isLoading = false;
       });
-    } catch (e) {
-      setState(() => _isLoading = false);
+    } else if (showLoading && _allCustomers.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+
+    // 2. Fetch fresh updates from server in background
+    try {
+      final data = await ApiService.getCustomers();
+      final list = data.map((c) => Customer.fromJson(c)).toList();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load customers: $e'), backgroundColor: Colors.red),
-        );
+        setState(() {
+          _allCustomers = list;
+          _filteredCustomers = list;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (_allCustomers.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load customers: $e'), backgroundColor: Colors.red),
+          );
+        }
       }
     }
   }

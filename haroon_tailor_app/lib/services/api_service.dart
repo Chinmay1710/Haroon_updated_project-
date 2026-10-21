@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'local_storage_service.dart';
 
 class ApiService {
   static const String baseUrl = 'https://haroon-tailor.onrender.com';
@@ -14,7 +15,7 @@ class ApiService {
           'action': action,
           'payload': payload ?? {},
         }),
-      );
+      ).timeout(const Duration(seconds: 25));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -33,14 +34,34 @@ class ApiService {
 
   // Dashboard Stats
   static Future<Map<String, dynamic>> getDashboardStats() async {
-    final res = await dispatch('get_dashboard_stats');
-    return Map<String, dynamic>.from(res ?? {});
+    try {
+      final res = await dispatch('get_dashboard_stats');
+      final data = Map<String, dynamic>.from(res ?? {});
+      await LocalStorageService.saveDashboardStats(data);
+      return data;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedDashboardStats();
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      rethrow;
+    }
   }
 
   // Customers
   static Future<List<dynamic>> getCustomers() async {
-    final res = await dispatch('get_customers');
-    return List<dynamic>.from(res ?? []);
+    try {
+      final res = await dispatch('get_customers');
+      final list = List<dynamic>.from(res ?? []);
+      await LocalStorageService.saveCustomers(list);
+      return list;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedCustomers();
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      rethrow;
+    }
   }
 
   static Future<Map<String, dynamic>> createCustomer({
@@ -55,51 +76,118 @@ class ApiService {
       'address': address,
       'notes': notes,
     });
-    return Map<String, dynamic>.from(res ?? {});
+    final map = Map<String, dynamic>.from(res ?? {});
+    // Refresh cached customers in background
+    getCustomers().ignore();
+    return map;
   }
 
   // Measurements
   static Future<List<dynamic>> getMeasurementsForCustomer(int customerId) async {
-    final res = await dispatch('get_measurements_for_customer', {'customer_id': customerId});
-    return List<dynamic>.from(res ?? []);
+    try {
+      final res = await dispatch('get_measurements_for_customer', {'customer_id': customerId});
+      final list = List<dynamic>.from(res ?? []);
+      await LocalStorageService.saveMeasurements(customerId, list);
+      return list;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedMeasurements(customerId);
+      if (cached != null) return cached;
+      rethrow;
+    }
   }
 
   // Orders
   static Future<List<dynamic>> getAllOrders() async {
-    final res = await dispatch('get_all_orders');
-    return List<dynamic>.from(res ?? []);
+    try {
+      final res = await dispatch('get_all_orders');
+      final list = List<dynamic>.from(res ?? []);
+      await LocalStorageService.saveOrders(list);
+      return list;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedOrders();
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      rethrow;
+    }
   }
 
   static Future<Map<String, dynamic>> getOrderDetails(int orderId) async {
-    final res = await dispatch('get_order_details', {'id': orderId});
-    return Map<String, dynamic>.from(res ?? {});
+    try {
+      final res = await dispatch('get_order_details', {'id': orderId});
+      final map = Map<String, dynamic>.from(res ?? {});
+      await LocalStorageService.saveOrderDetails(orderId, map);
+      return map;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedOrderDetails(orderId);
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      rethrow;
+    }
   }
 
   static Future<Map<String, dynamic>> createOrder(Map<String, dynamic> payload) async {
     final res = await dispatch('create_order', payload);
-    return Map<String, dynamic>.from(res ?? {});
+    final map = Map<String, dynamic>.from(res ?? {});
+    // Trigger background cache refresh
+    getAllOrders().ignore();
+    getDashboardStats().ignore();
+    return map;
   }
 
   static Future<Map<String, dynamic>> getDeliveriesDashboard() async {
-    final res = await dispatch('get_deliveries_dashboard');
-    return Map<String, dynamic>.from(res ?? {});
+    try {
+      final res = await dispatch('get_deliveries_dashboard');
+      final map = Map<String, dynamic>.from(res ?? {});
+      await LocalStorageService.saveDeliveries(map);
+      return map;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedDeliveries();
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      rethrow;
+    }
   }
 
   // Customer Details & Order History
   static Future<Map<String, dynamic>> getCustomerDetails(int customerId) async {
-    final res = await dispatch('get_customer_details', {'id': customerId});
-    return Map<String, dynamic>.from(res ?? {});
+    try {
+      final res = await dispatch('get_customer_details', {'id': customerId});
+      final map = Map<String, dynamic>.from(res ?? {});
+      await LocalStorageService.saveCustomerDetails(customerId, map);
+      return map;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedCustomerDetails(customerId);
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      rethrow;
+    }
   }
 
   // Pending Payments / Orders
   static Future<List<dynamic>> getPendingOrders() async {
-    final res = await dispatch('get_pending_orders');
-    return List<dynamic>.from(res ?? []);
+    try {
+      final res = await dispatch('get_pending_orders');
+      final list = List<dynamic>.from(res ?? []);
+      await LocalStorageService.savePendingOrders(list);
+      return list;
+    } catch (e) {
+      final cached = await LocalStorageService.getCachedPendingOrders();
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      rethrow;
+    }
   }
 
   // Delete Order (Frees bill number for reuse)
   static Future<Map<String, dynamic>> deleteOrder(int orderId) async {
     final res = await dispatch('delete_order', {'id': orderId});
+    getAllOrders().ignore();
+    getDashboardStats().ignore();
     return Map<String, dynamic>.from(res ?? {});
   }
 
@@ -116,6 +204,9 @@ class ApiService {
       'payment_method': paymentMethod,
       'send_whatsapp': sendWhatsapp,
     });
+    getAllOrders().ignore();
+    getPendingOrders().ignore();
+    getDashboardStats().ignore();
     return Map<String, dynamic>.from(res ?? {});
   }
 
@@ -133,6 +224,7 @@ class ApiService {
       'address': address,
       'notes': notes,
     });
+    getCustomers().ignore();
     return Map<String, dynamic>.from(res ?? {});
   }
 
@@ -148,14 +240,22 @@ class ApiService {
       'items': items,
       'notes': notes,
     });
+    getAllOrders().ignore();
+    getOrderDetails(orderId).ignore();
     return Map<String, dynamic>.from(res ?? {});
   }
 
   static Future<Map<String, dynamic>> getShopSettings() async {
     try {
       final res = await dispatch('get_settings');
-      return Map<String, dynamic>.from(res ?? {});
+      final map = Map<String, dynamic>.from(res ?? {});
+      await LocalStorageService.saveShopSettings(map);
+      return map;
     } catch (_) {
+      final cached = await LocalStorageService.getCachedShopSettings();
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
       return {'shop_name': 'Haroon Tailor', 'currency_symbol': '₹'};
     }
   }
@@ -175,6 +275,10 @@ class ApiService {
     if (deliveredItemIds != null) payload['delivered_item_ids'] = deliveredItemIds;
     if (readyItemIds != null) payload['ready_item_ids'] = readyItemIds;
     final res = await dispatch('update_order_status', payload);
+    getAllOrders().ignore();
+    getOrderDetails(orderId).ignore();
+    getDashboardStats().ignore();
     return Map<String, dynamic>.from(res ?? {});
   }
 }
+

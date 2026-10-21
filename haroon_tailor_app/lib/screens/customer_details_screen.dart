@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/customer.dart';
 import '../services/api_service.dart';
+import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
 import 'new_order_screen.dart';
 import 'order_details_screen.dart';
@@ -27,23 +28,41 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     _loadCustomerDetails();
   }
 
-  Future<void> _loadCustomerDetails() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  Future<void> _loadCustomerDetails({bool showLoading = true}) async {
+    // 1. Instant local cache load (0 milliseconds delay!)
+    final cached = await LocalStorageService.getCachedCustomerDetails(widget.customerId);
+    if (cached != null && cached.isNotEmpty && mounted) {
+      setState(() {
+        _customerData = cached;
+        _isLoading = false;
+        _errorMessage = null;
+      });
+    } else if (showLoading && _customerData == null) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
+    // 2. Fetch fresh updates from server in background
     try {
       final data = await ApiService.getCustomerDetails(widget.customerId);
-      setState(() {
-        _customerData = data;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _customerData = data;
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (_customerData == null) {
+            _errorMessage = e.toString();
+          }
+        });
+      }
     }
   }
 
