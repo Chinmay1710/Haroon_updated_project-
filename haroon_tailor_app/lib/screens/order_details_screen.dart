@@ -693,6 +693,87 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     );
   }
 
+  Widget? _buildDeliveryAlertBadge(Map<String, dynamic> o) {
+    final status = (o['status'] ?? '').toString();
+    if (status == 'DELIVERED' || status == 'CANCELLED' || status == 'STITCHING_COMPLETE') {
+      return null;
+    }
+
+    final delivStr = o['delivery_date']?.toString();
+    if (delivStr == null || delivStr.trim().isEmpty) {
+      return null;
+    }
+
+    final dDate = DateTime.tryParse(delivStr.split('T')[0]);
+    if (dDate == null) return null;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final targetDate = DateTime(dDate.year, dDate.month, dDate.day);
+    final diffDays = targetDate.difference(today).inDays;
+
+    String label;
+    Color bgColor;
+    Color textColor;
+    Color borderColor;
+    IconData icon;
+
+    if (diffDays < 0) {
+      final lateDays = -diffDays;
+      label = lateDays == 1 ? 'OVERDUE (1 Din Late)' : 'OVERDUE ($lateDays Din Late)';
+      bgColor = const Color(0xFFFEE2E2);
+      textColor = const Color(0xFFDC2626);
+      borderColor = const Color(0xFFEF4444);
+      icon = Icons.error_rounded;
+    } else if (diffDays == 0) {
+      label = 'DELIVERY AAJ HAI (Today)';
+      bgColor = const Color(0xFFFEE2E2);
+      textColor = const Color(0xFFE11D48);
+      borderColor = const Color(0xFFF43F5E);
+      icon = Icons.alarm;
+    } else if (diffDays == 1) {
+      label = 'DELIVERY KAL HAI (1 Din Bacha)';
+      bgColor = const Color(0xFFFFF7ED);
+      textColor = const Color(0xFFEA580C);
+      borderColor = const Color(0xFFF97316);
+      icon = Icons.warning_amber_rounded;
+    } else if (diffDays <= 3) {
+      label = '$diffDays Din Mein Delivery Baki';
+      bgColor = const Color(0xFFFEFCE8);
+      textColor = const Color(0xFFCA8A04);
+      borderColor = const Color(0xFFEAB308);
+      icon = Icons.hourglass_top_rounded;
+    } else {
+      return null;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: textColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDateColumn(String label, dynamic dateVal, {bool isDelivery = false}) {
     final str = dateVal != null ? dateVal.toString().split('T')[0] : '-';
     return Column(
@@ -789,6 +870,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         _buildDateColumn('Delivery Date', o['delivery_date'], isDelivery: true),
                       ],
                     ),
+                    if (_buildDeliveryAlertBadge(o) != null) ...[
+                      _buildDeliveryAlertBadge(o)!,
+                    ],
                   ],
                 ),
               ),

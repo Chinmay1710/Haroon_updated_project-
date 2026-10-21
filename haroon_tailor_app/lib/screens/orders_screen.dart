@@ -7,8 +7,29 @@ import 'order_details_screen.dart';
 import 'receipt_print_screen.dart';
 import 'stitching_slip_print_screen.dart';
 
+class DeliveryAlertInfo {
+  final bool isOverdue;
+  final int diffDays;
+  final String label;
+  final Color bgColor;
+  final Color textColor;
+  final Color borderColor;
+  final IconData icon;
+
+  const DeliveryAlertInfo({
+    required this.isOverdue,
+    required this.diffDays,
+    required this.label,
+    required this.bgColor,
+    required this.textColor,
+    required this.borderColor,
+    required this.icon,
+  });
+}
+
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  final String initialStatus;
+  const OrdersScreen({super.key, this.initialStatus = 'INCOMPLETE'});
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -18,12 +39,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
   bool _isLoading = true;
   List<dynamic> _allOrders = [];
   List<dynamic> _filteredOrders = [];
-  String _selectedStatus = 'ALL';
+  late String _selectedStatus;
   final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _selectedStatus = widget.initialStatus;
     _loadOrders();
   }
 
@@ -46,13 +68,83 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
+  int get _incompleteCount => _allOrders.where((o) {
+        final status = (o['status'] ?? '').toString();
+        return status != 'DELIVERED' && status != 'STITCHING_COMPLETE' && status != 'CANCELLED';
+      }).length;
+
+  DeliveryAlertInfo? _getDeliveryAlert(Map<String, dynamic> o) {
+    final status = (o['status'] ?? '').toString();
+    if (status == 'DELIVERED' || status == 'CANCELLED' || status == 'STITCHING_COMPLETE') {
+      return null;
+    }
+
+    final delivStr = o['delivery_date']?.toString();
+    if (delivStr == null || delivStr.trim().isEmpty) {
+      return null;
+    }
+
+    final dDate = DateTime.tryParse(delivStr.split('T')[0]);
+    if (dDate == null) return null;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final targetDate = DateTime(dDate.year, dDate.month, dDate.day);
+    final diffDays = targetDate.difference(today).inDays;
+
+    if (diffDays < 0) {
+      final lateDays = -diffDays;
+      return DeliveryAlertInfo(
+        isOverdue: true,
+        diffDays: diffDays,
+        label: lateDays == 1 ? 'OVERDUE (1 Din Late)' : 'OVERDUE ($lateDays Din Late)',
+        bgColor: const Color(0xFFFEE2E2),
+        textColor: const Color(0xFFDC2626),
+        borderColor: const Color(0xFFEF4444),
+        icon: Icons.error_rounded,
+      );
+    } else if (diffDays == 0) {
+      return const DeliveryAlertInfo(
+        isOverdue: false,
+        diffDays: 0,
+        label: 'DELIVERY AAJ HAI (Today)',
+        bgColor: Color(0xFFFEE2E2),
+        textColor: Color(0xFFE11D48),
+        borderColor: Color(0xFFF43F5E),
+        icon: Icons.alarm,
+      );
+    } else if (diffDays == 1) {
+      return const DeliveryAlertInfo(
+        isOverdue: false,
+        diffDays: 1,
+        label: 'DELIVERY KAL HAI (1 Din Bacha)',
+        bgColor: Color(0xFFFFF7ED),
+        textColor: Color(0xFFEA580C),
+        borderColor: Color(0xFFF97316),
+        icon: Icons.warning_amber_rounded,
+      );
+    } else if (diffDays <= 3) {
+      return DeliveryAlertInfo(
+        isOverdue: false,
+        diffDays: diffDays,
+        label: '$diffDays Din Mein Delivery',
+        bgColor: const Color(0xFFFEFCE8),
+        textColor: const Color(0xFFCA8A04),
+        borderColor: const Color(0xFFEAB308),
+        icon: Icons.hourglass_top_rounded,
+      );
+    }
+
+    return null;
+  }
+
   void _applyFilter() {
     final q = _searchCtrl.text.trim().toLowerCase();
     _filteredOrders = _allOrders.where((o) {
       final status = (o['status'] ?? '').toString();
       bool matchesStatus = true;
-      if (_selectedStatus == 'PENDING') {
-        matchesStatus = status != 'DELIVERED' && status != 'STITCHING_COMPLETE';
+      if (_selectedStatus == 'INCOMPLETE' || _selectedStatus == 'PENDING') {
+        matchesStatus = status != 'DELIVERED' && status != 'STITCHING_COMPLETE' && status != 'CANCELLED';
       } else if (_selectedStatus == 'PARTIALLY_COMPLETE') {
         matchesStatus = status == 'PARTIALLY_COMPLETE';
       } else if (_selectedStatus == 'COMPLETE') {
@@ -71,6 +163,33 @@ class _OrdersScreenState extends State<OrdersScreen> {
       }
       return true;
     }).toList();
+
+    // Sort: Incomplete orders sorted by delivery date (nearest first, overdue on top)
+    _filteredOrders.sort((a, b) {
+      if (_selectedStatus == 'INCOMPLETE' || _selectedStatus == 'PENDING') {
+        final dStrA = a['delivery_date']?.toString();
+        final dStrB = b['delivery_date']?.toString();
+
+        final dateA = (dStrA != null && dStrA.trim().isNotEmpty)
+            ? DateTime.tryParse(dStrA.split('T')[0])
+            : null;
+        final dateB = (dStrB != null && dStrB.trim().isNotEmpty)
+            ? DateTime.tryParse(dStrB.split('T')[0])
+            : null;
+
+        if (dateA == null && dateB == null) {
+          return ((b['id'] ?? 0) as int).compareTo((a['id'] ?? 0) as int);
+        }
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+
+        final comp = dateA.compareTo(dateB);
+        if (comp != 0) return comp;
+        return ((b['id'] ?? 0) as int).compareTo((a['id'] ?? 0) as int);
+      } else {
+        return ((b['id'] ?? 0) as int).compareTo((a['id'] ?? 0) as int);
+      }
+    });
   }
 
   // 1. COMPLETE BUTTON WITH WHATSAPP CONFIRMATION (Point 2 - Website Flow)
@@ -458,19 +577,44 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
 
           // Status Filter Tabs
+          // Status Filter Tabs
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
+                _buildFilterChip('INCOMPLETE', 'Incomplete Orders', count: _incompleteCount),
                 _buildFilterChip('ALL', 'All Orders'),
-                _buildFilterChip('PENDING', 'Stitching Pending'),
                 _buildFilterChip('PARTIALLY_COMPLETE', 'Partially Complete'),
                 _buildFilterChip('COMPLETE', 'Complete'),
                 _buildFilterChip('DELIVERED', 'Delivered'),
               ],
             ),
           ),
+
+          // Informational sorting note when viewing Incomplete Orders
+          if (_selectedStatus == 'INCOMPLETE' || _selectedStatus == 'PENDING')
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.sort_rounded, size: 16, color: Colors.blue.shade700),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Delivery date nazdeek wale orders pehle dikh rahe hain (Alerts: ≤ 3 din)',
+                      style: TextStyle(fontSize: 11, color: Colors.blue.shade900, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Orders List
           Expanded(
@@ -504,14 +648,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             final status = (o['status'] ?? 'NEW').toString();
                             final total = o['total_amount'] ?? 0;
                             final remaining = o['remaining_amount'] ?? 0;
+                            final alert = _getDeliveryAlert(o);
 
                             return Card(
-                              elevation: 0,
+                              elevation: alert != null ? 2 : 0,
                               margin: const EdgeInsets.only(bottom: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.grey.shade200),
+                                side: BorderSide(
+                                  color: alert != null ? alert.borderColor.withValues(alpha: 0.6) : Colors.grey.shade200,
+                                  width: alert != null ? 1.5 : 1.0,
+                                ),
                               ),
+                              color: alert != null ? alert.bgColor.withValues(alpha: 0.25) : Colors.white,
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
                                 onTap: () {
@@ -530,6 +679,34 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
+                                      // URGENT ALERT BANNER (If delivery date is <= 3 days or overdue)
+                                      if (alert != null)
+                                        Container(
+                                          margin: const EdgeInsets.only(bottom: 10),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: alert.bgColor,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: alert.borderColor.withValues(alpha: 0.6)),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(alert.icon, size: 14, color: alert.textColor),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                alert.label,
+                                                style: TextStyle(
+                                                  color: alert.textColor,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  letterSpacing: 0.2,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
@@ -563,10 +740,24 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                         Text(phone, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                                       if (o['delivery_date'] != null)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 2),
-                                          child: Text(
-                                            'Delivery: ${o['delivery_date'].toString().split('T')[0]}',
-                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.event_outlined,
+                                                size: 14,
+                                                color: alert != null ? alert.textColor : Colors.grey.shade600,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Delivery: ${o['delivery_date'].toString().split('T')[0]}',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: alert != null ? FontWeight.bold : FontWeight.normal,
+                                                  color: alert != null ? alert.textColor : Colors.grey.shade700,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       const Divider(height: 18),
@@ -725,12 +916,21 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Widget _buildFilterChip(String value, String label) {
+  Widget _buildFilterChip(String value, String label, {int? count}) {
     final isSelected = _selectedStatus == value;
+    final displayLabel = count != null && count > 0 ? '$label ($count)' : label;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
-        label: Text(label),
+        avatar: value == 'INCOMPLETE'
+            ? Icon(
+                Icons.schedule,
+                size: 16,
+                color: isSelected ? Colors.amberAccent : const Color(0xFFD97706),
+              )
+            : null,
+        label: Text(displayLabel),
         selected: isSelected,
         selectedColor: const Color(0xFF0F172A),
         backgroundColor: Colors.white,
