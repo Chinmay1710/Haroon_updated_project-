@@ -970,18 +970,38 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                     const SizedBox(height: 8),
                     if (_customer == null)
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: const Color(0xFF0F172A).withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: Colors.blueGrey.shade100),
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(Icons.info_outline, color: Colors.blueGrey),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Text('Kripya upar "Select Customer" button se customer chunein.'),
+                            const Icon(Icons.info_outline, color: Colors.blueGrey),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text('Kripya customer chunein ya naya jodein:'),
+                            ),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.person_add, size: 14, color: Colors.white),
+                              label: const Text('Add Customer', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: () async {
+                                final selected = await Navigator.push<Customer>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const CustomersScreen(isSelectMode: true),
+                                  ),
+                                );
+                                if (selected != null) {
+                                  _selectCustomer(selected);
+                                }
+                              },
                             ),
                           ],
                         ),

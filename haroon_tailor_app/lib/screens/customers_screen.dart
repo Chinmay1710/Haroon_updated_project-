@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/customer.dart';
 import 'customer_details_screen.dart';
+import 'new_order_screen.dart';
 
 class CustomersScreen extends StatefulWidget {
   final bool isSelectMode;
@@ -189,67 +190,177 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    Row(
+                      children: [
+                        // 1. SAVE CUSTOMER ONLY
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: duplicateWarning != null || isSaving
+                                  ? null
+                                  : () async {
+                                      final name = nameCtrl.text.trim();
+                                      final rawPhone = phoneCtrl.text.trim();
+                                      final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '');
+
+                                      if (name.isEmpty) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Customer name is required')),
+                                        );
+                                        return;
+                                      }
+                                      if (cleanPhone.length != 10) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Mobile number must be 10 digits')),
+                                        );
+                                        return;
+                                      }
+
+                                      setModalState(() => isSaving = true);
+                                      try {
+                                        final res = await ApiService.createCustomer(
+                                          name: name,
+                                          mobile: '+91 $cleanPhone',
+                                          address: addressCtrl.text.trim(),
+                                          notes: notesCtrl.text.trim(),
+                                        );
+                                        final newCust = Customer(
+                                          id: (res['id'] ?? 0) as int,
+                                          name: name,
+                                          mobile: '+91 $cleanPhone',
+                                          address: addressCtrl.text.trim(),
+                                          notes: notesCtrl.text.trim(),
+                                        );
+
+                                        if (ctx.mounted) {
+                                          Navigator.pop(ctx);
+                                        }
+                                        _loadCustomers();
+
+                                        if (mounted) {
+                                          if (widget.isSelectMode) {
+                                            widget.onSelectCustomer?.call(newCust);
+                                            Navigator.pop(context, newCust);
+                                          }
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Customer "$name" saved!'),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                        }
+                                      } catch (err) {
+                                        setModalState(() => isSaving = false);
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
+                                          );
+                                        }
+                                      }
+                                    },
+                              child: isSaving
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Text(
+                                      'Save Customer',
+                                      style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                          ),
                         ),
-                        onPressed: duplicateWarning != null || isSaving
-                            ? null
-                            : () async {
-                                final name = nameCtrl.text.trim();
-                                final rawPhone = phoneCtrl.text.trim();
-                                final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '');
+                        const SizedBox(width: 10),
+                        // 2. SAVE & NEW ORDER (Directly create order for this new customer)
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.add_shopping_cart, size: 16, color: Colors.white),
+                              label: const Text(
+                                'Save & New Order',
+                                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 2,
+                              ),
+                              onPressed: duplicateWarning != null || isSaving
+                                  ? null
+                                  : () async {
+                                      final name = nameCtrl.text.trim();
+                                      final rawPhone = phoneCtrl.text.trim();
+                                      final cleanPhone = rawPhone.replaceAll(RegExp(r'\D'), '');
 
-                                if (name.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Customer name is required')),
-                                  );
-                                  return;
-                                }
-                                if (cleanPhone.length != 10) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Mobile number must be 10 digits')),
-                                  );
-                                  return;
-                                }
+                                      if (name.isEmpty) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Customer name is required')),
+                                        );
+                                        return;
+                                      }
+                                      if (cleanPhone.length != 10) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Mobile number must be 10 digits')),
+                                        );
+                                        return;
+                                      }
 
-                                setModalState(() => isSaving = true);
-                                try {
-                                  final res = await ApiService.createCustomer(
-                                    name: name,
-                                    mobile: '+91 $cleanPhone',
-                                    address: addressCtrl.text.trim(),
-                                    notes: notesCtrl.text.trim(),
-                                  );
-                                  if (ctx.mounted) {
-                                    Navigator.pop(ctx);
-                                  }
-                                  _loadCustomers();
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Customer "${res['name'] ?? name}" saved!'),
-                                        backgroundColor: Colors.green,
-                                      ),
-                                    );
-                                  }
-                                } catch (err) {
-                                  setModalState(() => isSaving = false);
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
-                                    );
-                                  }
-                                }
-                              },
-                        child: isSaving
-                            ? const CircularProgressIndicator(color: Colors.white)
-                            : const Text('Save Customer', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
+                                      setModalState(() => isSaving = true);
+                                      try {
+                                        final res = await ApiService.createCustomer(
+                                          name: name,
+                                          mobile: '+91 $cleanPhone',
+                                          address: addressCtrl.text.trim(),
+                                          notes: notesCtrl.text.trim(),
+                                        );
+                                        final newCust = Customer(
+                                          id: (res['id'] ?? 0) as int,
+                                          name: name,
+                                          mobile: '+91 $cleanPhone',
+                                          address: addressCtrl.text.trim(),
+                                          notes: notesCtrl.text.trim(),
+                                        );
+
+                                        if (ctx.mounted) {
+                                          Navigator.pop(ctx);
+                                        }
+                                        _loadCustomers();
+
+                                        if (mounted) {
+                                          if (widget.isSelectMode) {
+                                            widget.onSelectCustomer?.call(newCust);
+                                            Navigator.pop(context, newCust);
+                                          } else {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => NewOrderScreen(preSelectedCustomer: newCust),
+                                              ),
+                                            );
+                                          }
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Customer "$name" save ho gaya! Naya order shuru karein.'),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                        }
+                                      } catch (err) {
+                                        setModalState(() => isSaving = false);
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
+                                          );
+                                        }
+                                      }
+                                    },
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
