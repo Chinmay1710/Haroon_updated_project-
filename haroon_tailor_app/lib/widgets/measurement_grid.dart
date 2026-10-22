@@ -50,23 +50,6 @@ class _MeasurementGridState extends State<MeasurementGrid> {
     setState(() {});
   }
 
-  void _insertFraction(String fraction) {
-    final active = _currentActiveBox;
-    if (active == null || widget.controllers == null) return;
-    final key = 'Box $active';
-    final ctrl = widget.controllers![key];
-    if (ctrl == null) return;
-
-    final curText = ctrl.text.trim();
-    if (curText.isEmpty) {
-      ctrl.text = fraction;
-    } else {
-      ctrl.text = '$curText $fraction';
-    }
-    widget.onChanged?.call(key, ctrl.text);
-    setState(() {});
-  }
-
   void _handleBackspace() {
     final active = _currentActiveBox;
     if (active == null || widget.controllers == null) return;
@@ -122,61 +105,6 @@ class _MeasurementGridState extends State<MeasurementGrid> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Quick fraction helper toolbar for mobile tailors when editing
-        if (!widget.isReadOnly) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  active != null ? 'Box $active:' : 'Tap box & tap:',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: ['1/4', '1/2', '3/4', '.5'].map((f) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: InkWell(
-                            onTap: () {
-                              HapticFeedback.lightImpact();
-                              _insertFraction(f);
-                            },
-                            borderRadius: BorderRadius.circular(6),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFF0F172A).withValues(alpha: 0.3)),
-                                boxShadow: const [
-                                  BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1)),
-                                ],
-                              ),
-                              child: Text(
-                                f,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0F172A)),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
 
         // 6 Columns x 4 Rows = 24 Boxes (Exact website layout)
         LayoutBuilder(
