@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'custom_measurement_keypad.dart';
 
 class MeasurementGrid extends StatefulWidget {
   final Map<String, TextEditingController>? controllers;
   final Map<String, dynamic>? staticValues;
   final bool isReadOnly;
+  final int? activeBoxIndex;
+  final ValueChanged<int?>? onBoxSelected;
   final Function(String key, String value)? onChanged;
 
   const MeasurementGrid({
@@ -11,6 +15,8 @@ class MeasurementGrid extends StatefulWidget {
     this.controllers,
     this.staticValues,
     this.isReadOnly = false,
+    this.activeBoxIndex,
+    this.onBoxSelected,
     this.onChanged,
   });
 
@@ -19,11 +25,35 @@ class MeasurementGrid extends StatefulWidget {
 }
 
 class _MeasurementGridState extends State<MeasurementGrid> {
-  int? _activeBoxIndex;
+  int? _internalActiveBoxIndex;
+
+  int? get _currentActiveBox => widget.activeBoxIndex ?? _internalActiveBoxIndex;
+
+  void _setActiveBox(int? boxNum) {
+    FocusScope.of(context).unfocus(); // Dismiss native keyboard
+    if (widget.onBoxSelected != null) {
+      widget.onBoxSelected!(boxNum);
+    } else {
+      setState(() => _internalActiveBoxIndex = boxNum);
+    }
+  }
+
+  void _insertText(String text) {
+    final active = _currentActiveBox;
+    if (active == null || widget.controllers == null) return;
+    final key = 'Box $active';
+    final ctrl = widget.controllers![key];
+    if (ctrl == null) return;
+
+    ctrl.text = '${ctrl.text}$text';
+    widget.onChanged?.call(key, ctrl.text);
+    setState(() {});
+  }
 
   void _insertFraction(String fraction) {
-    if (_activeBoxIndex == null || widget.controllers == null) return;
-    final key = 'Box $_activeBoxIndex';
+    final active = _currentActiveBox;
+    if (active == null || widget.controllers == null) return;
+    final key = 'Box $active';
     final ctrl = widget.controllers![key];
     if (ctrl == null) return;
 
@@ -37,8 +67,58 @@ class _MeasurementGridState extends State<MeasurementGrid> {
     setState(() {});
   }
 
+  void _handleBackspace() {
+    final active = _currentActiveBox;
+    if (active == null || widget.controllers == null) return;
+    final key = 'Box $active';
+    final ctrl = widget.controllers![key];
+    if (ctrl == null || ctrl.text.isEmpty) return;
+
+    final val = ctrl.text;
+    // Check if ends with fraction
+    for (final frac in [' 1/4', ' 1/2', ' 3/4', ' .5', '1/4', '1/2', '3/4', '.5']) {
+      if (val.endsWith(frac)) {
+        ctrl.text = val.substring(0, val.length - frac.length);
+        widget.onChanged?.call(key, ctrl.text);
+        setState(() {});
+        return;
+      }
+    }
+    ctrl.text = val.substring(0, val.length - 1);
+    widget.onChanged?.call(key, ctrl.text);
+    setState(() {});
+  }
+
+  void _handleClear() {
+    final active = _currentActiveBox;
+    if (active == null || widget.controllers == null) return;
+    final key = 'Box $active';
+    final ctrl = widget.controllers![key];
+    if (ctrl == null) return;
+
+    ctrl.text = '';
+    widget.onChanged?.call(key, '');
+    setState(() {});
+  }
+
+  void _handleNext() {
+    final active = _currentActiveBox;
+    if (active == null) return;
+    final nextBox = active < 24 ? active + 1 : 1;
+    _setActiveBox(nextBox);
+  }
+
+  void _handlePrev() {
+    final active = _currentActiveBox;
+    if (active == null) return;
+    final prevBox = active > 1 ? active - 1 : 24;
+    _setActiveBox(prevBox);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final active = _currentActiveBox;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -54,7 +134,7 @@ class _MeasurementGridState extends State<MeasurementGrid> {
             child: Row(
               children: [
                 Text(
-                  _activeBoxIndex != null ? 'Box $_activeBoxIndex:' : 'Tap box & tap:',
+                  active != null ? 'Box $active:' : 'Tap box & tap:',
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
                 ),
                 const SizedBox(width: 8),
@@ -66,14 +146,17 @@ class _MeasurementGridState extends State<MeasurementGrid> {
                         return Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: InkWell(
-                            onTap: () => _insertFraction(f),
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              _insertFraction(f);
+                            },
                             borderRadius: BorderRadius.circular(6),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFF0F172A).withOpacity(0.3)),
+                                border: Border.all(color: const Color(0xFF0F172A).withValues(alpha: 0.3)),
                                 boxShadow: const [
                                   BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1)),
                                 ],
@@ -122,7 +205,7 @@ class _MeasurementGridState extends State<MeasurementGrid> {
                       color: hasValue ? const Color(0xFFEEF2F6) : Colors.white,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: hasValue ? const Color(0xFF0F172A).withOpacity(0.4) : Colors.grey.shade300,
+                        color: hasValue ? const Color(0xFF0F172A).withValues(alpha: 0.4) : Colors.grey.shade300,
                         width: hasValue ? 1.5 : 1,
                       ),
                     ),
@@ -161,24 +244,36 @@ class _MeasurementGridState extends State<MeasurementGrid> {
 
                 // Editable mode
                 final ctrl = widget.controllers?[key];
-                final isSelected = _activeBoxIndex == boxNum;
+                final val = ctrl?.text ?? '';
+                final isSelected = active == boxNum;
+                final hasValue = val.trim().isNotEmpty;
 
-                return Focus(
-                  onFocusChange: (hasFocus) {
-                    if (hasFocus) {
-                      setState(() => _activeBoxIndex = boxNum);
-                    }
+                return InkWell(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    _setActiveBox(boxNum);
                   },
+                  borderRadius: BorderRadius.circular(8),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: isSelected
+                          ? const Color(0xFFEFF6FF)
+                          : (hasValue ? const Color(0xFFF8FAFC) : Colors.white),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: isSelected ? const Color(0xFF0F172A) : Colors.grey.shade300,
-                        width: isSelected ? 2 : 1,
+                        color: isSelected
+                            ? const Color(0xFF2563EB)
+                            : (hasValue ? const Color(0xFF64748B) : Colors.grey.shade300),
+                        width: isSelected ? 2.5 : (hasValue ? 1.5 : 1.0),
                       ),
                       boxShadow: isSelected
-                          ? [BoxShadow(color: const Color(0xFF0F172A).withOpacity(0.15), blurRadius: 4)]
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                                blurRadius: 6,
+                                offset: const Offset(0, 1),
+                              ),
+                            ]
                           : null,
                     ),
                     child: Stack(
@@ -191,24 +286,41 @@ class _MeasurementGridState extends State<MeasurementGrid> {
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
-                              color: isSelected ? const Color(0xFF0F172A) : Colors.grey.shade400,
+                              color: isSelected
+                                  ? const Color(0xFF2563EB)
+                                  : (hasValue ? const Color(0xFF0F172A) : Colors.grey.shade400),
                             ),
                           ),
                         ),
-                        TextField(
-                          controller: ctrl,
-                          textAlign: TextAlign.center,
-                          keyboardType: TextInputType.text,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.only(top: 8, bottom: 2, left: 2, right: 2),
-                            isDense: true,
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 6, left: 2, right: 2),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    val,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Container(
+                                    width: 1.5,
+                                    height: 14,
+                                    margin: const EdgeInsets.only(left: 2),
+                                    color: const Color(0xFF2563EB),
+                                  ),
+                              ],
+                            ),
                           ),
-                          onTap: () {
-                            setState(() => _activeBoxIndex = boxNum);
-                          },
-                          onChanged: (v) => widget.onChanged?.call(key, v),
                         ),
                       ],
                     ),
@@ -218,6 +330,21 @@ class _MeasurementGridState extends State<MeasurementGrid> {
             );
           },
         ),
+
+        // Standalone inline keypad if no external parent manages keypad
+        if (!widget.isReadOnly && widget.onBoxSelected == null && active != null) ...[
+          const SizedBox(height: 12),
+          CustomMeasurementKeypad(
+            activeBoxNumber: active,
+            currentValue: widget.controllers?['Box $active']?.text ?? '',
+            onInsertText: _insertText,
+            onBackspace: _handleBackspace,
+            onClear: _handleClear,
+            onNext: _handleNext,
+            onPrev: _handlePrev,
+            onClose: () => _setActiveBox(null),
+          ),
+        ],
       ],
     );
   }

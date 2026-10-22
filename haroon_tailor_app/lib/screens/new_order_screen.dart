@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +7,7 @@ import '../models/customer.dart';
 import '../services/api_service.dart';
 import '../utils/phone_utils.dart';
 import '../widgets/measurement_grid.dart';
+import '../widgets/custom_measurement_keypad.dart';
 import 'customers_screen.dart';
 
 /// Single garment item draft inside a multi-garment order
@@ -250,6 +250,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
     final List<Uint8List> tempBytes = List<Uint8List>.from(existingItem?.imageBytesList ?? []);
     final List<String> tempB64 = List<String>.from(existingItem?.imageBase64List ?? []);
+    int? activeBoxNum;
 
     await showModalBottomSheet(
       context: context,
@@ -341,6 +342,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                         child: TextFormField(
                                           controller: qtyCtrl,
                                           keyboardType: TextInputType.number,
+                                          onTap: () {
+                                            if (activeBoxNum != null) {
+                                              setEditorState(() => activeBoxNum = null);
+                                            }
+                                          },
                                           inputFormatters: [
                                             FilteringTextInputFormatter.digitsOnly,
                                             LengthLimitingTextInputFormatter(3),
@@ -359,6 +365,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                         child: TextFormField(
                                           controller: priceCtrl,
                                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          onTap: () {
+                                            if (activeBoxNum != null) {
+                                              setEditorState(() => activeBoxNum = null);
+                                            }
+                                          },
                                           inputFormatters: [
                                             FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                                           ],
@@ -447,7 +458,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 12),
-                                  MeasurementGrid(controllers: tempControllers),
+                                  MeasurementGrid(
+                                    controllers: tempControllers,
+                                    activeBoxIndex: activeBoxNum,
+                                    onBoxSelected: (box) {
+                                      FocusScope.of(context).unfocus();
+                                      setEditorState(() => activeBoxNum = box);
+                                    },
+                                  ),
                                 ],
                               ),
                             ),
@@ -575,6 +593,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                   TextFormField(
                                     controller: notesCtrl,
                                     maxLines: 2,
+                                    onTap: () {
+                                      if (activeBoxNum != null) {
+                                        setEditorState(() => activeBoxNum = null);
+                                      }
+                                    },
                                     decoration: InputDecoration(
                                       hintText: 'Jaise: Collar Chinese rahega, single pocket, etc.',
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -590,29 +613,83 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                     ),
                   ),
 
-                  // Bottom Save Garment Button
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -4)),
-                      ],
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.check, color: Colors.white),
-                        label: Text(
-                          isEditing ? 'Kapda Update Karein (Rs. ${itemTotal.toStringAsFixed(0)})' : 'Is Kapde Ko Order Me Jodein (Rs. ${itemTotal.toStringAsFixed(0)})',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F172A),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: () {
+                  // Bottom Actions: Custom Keypad or Save Garment Button
+                  if (activeBoxNum != null)
+                    CustomMeasurementKeypad(
+                      activeBoxNumber: activeBoxNum!,
+                      currentValue: tempControllers['Box $activeBoxNum']?.text ?? '',
+                      onInsertText: (txt) {
+                        final ctrl = tempControllers['Box $activeBoxNum'];
+                        if (ctrl != null) {
+                          setEditorState(() {
+                            ctrl.text = '${ctrl.text}$txt';
+                          });
+                        }
+                      },
+                      onBackspace: () {
+                        final ctrl = tempControllers['Box $activeBoxNum'];
+                        if (ctrl != null && ctrl.text.isNotEmpty) {
+                          final val = ctrl.text;
+                          String newVal = val.substring(0, val.length - 1);
+                          for (final frac in [' 1/4', ' 1/2', ' 3/4', ' .5', '1/4', '1/2', '3/4', '.5']) {
+                            if (val.endsWith(frac)) {
+                              newVal = val.substring(0, val.length - frac.length);
+                              break;
+                            }
+                          }
+                          setEditorState(() {
+                            ctrl.text = newVal;
+                          });
+                        }
+                      },
+                      onClear: () {
+                        final ctrl = tempControllers['Box $activeBoxNum'];
+                        if (ctrl != null) {
+                          setEditorState(() {
+                            ctrl.text = '';
+                          });
+                        }
+                      },
+                      onNext: () {
+                        setEditorState(() {
+                          activeBoxNum = (activeBoxNum! < 24) ? activeBoxNum! + 1 : 1;
+                        });
+                      },
+                      onPrev: () {
+                        setEditorState(() {
+                          activeBoxNum = (activeBoxNum! > 1) ? activeBoxNum! - 1 : 24;
+                        });
+                      },
+                      onClose: () {
+                        setEditorState(() {
+                          activeBoxNum = null;
+                        });
+                      },
+                    )
+                  else
+                    // Bottom Save Garment Button
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, -4)),
+                        ],
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.check, color: Colors.white),
+                          label: Text(
+                            isEditing ? 'Kapda Update Karein (Rs. ${itemTotal.toStringAsFixed(0)})' : 'Is Kapde Ko Order Me Jodein (Rs. ${itemTotal.toStringAsFixed(0)})',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
                           final parsedPrice = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
                           final parsedQty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
 
