@@ -280,5 +280,27 @@ class ApiService {
     getDashboardStats().ignore();
     return Map<String, dynamic>.from(res ?? {});
   }
+
+  static Future<Map<String, dynamic>> updateShopSettings(Map<String, dynamic> settings) async {
+    try {
+      final res = await dispatch('update_settings', settings);
+      final updated = await getShopSettings();
+      await LocalStorageService.saveShopSettings(updated);
+      return Map<String, dynamic>.from(res ?? {});
+    } catch (e) {
+      // Still persist locally
+      await LocalStorageService.saveShopSettings(settings);
+      return {'status': 'saved_locally', 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createDatabaseBackup() async {
+    try {
+      final res = await dispatch('create_backup');
+      return Map<String, dynamic>.from(res ?? {});
+    } catch (e) {
+      return {'status': 'error', 'message': e.toString()};
+    }
+  }
 }
 

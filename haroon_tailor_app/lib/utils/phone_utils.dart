@@ -1,4 +1,5 @@
 import 'package:url_launcher/url_launcher.dart';
+import '../services/local_storage_service.dart';
 
 class PhoneUtils {
   /// Cleans any raw phone string to a strict 12-digit Indian format (e.g. 919876543210)
@@ -101,5 +102,15 @@ class PhoneUtils {
       }
     } catch (_) {}
     return false;
+  }
+
+  /// Formats a customized message template from LocalStorageService
+  static Future<String> formatTemplate(String templateKey, Map<String, String> values) async {
+    final templates = await LocalStorageService.getMessageTemplates();
+    String tmpl = templates[templateKey] ?? (LocalStorageService.defaultMessageTemplates[templateKey] ?? '');
+    values.forEach((k, v) {
+      tmpl = tmpl.replaceAll('{$k}', v);
+    });
+    return tmpl;
   }
 }

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../models/customer.dart';
 import '../services/api_service.dart';
+import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
 import '../widgets/measurement_grid.dart';
 import '../widgets/custom_measurement_keypad.dart';
@@ -100,20 +101,12 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
   final ImagePicker _picker = ImagePicker();
 
-  final List<String> _garmentTypes = [
-    'Shirt',
-    'Pant',
-    'Kurta',
-    'Pajama',
-    'Safari Suit',
-    'Blazer / Coat',
-    'Sherwani',
-    'Custom Item'
-  ];
+  List<String> _garmentTypes = List<String>.from(LocalStorageService.defaultGarmentTypes);
 
   @override
   void initState() {
     super.initState();
+    _loadGarmentTypes();
     _isEditMode = widget.editOrder != null;
 
     if (_isEditMode) {
@@ -137,6 +130,13 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       if (widget.preSelectedCustomer != null) {
         _selectCustomer(widget.preSelectedCustomer!);
       }
+    }
+  }
+
+  Future<void> _loadGarmentTypes() async {
+    final types = await LocalStorageService.getGarmentTypes();
+    if (mounted && types.isNotEmpty) {
+      setState(() => _garmentTypes = types);
     }
   }
 
@@ -232,10 +232,23 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   // ─── ADD / EDIT GARMENT MODAL (Full 24-box Measurement Grid + Details) ─────
   Future<void> _openGarmentEditor({OrderItemDraft? existingItem, int? index}) async {
     final bool isEditing = existingItem != null;
-    String tempType = existingItem?.clothingType ?? 'Shirt';
+    final freshTypes = await LocalStorageService.getGarmentTypes();
+    final defaultRates = await LocalStorageService.getDefaultRates();
+    if (freshTypes.isNotEmpty) {
+      _garmentTypes = freshTypes;
+    }
+
+    String tempType = existingItem?.clothingType ?? (_garmentTypes.isNotEmpty ? _garmentTypes.first : 'Shirt');
+    if (!_garmentTypes.contains(tempType)) {
+      _garmentTypes.add(tempType);
+    }
+
+    final double initialRate = !isEditing && defaultRates.containsKey(tempType) ? (defaultRates[tempType] ?? 0.0) : 0.0;
     final qtyCtrl = TextEditingController(text: (existingItem?.quantity ?? 1).toString());
     final priceCtrl = TextEditingController(
-      text: existingItem != null && existingItem.price > 0 ? existingItem.price.toStringAsFixed(0) : '',
+      text: existingItem != null && existingItem.price > 0
+          ? existingItem.price.toStringAsFixed(0)
+          : (initialRate > 0 ? initialRate.toStringAsFixed(0) : ''),
     );
     final notesCtrl = TextEditingController(text: existingItem?.notes ?? '');
 
@@ -252,6 +265,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     final List<String> tempB64 = List<String>.from(existingItem?.imageBase64List ?? []);
     int? activeBoxNum;
 
+    if (!mounted) return;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -330,7 +344,15 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                     items: _garmentTypes.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                                     onChanged: (val) {
                                       if (val != null) {
-                                        setEditorState(() => tempType = val);
+                                        setEditorState(() {
+                                          tempType = val;
+                                          if (!isEditing && (priceCtrl.text.isEmpty || priceCtrl.text == '0')) {
+                                            final defPrice = defaultRates[val] ?? 0.0;
+                                            if (defPrice > 0) {
+                                              priceCtrl.text = defPrice.toStringAsFixed(0);
+                                            }
+                                          }
+                                        });
                                       }
                                     },
                                   ),
@@ -1000,15 +1022,17 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             final delivDateStr = DateFormat('dd/MM/yyyy').format(_deliveryDate);
             final itemsStr = _items.map((i) => '${i.quantity} ${i.clothingType}').join(', ');
 
-            final msg =
-                '✨ ${_customer!.name}! ✨\n\n'
-                '$shopName ko chunne ke liye shukriya! Aapka order #$billNo ($itemsStr) safaltapoorvak darj kar liya gaya hai.\n\n'
-                '👔 Kul Bill: Rs. $totalAmt\n'
-                '💵 Jama Rashi: Rs. $_advance\n'
-                '⏳ Baqaya Rashi: Rs. $remainingAmt\n'
-                '📅 Delivery ki Tareekh: $delivDateStr\n\n'
-                'Note: Jummah (Friday) ko dukan band rehti hai.\n\n'
-                'Shukriya!\n$shopName';
+            final msg = await PhoneUtils.formatTemplate('new_order', {
+              'customer_name': _customer!.name,
+              'order_number': billNo.toString(),
+              'garments': itemsStr,
+              'total_amount': totalAmt.toStringAsFixed(0),
+              'advance_amount': _advance.toStringAsFixed(0),
+              'balance_amount': remainingAmt.toStringAsFixed(0),
+              'delivery_date': delivDateStr,
+              'shop_name': shopName.toString(),
+              'shop_phone': shopSettings['phone']?.toString() ?? '',
+            });
 
             await PhoneUtils.openWhatsApp(_customer!.mobile, msg);
           }

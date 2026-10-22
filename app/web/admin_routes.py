@@ -1554,7 +1554,15 @@ def handle_open_url(payload):
     return {"status": "success", "data": {"url": url}}
 
 def handle_create_backup(payload):
-    return {"status": "error", "message": "Backup is only available on the desktop app."}
+    try:
+        from app.services.backup_service import BackupService
+        svc = BackupService()
+        path = svc.create_backup()
+        if path:
+            return {"status": "success", "data": {"backup_path": path, "message": "Database backup created successfully."}}
+        return {"status": "warning", "message": "Database is empty or backup skipped."}
+    except Exception as e:
+        return {"status": "error", "message": f"Backup failed: {str(e)}"}
 
 def handle_restore_backup(payload):
     return {"status": "error", "message": "Restore is only available on the desktop app."}
