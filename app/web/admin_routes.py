@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from app.database.engine import get_session
@@ -1570,6 +1570,210 @@ def handle_restore_backup(payload):
 def handle_erase_all_data(payload):
     return {"status": "error", "message": "Data reset is only available on the desktop app."}
 
+def handle_export_full_master_backup(payload):
+    """
+    Exports a 100% complete master snapshot of all customers, measurement profiles,
+    orders (with exact status, item breakdown, 24 measurements, Cloudinary photos,
+    and payment history), expenses, workers, stock items, plus shop settings.
+    """
+    from app.models.customer import Customer
+    from app.models.order import Order, OrderItem, OrderMeasurement
+    from app.models.payment import Payment
+    from app.models.measurement import MeasurementProfile, MeasurementValue
+    from app.models.settings import ShopSettings
+    from app.models.expense import Expense
+    from app.models.worker import Worker
+    from app.models.stock import StockItem
+    from sqlalchemy.orm import joinedload
+    
+    session = get_session()
+    try:
+        # 1. Shop Settings
+        s = session.query(ShopSettings).first()
+        settings_data = {
+            "shop_name": s.shop_name if s else "Haroon Tailor",
+            "owner_name": s.owner_name if s else "",
+            "phone": s.phone if s else "",
+            "address": s.address if s else "",
+            "clothing_types": s.clothing_types if s else "",
+            "currency": s.currency if s else "₹",
+            "measurement_unit": s.measurement_unit if s else "Inches (in)"
+        }
+        
+        # 2. Customers & Profiles
+        customers = session.query(Customer).order_by(Customer.id.asc()).all()
+        cust_list = []
+        for c in customers:
+            profs_data = []
+            for p in c.measurement_profiles:
+                vals = {}
+                for v in p.values:
+                    vals[v.field_name] = v.field_value
+                profs_data.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "template_type": p.template_type,
+                    "unit": p.unit or "inches",
+                    "values": vals,
+                    "notes": p.notes or ""
+                })
+            cust_list.append({
+                "id": c.id,
+                "name": c.name,
+                "mobile": c.mobile or "",
+                "address": c.address or "",
+                "notes": c.notes or "",
+                "is_active": getattr(c, "is_active", True),
+                "created_at": c.created_at.isoformat() if hasattr(c, "created_at") and c.created_at else "",
+                "measurement_profiles": profs_data
+            })
+            
+        # 3. Orders with items, measurements, and payments
+        orders = session.query(Order).options(
+            joinedload(Order.items).joinedload(OrderItem.measurements),
+            joinedload(Order.payments)
+        ).order_by(Order.id.asc()).all()
+        
+        orders_list = []
+        for o in orders:
+            items_data = []
+            for it in o.items:
+                meas = {}
+                for m in it.measurements:
+                    meas[m.field_name] = m.field_value
+                
+                # Ensure Cloudinary / full accessible URL
+                img_url = _fix_image_path(it.image_path)
+                
+                items_data.append({
+                    "id": it.id,
+                    "clothing_type": it.clothing_type,
+                    "quantity": it.quantity,
+                    "price": it.price,
+                    "notes": it.notes or "",
+                    "raw_image_path": it.image_path or "",
+                    "image_path": img_url,
+                    "is_delivered": getattr(it, "is_delivered", False),
+                    "is_ready": getattr(it, "is_ready", False),
+                    "measurements": meas
+                })
+            
+            payments_data = []
+            for p in o.payments:
+                payments_data.append({
+                    "id": p.id,
+                    "amount": p.amount,
+                    "payment_date": p.payment_date.isoformat() if p.payment_date else "",
+                    "payment_method": p.payment_method or "CASH",
+                    "notes": getattr(p, "notes", "") or ""
+                })
+                
+            orders_list.append({
+                "id": o.id,
+                "order_number": o.order_number,
+                "customer_id": o.customer_id,
+                "customer_name": o.customer.name if o.customer else "",
+                "customer_mobile": o.customer.mobile if o.customer else "",
+                "order_date": o.order_date.isoformat() if o.order_date else "",
+                "delivery_date": o.delivery_date.isoformat() if o.delivery_date else "",
+                "status": o.status,
+                "total_amount": o.total_amount,
+                "discount": getattr(o, "discount", 0.0),
+                "advance_amount": getattr(o, "advance_amount", 0.0),
+                "paid_amount": getattr(o, "paid_amount", 0.0),
+                "remaining_amount": o.remaining_amount,
+                "special_instructions": o.special_instructions or "",
+                "notes": getattr(o, "notes", "") or "",
+                "created_at": o.created_at.isoformat() if hasattr(o, "created_at") and o.created_at else "",
+                "items": items_data,
+                "payments": payments_data
+            })
+            
+        # 4. Expenses
+        expenses = session.query(Expense).order_by(Expense.id.asc()).all()
+        expenses_list = [
+            {
+                "id": ex.id,
+                "name": ex.name,
+                "category": ex.category,
+                "amount": ex.amount,
+                "expense_date": ex.expense_date.isoformat() if ex.expense_date else "",
+                "note": ex.note or ""
+            }
+            for ex in expenses
+        ]
+        
+        # 5. Workers
+        workers = session.query(Worker).order_by(Worker.id.asc()).all()
+        workers_list = [
+            {
+                "id": w.id,
+                "name": w.name,
+                "phone": w.phone or "",
+                "pin": w.pin,
+                "worker_type": str(w.worker_type),
+                "worker_role": str(w.worker_role),
+                "daily_rate": w.daily_rate,
+                "is_active": w.is_active
+            }
+            for w in workers
+        ]
+        
+        # 6. Stock Items
+        stock_items = session.query(StockItem).order_by(StockItem.id.asc()).all()
+        stock_list = [
+            {
+                "id": st.id,
+                "name": st.name,
+                "category": st.category,
+                "quantity": st.quantity,
+                "unit": st.unit,
+                "min_quantity": st.min_quantity,
+                "unit_cost": st.unit_cost
+            }
+            for st in stock_items
+        ]
+        
+        return {
+            "status": "success",
+            "data": {
+                "app": "Haroon Tailor",
+                "version": "1.0.0",
+                "export_date": datetime.now().isoformat(),
+                "total_customers": len(cust_list),
+                "total_orders": len(orders_list),
+                "total_expenses": len(expenses_list),
+                "total_workers": len(workers_list),
+                "total_stock_items": len(stock_list),
+                "settings": settings_data,
+                "customers": cust_list,
+                "orders": orders_list,
+                "expenses": expenses_list,
+                "workers": workers_list,
+                "stock_items": stock_list
+            }
+        }
+    except Exception as e:
+        logger.exception("Export full master backup failed")
+        return {"status": "error", "message": f"Export failed: {str(e)}"}
+    finally:
+        session.close()
+
+@router.get("/export-full-backup")
+async def export_full_backup_download():
+    """Direct 1-click download of the complete master JSON backup."""
+    res = handle_export_full_master_backup({})
+    if res.get("status") == "success":
+        content = json.dumps(res.get("data", {}), indent=2, ensure_ascii=False)
+        filename = f"HaroonTailor_Master_Backup_{datetime.now().strftime('%Y-%m-%d')}.json"
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    return JSONResponse(res, status_code=500)
+
+
 
 # ─── Action handler map (matches web_bridge.py dispatch action names) ─────────
 def handle_get_pending_orders(payload):
@@ -1765,4 +1969,5 @@ ACTION_HANDLERS = {
     "create_backup": handle_create_backup,
     "restore_backup": handle_restore_backup,
     "erase_all_data": handle_erase_all_data,
+    "export_full_master_backup": handle_export_full_master_backup,
 }
