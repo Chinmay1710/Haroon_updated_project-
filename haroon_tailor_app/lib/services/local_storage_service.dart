@@ -460,6 +460,51 @@ class LocalStorageService {
     return const JsonEncoder.withIndent('  ').convert(backupData);
   }
 
+  static Future<String> exportFullMasterBackupJson() async {
+    final orders = await getCachedOrders();
+    final customers = await getCachedCustomers();
+    final settings = await getCachedShopSettings();
+
+    final List<dynamic> detailedOrders = [];
+    int totalPhotos = 0;
+    int totalMeasurements = 0;
+
+    if (orders != null) {
+      for (var o in orders) {
+        if (o is Map && o['id'] != null) {
+          final det = await getCachedOrderDetails(o['id'] as int);
+          final orderData = det ?? o;
+          detailedOrders.add(orderData);
+
+          final items = orderData['items'] as List<dynamic>? ?? [];
+          for (var it in items) {
+            if (it is Map) {
+              if ((it['image_path']?.toString() ?? '').isNotEmpty) {
+                totalPhotos++;
+              }
+              final meas = it['measurements'] as Map<String, dynamic>? ?? {};
+              totalMeasurements += meas.length;
+            }
+          }
+        }
+      }
+    }
+
+    final Map<String, dynamic> backupData = {
+      'app': 'Haroon Tailor',
+      'version': '1.0.0',
+      'export_timestamp': DateTime.now().toIso8601String(),
+      'total_customers': customers?.length ?? 0,
+      'total_orders': detailedOrders.length,
+      'total_photos': totalPhotos,
+      'total_measurements': totalMeasurements,
+      'settings': settings ?? {},
+      'customers': customers ?? [],
+      'orders': detailedOrders,
+    };
+    return const JsonEncoder.withIndent('  ').convert(backupData);
+  }
+
   static Future<bool> importLocalBackupJson(String rawJson) async {
     try {
       final decoded = jsonDecode(rawJson);
@@ -491,6 +536,173 @@ class LocalStorageService {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // MASTER BACKUP RESTORE (Full 360 Orders, Photos, Measurements, Customers)
+  // -------------------------------------------------------------
+  static Future<Map<String, dynamic>> importMasterBackupMap(Map<String, dynamic> data) async {
+    int importedCustomers = 0;
+    int importedOrders = 0;
+    int totalPhotos = 0;
+    int totalMeasurements = 0;
+
+    try {
+      // 1. Settings
+      if (data['settings'] is Map) {
+        final settings = Map<String, dynamic>.from(data['settings']);
+        await saveShopSettings(settings);
+        if (settings['clothing_types'] != null) {
+          final typesStr = settings['clothing_types'].toString();
+          final typesList = typesStr
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+          if (typesList.isNotEmpty) {
+            await saveGarmentTypes(typesList);
+          }
+        }
+      }
+
+      // 2. Customers
+      final customersRaw = data['customers'];
+      if (customersRaw is List) {
+        final List<dynamic> customersList = [];
+        for (var c in customersRaw) {
+          if (c is Map) {
+            final custMap = Map<String, dynamic>.from(c);
+            customersList.add(custMap);
+            final custId = custMap['id'];
+            if (custId is int) {
+              await saveCustomerDetails(custId, {
+                'customer': custMap,
+                'profiles': custMap['profiles'] ?? [],
+              });
+            }
+            importedCustomers++;
+          }
+        }
+        await saveCustomers(customersList);
+      }
+
+      // 3. Orders
+      final ordersRaw = data['orders'];
+      if (ordersRaw is List) {
+        final List<dynamic> ordersSummaryList = [];
+        final List<dynamic> pendingOrdersList = [];
+        double totalRevenue = 0.0;
+        double pendingBalance = 0.0;
+        int activeOrders = 0;
+        int deliveredOrders = 0;
+
+        for (var o in ordersRaw) {
+          if (o is Map) {
+            final orderMap = Map<String, dynamic>.from(o);
+            final orderId = orderMap['id'];
+            final remaining = (orderMap['remaining_amount'] as num?)?.toDouble() ?? 0.0;
+            final total = (orderMap['total_amount'] as num?)?.toDouble() ?? 0.0;
+            final status = orderMap['status']?.toString().toUpperCase() ?? 'NEW';
+
+            // Save deep order details (with items, 24 measurements, photos, payments)
+            if (orderId is int) {
+              await saveOrderDetails(orderId, orderMap);
+            }
+
+            // Summary format for list view
+            String itemsSummary = orderMap['items_summary']?.toString() ?? '';
+            String photoUrl = '';
+            final items = orderMap['items'] as List<dynamic>? ?? [];
+            for (var it in items) {
+              if (it is Map) {
+                final p = it['image_path']?.toString() ?? '';
+                if (p.isNotEmpty) {
+                  photoUrl = p;
+                  totalPhotos++;
+                }
+                final meas = it['measurements'] as Map<String, dynamic>? ?? {};
+                totalMeasurements += meas.length;
+              }
+            }
+
+            final summaryItem = {
+              'id': orderId,
+              'order_number': orderMap['order_number'] ?? 'Bill-$orderId',
+              'customer_name': orderMap['customer_name'] ?? 'Unknown',
+              'customer_id': orderMap['customer_id'],
+              'customer_mobile': orderMap['customer_mobile'] ?? '',
+              'items': itemsSummary.isNotEmpty ? itemsSummary : 'Garments',
+              'raw_items': items,
+              'image_path': photoUrl,
+              'order_date': orderMap['order_date'] ?? '',
+              'delivery_date': orderMap['delivery_date'] ?? '',
+              'status': status,
+              'total_amount': total,
+              'discount': (orderMap['discount'] as num?)?.toDouble() ?? 0.0,
+              'remaining_amount': remaining,
+              'updated_at': orderMap['updated_at'] ?? '',
+            };
+
+            ordersSummaryList.add(summaryItem);
+
+            if (remaining > 0) {
+              pendingOrdersList.add(summaryItem);
+              pendingBalance += remaining;
+            }
+
+            if (status == 'DELIVERED') {
+              deliveredOrders++;
+            } else if (status != 'CANCELLED') {
+              activeOrders++;
+            }
+
+            totalRevenue += (total - remaining);
+            importedOrders++;
+          }
+        }
+
+        await saveOrders(ordersSummaryList);
+        await savePendingOrders(pendingOrdersList);
+
+        // Save computed dashboard stats so everything loads instantly
+        final stats = {
+          'total_orders': importedOrders,
+          'active_orders': activeOrders,
+          'delivered_orders': deliveredOrders,
+          'total_revenue': totalRevenue,
+          'pending_balance': pendingBalance,
+          'completed_today': 0,
+        };
+        await saveDashboardStats(stats);
+      }
+
+      await _recordSyncTime();
+
+      return {
+        'success': true,
+        'customers_count': importedCustomers,
+        'orders_count': importedOrders,
+        'photos_count': totalPhotos,
+        'measurements_count': totalMeasurements,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> importMasterBackupJson(String rawJson) async {
+    try {
+      final decoded = jsonDecode(rawJson);
+      if (decoded is! Map<String, dynamic>) {
+        return {'success': false, 'error': 'Invalid JSON format'};
+      }
+      return await importMasterBackupMap(decoded);
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
     }
   }
 

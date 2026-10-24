@@ -302,5 +302,10 @@ class ApiService {
       return {'status': 'error', 'message': e.toString()};
     }
   }
+
+  static Future<Map<String, dynamic>> exportFullMasterBackup() async {
+    final res = await dispatch('export_full_master_backup');
+    return Map<String, dynamic>.from(res ?? {});
+  }
 }
 

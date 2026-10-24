@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
+import '../utils/file_helper.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ValueChanged<ThemeMode>? onThemeChanged;
@@ -307,24 +309,161 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
   }
 
+  Future<void> _downloadMasterBackupFile() async {
+    setState(() => _isBackingUp = true);
+    try {
+      String jsonStr = '';
+      // Try local full master backup first
+      jsonStr = await LocalStorageService.exportFullMasterBackupJson();
+
+      // If local storage is empty, fetch from server
+      if (jsonStr.isEmpty || jsonStr.contains('"total_orders": 0')) {
+        try {
+          final res = await ApiService.exportFullMasterBackup();
+          if (res.isNotEmpty && (res['orders'] != null || res['total_orders'] != null)) {
+            jsonStr = const JsonEncoder.withIndent('  ').convert(res);
+          }
+        } catch (_) {}
+      }
+
+      await FileHelper.downloadBackupJson(jsonContent: jsonStr);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Master Backup file (.json) download shuru ho gayi!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBackingUp = false);
+    }
+  }
+
+  Future<void> _restoreFromFilePicker() async {
+    try {
+      final jsonStr = await FileHelper.pickBackupJsonFile();
+      if (jsonStr == null || jsonStr.trim().isEmpty) {
+        return; // User cancelled
+      }
+
+      setState(() => _isBackingUp = true);
+      final raw = jsonStr.trim();
+      final res = await LocalStorageService.importMasterBackupJson(raw);
+      await _loadAllSettings();
+      setState(() => _isBackingUp = false);
+
+      if (!mounted) return;
+      if (res['success'] == true) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 28),
+                SizedBox(width: 8),
+                Text('Backup File Restored!'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Aapki backup file se poora data offline load ho gaya:'),
+                const SizedBox(height: 14),
+                _buildRestoreStatRow(Icons.receipt_long, '${res['orders_count']} Orders (Exact status & balance)'),
+                _buildRestoreStatRow(Icons.people, '${res['customers_count']} Customers & Mobile numbers'),
+                _buildRestoreStatRow(Icons.photo_library, '${res['photos_count']} Cloudinary Photos linked'),
+                _buildRestoreStatRow(Icons.straighten, '${res['measurements_count']} Naap measurements preserved'),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.offline_bolt, color: Colors.green, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Ab yeh app 100% offline chalega!',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context, true);
+                },
+                child: const Text('Dashboard Dekhein'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Restore error: ${res['error'] ?? "Invalid backup file"}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isBackingUp = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildRestoreStatRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF2563EB)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+
   Future<void> _importLocalBackup() async {
     final textCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Restore Data from Backup JSON'),
+        title: const Text('Paste Backup JSON Text'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Apna pehle se copy kiya gaya backup JSON yahan paste karein:'),
+            const Text('Apna backup JSON yahan paste karein:'),
             const SizedBox(height: 10),
             TextField(
               controller: textCtrl,
               maxLines: 6,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               decoration: const InputDecoration(
-                hintText: '{\n  "clothing_types": [...],\n  ...\n}',
+                hintText: '{\n  "orders": [...],\n  "customers": [...]\n}',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -341,73 +480,51 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
 
     if (confirmed == true && textCtrl.text.trim().isNotEmpty) {
-      final success = await LocalStorageService.importLocalBackupJson(textCtrl.text.trim());
-      if (success) {
+      final raw = textCtrl.text.trim();
+      final res = await LocalStorageService.importMasterBackupJson(raw);
+      if (res['success'] == true) {
         await _loadAllSettings();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Backup successfully restore ho gaya!'), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text('✅ ${res['orders_count']} Orders & ${res['customers_count']} Customers restore ho gaye!'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid JSON format! Restore fail ho gaya.'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Restore error: ${res['error'] ?? "Invalid JSON"}'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
     }
   }
 
-  Future<void> _triggerServerBackup() async {
-    setState(() => _isBackingUp = true);
-    final res = await ApiService.createDatabaseBackup();
-    setState(() => _isBackingUp = false);
-
-    if (!mounted) return;
-    if (res['status'] == 'success') {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.cloud_done, color: Colors.green),
-              SizedBox(width: 8),
-              Text('Server Backup Complete'),
-            ],
-          ),
-          content: Text(
-            'Database backup create ho chuka hai!\n\nFile Path:\n${res['data']?['backup_path'] ?? 'Server Storage'}',
-          ),
-          actions: [
-            ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
-          ],
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message']?.toString() ?? 'Server backup failed!'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-  }
-
-  Future<void> _clearLocalCache() async {
+  Future<void> _startFreshOfflineApp() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Offline Cache Clear Karein?'),
+        title: const Row(
+          children: [
+            Icon(Icons.cleaning_services, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Fresh App Shuru Karein?'),
+          ],
+        ),
         content: const Text(
-          'Offline cached data delete ho jayega. Agli baar internet se fresh data download hoga. Database safe rahega.',
+          'Yeh local cache ko poora reset/saaf kar dega taaki aap bilkul fresh app dekh sakein.\n\nFir aap "Restore Backup (Select File)" click karke backup file select karenge aur poora data turant wapas aa jayega.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clear Cache', style: TextStyle(color: Colors.white)),
+            child: const Text('Clear & Start Fresh'),
           ),
         ],
       ),
@@ -418,7 +535,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       await _loadAllSettings();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Local cache clear ho gaya!'), backgroundColor: Colors.blueGrey),
+          const SnackBar(
+            content: Text('App fresh reset ho gaya! Ab Restore Backup se file select karein.'),
+            backgroundColor: Colors.blueGrey,
+          ),
         );
       }
     }
@@ -909,7 +1029,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 16),
 
-          // Actions
+          // Primary 1-Click File Actions Card
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
@@ -917,38 +1037,82 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             child: Column(
               children: [
                 ListTile(
-                  leading: const CircleAvatar(backgroundColor: Color(0xFFEFF6FF), child: Icon(Icons.download, color: Color(0xFF2563EB))),
-                  title: const Text('Export Local JSON Backup', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Copy or download all offline customer & order data snapshot.'),
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xFFEFF6FF),
+                    child: _isBackingUp
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.file_download, color: Color(0xFF2563EB)),
+                  ),
+                  title: const Text('Download Master Backup File (.JSON)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Click karte hi computer/phone me complete 360 orders aur photos ki backup file download hogi.'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: _exportLocalBackup,
+                  onTap: _isBackingUp ? null : _downloadMasterBackupFile,
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const CircleAvatar(backgroundColor: Color(0xFFF0FDF4), child: Icon(Icons.upload, color: Color(0xFF16A34A))),
-                  title: const Text('Restore Data from Backup', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Paste backup JSON to restore all measurements and history.'),
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFF0FDF4),
+                    child: Icon(Icons.folder_open, color: Color(0xFF16A34A)),
+                  ),
+                  title: const Text('Restore Backup (Select File)', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                  subtitle: const Text('Apni downloaded backup file (.json) select karein aur poora data offline load karein.'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _isBackingUp ? null : _restoreFromFilePicker,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Secondary & Manual Actions
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFFFFBEB),
+                    child: Icon(Icons.content_paste, color: Color(0xFFD97706)),
+                  ),
+                  title: const Text('Paste Backup JSON Text (Manual)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('File select karne ke bajaye direct text copy-paste karke restore karein.'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _importLocalBackup,
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFFAF5FF),
-                    child: _isBackingUp ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.storage, color: Color(0xFF9333EA)),
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFF8FAFC),
+                    child: Icon(Icons.copy, color: Color(0xFF64748B)),
                   ),
-                  title: const Text('Trigger Server Database Backup (.ZIP)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Server SQLite DB and attachments zipped into hard drive/drive.'),
+                  title: const Text('Copy Backup JSON to Clipboard', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Offline data JSON ko screen par dekhkar clipboard me copy karein.'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: _isBackingUp ? null : _triggerServerBackup,
+                  onTap: _exportLocalBackup,
                 ),
-                const Divider(height: 1),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Testing & Reset
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Column(
+              children: [
                 ListTile(
-                  leading: const CircleAvatar(backgroundColor: Color(0xFFFEF2F2), child: Icon(Icons.delete_sweep, color: Colors.red)),
-                  title: const Text('Clear Local Cache', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                  subtitle: const Text('Clear local cached files to force re-download from server.'),
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFFEF2F2),
+                    child: Icon(Icons.cleaning_services, color: Colors.red),
+                  ),
+                  title: const Text('Start Fresh Offline App (Clear All Data)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  subtitle: const Text('App ko khali karke fresh chalu karein taaki aap restore test kar sakein.'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: _clearLocalCache,
+                  onTap: _startFreshOfflineApp,
                 ),
               ],
             ),
