@@ -10,14 +10,18 @@ class DeliveriesScreen extends StatefulWidget {
   const DeliveriesScreen({super.key});
 
   @override
-  State<DeliveriesScreen> createState() => _DeliveriesScreenState();
+  State<DeliveriesScreen> createState() => DeliveriesScreenState();
 }
 
-class _DeliveriesScreenState extends State<DeliveriesScreen> {
+class DeliveriesScreenState extends State<DeliveriesScreen> {
   bool _isLoading = true;
   List<dynamic> _deliveries = [];
   List<dynamic> _filteredDeliveries = [];
   final TextEditingController _searchCtrl = TextEditingController();
+
+  void reloadDeliveries() {
+    _loadDeliveries();
+  }
 
   @override
   void initState() {
@@ -74,14 +78,36 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
       _filteredDeliveries = _deliveries.where((d) {
         final custName = (d['customer_name'] ?? '').toString().toLowerCase();
         final orderNum = (d['order_number'] ?? '').toString().toLowerCase();
-        final items = (d['items'] ?? '').toString().toLowerCase();
-        return custName.contains(q) || orderNum.contains(q) || items.contains(q);
+        final itemsStr = _formatItems(d).toLowerCase();
+        return custName.contains(q) || orderNum.contains(q) || itemsStr.contains(q);
       }).toList();
     }
   }
 
+  String _formatItems(Map<String, dynamic> d) {
+    final summary = (d['items_summary'] ?? '').toString().trim();
+    if (summary.isNotEmpty && !summary.startsWith('[') && !summary.startsWith('{')) {
+      return summary;
+    }
+    final rawItems = d['items'];
+    if (rawItems is List && rawItems.isNotEmpty) {
+      return rawItems.map((it) {
+        if (it is Map) {
+          final qty = it['quantity'] ?? 1;
+          final type = it['clothing_type'] ?? it['item_name'] ?? 'Kapda';
+          return '$qty $type';
+        }
+        return it.toString();
+      }).join(', ');
+    }
+    if (rawItems is String && rawItems.isNotEmpty && !rawItems.startsWith('[') && !rawItems.startsWith('{')) {
+      return rawItems;
+    }
+    return 'Kapde';
+  }
+
   Future<void> _handleDelivery(Map<String, dynamic> d) async {
-    final orderId = d['id'] as int;
+    final orderId = int.tryParse((d['id'] ?? '').toString()) ?? 0;
     final custName = d['customer_name'] ?? 'Unknown';
     final billNo = d['order_number'] ?? '';
     final remaining = double.tryParse((d['remaining_amount'] ?? 0).toString()) ?? 0.0;
@@ -325,12 +351,12 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
                           separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, index) {
                             final d = Map<String, dynamic>.from(_filteredDeliveries[index]);
-                            final orderId = d['id'] as int;
+                            final orderId = int.tryParse((d['id'] ?? '').toString()) ?? 0;
                             final remaining = double.tryParse((d['remaining_amount'] ?? 0).toString()) ?? 0.0;
                             final isDelivered = d['status'] == 'DELIVERED';
                             final billNo = d['order_number'] ?? '';
                             final custName = d['customer_name'] ?? 'Unknown';
-                            final items = d['items'] ?? 'Garment';
+                            final itemsStr = _formatItems(d);
                             final phone = (d['customer_mobile'] ?? '').toString();
 
                             return Card(
@@ -388,7 +414,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                       ),
                                       const SizedBox(height: 4),
-                                      Text('Item: $items', style: TextStyle(color: Colors.grey.shade700, fontSize: 14)),
+                                      Text('Item: $itemsStr', style: TextStyle(color: Colors.grey.shade700, fontSize: 14)),
                                       const SizedBox(height: 4),
                                       if (d['delivery_date'] != null)
                                         Text(

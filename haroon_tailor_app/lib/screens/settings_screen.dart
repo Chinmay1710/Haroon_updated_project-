@@ -1,10 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/zip_backup_service.dart';
 import '../utils/phone_utils.dart';
 import '../utils/file_helper.dart';
+import '../main.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ValueChanged<ThemeMode>? onThemeChanged;
@@ -32,6 +32,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   int _cachedOrdersCount = 0;
   int _cachedCustomersCount = 0;
   bool _isBackingUp = false;
+  bool _isOfflineMode = false;
+
 
   // 4. Language & Theme
   String _currentTheme = 'system';
@@ -93,6 +95,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       final cachedOrders = await LocalStorageService.getCachedOrders();
       final cachedCust = await LocalStorageService.getCachedCustomers();
       final shop = await ApiService.getShopSettings();
+      final isOffline = await LocalStorageService.isOfflineMode();
+
 
       if (!mounted) return;
       setState(() {
@@ -107,6 +111,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _lastSyncTime = syncTime;
         _cachedOrdersCount = cachedOrders?.length ?? 0;
         _cachedCustomersCount = cachedCust?.length ?? 0;
+        _isOfflineMode = isOffline;
+
 
         _shopNameCtrl.text = shop['shop_name']?.toString() ?? 'Haroon Tailor';
         _ownerNameCtrl.text = shop['owner_name']?.toString() ?? '';
@@ -253,185 +259,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   // ──────────────────────────────────────────────────────────────────────────
   // 3. BACKUP & SYNC ACTIONS
   // ──────────────────────────────────────────────────────────────────────────
-  Future<void> _exportLocalBackup() async {
-    final jsonStr = await LocalStorageService.exportLocalBackupJson();
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.download, color: Color(0xFF2563EB)),
-            SizedBox(width: 8),
-            Text('Local Data Backup (JSON)'),
-          ],
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Yeh backup aapke sabhi offline orders, customers aur naap ka snapshot hai.'),
-              const SizedBox(height: 12),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 180),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SingleChildScrollView(
-                  child: Text(
-                    jsonStr,
-                    style: const TextStyle(fontFamily: 'monospace', color: Colors.greenAccent, fontSize: 11),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.copy, size: 16),
-            label: const Text('Copy to Clipboard'),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: jsonStr));
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Backup JSON clipboard me copy ho gaya!'), backgroundColor: Colors.green),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
-  Future<void> _downloadMasterBackupFile() async {
-    setState(() => _isBackingUp = true);
-    try {
-      String jsonStr = '';
-      // Try local full master backup first
-      jsonStr = await LocalStorageService.exportFullMasterBackupJson();
-
-      // If local storage is empty, fetch from server
-      if (jsonStr.isEmpty || jsonStr.contains('"total_orders": 0')) {
-        try {
-          final res = await ApiService.exportFullMasterBackup();
-          if (res.isNotEmpty && (res['orders'] != null || res['total_orders'] != null)) {
-            jsonStr = const JsonEncoder.withIndent('  ').convert(res);
-          }
-        } catch (_) {}
-      }
-
-      await FileHelper.downloadBackupJson(jsonContent: jsonStr);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Master Backup file (.json) download shuru ho gayi!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download failed: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isBackingUp = false);
-    }
-  }
-
-  Future<void> _restoreFromFilePicker() async {
-    try {
-      final jsonStr = await FileHelper.pickBackupJsonFile();
-      if (jsonStr == null || jsonStr.trim().isEmpty) {
-        return; // User cancelled
-      }
-
-      setState(() => _isBackingUp = true);
-      final raw = jsonStr.trim();
-      final res = await LocalStorageService.importMasterBackupJson(raw);
-      await _loadAllSettings();
-      setState(() => _isBackingUp = false);
-
-      if (!mounted) return;
-      if (res['success'] == true) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 28),
-                SizedBox(width: 8),
-                Text('Backup File Restored!'),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Aapki backup file se poora data offline load ho gaya:'),
-                const SizedBox(height: 14),
-                _buildRestoreStatRow(Icons.receipt_long, '${res['orders_count']} Orders (Exact status & balance)'),
-                _buildRestoreStatRow(Icons.people, '${res['customers_count']} Customers & Mobile numbers'),
-                _buildRestoreStatRow(Icons.photo_library, '${res['photos_count']} Cloudinary Photos linked'),
-                _buildRestoreStatRow(Icons.straighten, '${res['measurements_count']} Naap measurements preserved'),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF86EFAC)),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.offline_bolt, color: Colors.green, size: 20),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Ab yeh app 100% offline chalega!',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.pop(context, true);
-                },
-                child: const Text('Dashboard Dekhein'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Restore error: ${res['error'] ?? "Invalid backup file"}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isBackingUp = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('File error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
 
   Widget _buildRestoreStatRow(IconData icon, String text) {
     return Padding(
@@ -446,63 +274,263 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
   }
 
-  Future<void> _importLocalBackup() async {
-    final textCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
+
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // ZIP BACKUP & RESTORE (WITH PHOTOS)
+  // ──────────────────────────────────────────────────────────────────────────
+  Future<void> _downloadZipBackup() async {
+    setState(() => _isBackingUp = true);
+
+    final progressStatusNotifier = ValueNotifier<String>('Starting backup...');
+    final progressValueNotifier = ValueNotifier<double>(0.0);
+
+    // Show progress dialog
+    showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Paste Backup JSON Text'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Apna backup JSON yahan paste karein:'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: textCtrl,
-              maxLines: 6,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              decoration: const InputDecoration(
-                hintText: '{\n  "orders": [...],\n  "customers": [...]\n}',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Restore Data'),
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.archive, color: Color(0xFF7C3AED)),
+              SizedBox(width: 10),
+              Text('Creating ZIP Backup'),
+            ],
           ),
-        ],
+          content: AnimatedBuilder(
+            animation: Listenable.merge([progressStatusNotifier, progressValueNotifier]),
+            builder: (ctx, _) {
+              final val = progressValueNotifier.value;
+              final status = progressStatusNotifier.value;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(
+                    value: val > 0 ? val : null,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: const AlwaysStoppedAnimation(Color(0xFF7C3AED)),
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    status,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${(val * 100).toStringAsFixed(0)}%',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF7C3AED)),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
 
-    if (confirmed == true && textCtrl.text.trim().isNotEmpty) {
-      final raw = textCtrl.text.trim();
-      final res = await LocalStorageService.importMasterBackupJson(raw);
+    try {
+      final zipBytes = await ZipBackupService.createZipBackup(
+        onProgress: (status, progress) {
+          progressStatusNotifier.value = status;
+          progressValueNotifier.value = progress;
+        },
+      );
+
+      // Close progress dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Save the ZIP file
+      await FileHelper.downloadBackupZip(zipBytes: zipBytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ZIP Backup download ho gayi! (${_formatFileSize(zipBytes.length)})'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close progress dialog if still open
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ZIP Backup failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBackingUp = false);
+    }
+  }
+
+
+
+  Future<void> _restoreFromZipFile() async {
+    try {
+      final zipBytes = await FileHelper.pickBackupZipFile();
+      if (zipBytes == null) return; // User cancelled
+      if (!mounted) return;
+
+      setState(() => _isBackingUp = true);
+
+      final progressStatusNotifier = ValueNotifier<String>('Opening ZIP file...');
+      final progressValueNotifier = ValueNotifier<double>(0.0);
+
+      // Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.unarchive, color: Color(0xFF16A34A)),
+                SizedBox(width: 10),
+                Text('Restoring ZIP Backup'),
+              ],
+            ),
+            content: AnimatedBuilder(
+              animation: Listenable.merge([progressStatusNotifier, progressValueNotifier]),
+              builder: (ctx, _) {
+                final val = progressValueNotifier.value;
+                final status = progressStatusNotifier.value;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LinearProgressIndicator(
+                      value: val > 0 ? val : null,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor: const AlwaysStoppedAnimation(Color(0xFF16A34A)),
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      status,
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${(val * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF16A34A)),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      final res = await ZipBackupService.restoreFromZip(
+        zipBytes: zipBytes,
+        onProgress: (status, progress) {
+          progressStatusNotifier.value = status;
+          progressValueNotifier.value = progress;
+        },
+      );
+
+      // Close progress dialog
+      if (mounted) Navigator.of(context).pop();
+
+      await _loadAllSettings();
+      if (mounted) setState(() => _isBackingUp = false);
+
+      if (!mounted) return;
+
       if (res['success'] == true) {
-        await _loadAllSettings();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ ${res['orders_count']} Orders & ${res['customers_count']} Customers restore ho gaye!'),
-              backgroundColor: Colors.green,
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 28),
+                SizedBox(width: 8),
+                Text('ZIP Backup Restored!'),
+              ],
             ),
-          );
-        }
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Aapki ZIP backup se poora data + photos restore ho gaye:'),
+                const SizedBox(height: 14),
+                _buildRestoreStatRow(Icons.receipt_long, '${res['orders_count']} Orders restored'),
+                _buildRestoreStatRow(Icons.people, '${res['customers_count']} Customers restored'),
+                _buildRestoreStatRow(Icons.photo_library, '${res['photos_saved_locally']} Photos saved locally'),
+                _buildRestoreStatRow(Icons.straighten, '${res['measurements_count']} Naap measurements'),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.offline_bolt, color: Colors.green, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Photos + Data sab 100% offline! Cloudinary ki zarurat nahi!',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  HaroonTailorApp.restartApp(context);
+                },
+                child: const Text('Dashboard Dekhein'),
+              ),
+            ],
+          ),
+        );
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Restore error: ${res['error'] ?? "Invalid JSON"}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ZIP Restore error: ${res['error'] ?? "Invalid ZIP file"}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        try { Navigator.of(context).pop(); } catch (_) {}
+        setState(() => _isBackingUp = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ZIP File error: $e'), backgroundColor: Colors.red),
+        );
       }
     }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   Future<void> _startFreshOfflineApp() async {
@@ -531,15 +559,16 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
 
     if (confirmed == true) {
-      await LocalStorageService.clearAll();
-      await _loadAllSettings();
+      await LocalStorageService.clearAll(enableOfflineMode: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('App fresh reset ho gaya! Ab Restore Backup se file select karein.'),
+            content: Text('✅ App 100% fresh reset ho gayi (0 Orders)! Ab "Restore ZIP" se backup restore karein.'),
             backgroundColor: Colors.blueGrey,
+            duration: Duration(seconds: 4),
           ),
         );
+        HaroonTailorApp.restartApp(context);
       }
     }
   }
@@ -1029,73 +1058,140 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 16),
 
-          // Primary 1-Click File Actions Card
+          // Offline Standalone Mode Switch Card
           Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: _isOfflineMode ? Colors.amber.shade300 : Colors.blue.shade100,
+                width: 1.5,
+              ),
+            ),
             elevation: 0,
-            color: Colors.white,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFEFF6FF),
-                    child: _isBackingUp
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.file_download, color: Color(0xFF2563EB)),
-                  ),
-                  title: const Text('Download Master Backup File (.JSON)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Click karte hi computer/phone me complete 360 orders aur photos ki backup file download hogi.'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _isBackingUp ? null : _downloadMasterBackupFile,
+            color: _isOfflineMode ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAFC),
+            child: SwitchListTile(
+              secondary: CircleAvatar(
+                backgroundColor: _isOfflineMode ? const Color(0xFFFEF3C7) : const Color(0xFFEFF6FF),
+                child: Icon(
+                  _isOfflineMode ? Icons.cloud_off : Icons.cloud_done,
+                  color: _isOfflineMode ? const Color(0xFFD97706) : const Color(0xFF2563EB),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFF0FDF4),
-                    child: Icon(Icons.folder_open, color: Color(0xFF16A34A)),
-                  ),
-                  title: const Text('Restore Backup (Select File)', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
-                  subtitle: const Text('Apni downloaded backup file (.json) select karein aur poora data offline load karein.'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _isBackingUp ? null : _restoreFromFilePicker,
+              ),
+              title: Text(
+                _isOfflineMode ? '📶 Offline Standalone Mode (ON)' : '☁️ Cloud Sync Mode (Active)',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: _isOfflineMode ? const Color(0xFF92400E) : const Color(0xFF1E40AF),
                 ),
-              ],
+              ),
+              subtitle: Text(
+                _isOfflineMode
+                    ? 'Cloud server sync band hai. App 100% local database par chal rahi hai (Render se data nahi aayega).'
+                    : 'App Render cloud server se auto-sync ho rahi hai.',
+                style: const TextStyle(fontSize: 12),
+              ),
+              value: _isOfflineMode,
+              activeThumbColor: const Color(0xFFD97706),
+              onChanged: (val) async {
+                await LocalStorageService.setOfflineMode(val);
+                setState(() => _isOfflineMode = val);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(val ? 'Offline Standalone Mode ON! Cloud sync paused.' : 'Cloud Sync Mode ON! Auto-sync active.'),
+                      backgroundColor: val ? Colors.amber.shade800 : Colors.blue,
+                    ),
+                  );
+                  HaroonTailorApp.restartApp(context);
+                }
+              },
             ),
           ),
           const SizedBox(height: 16),
 
-          // Secondary & Manual Actions
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            elevation: 0,
-            color: Colors.white,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFFFFBEB),
-                    child: Icon(Icons.content_paste, color: Color(0xFFD97706)),
-                  ),
-                  title: const Text('Paste Backup JSON Text (Manual)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('File select karne ke bajaye direct text copy-paste karke restore karein.'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _importLocalBackup,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFF8FAFC),
-                    child: Icon(Icons.copy, color: Color(0xFF64748B)),
-                  ),
-                  title: const Text('Copy Backup JSON to Clipboard', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Offline data JSON ko screen par dekhkar clipboard me copy karein.'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _exportLocalBackup,
+          // ★ PRIMARY: ZIP BACKUP WITH PHOTOS (NO CLOUDINARY NEEDED)
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.archive, color: Colors.white, size: 24),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('📦 ZIP Backup (Data + Photos)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
+                            SizedBox(height: 2),
+                            Text('Ek ZIP file me sab kuch — Orders, Customers, Naap, AUR Photos! Cloudinary ki zarurat nahi.', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: _isBackingUp
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7C3AED)))
+                              : const Icon(Icons.file_download, size: 20),
+                          label: const Text('Download ZIP', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF7C3AED),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: _isBackingUp ? null : _downloadZipBackup,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.unarchive, size: 20),
+                          label: const Text('Restore ZIP', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: 0.15),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: const BorderSide(color: Colors.white30),
+                            ),
+                          ),
+                          onPressed: _isBackingUp ? null : _restoreFromZipFile,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 16),
+
+
 
           // Testing & Reset
           Card(

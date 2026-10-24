@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 import 'file_download_stub.dart'
     if (dart.library.html) 'file_download_web.dart'
     if (dart.library.io) 'file_download_io.dart';
@@ -14,19 +14,23 @@ class FileHelper {
     saveFileToDevice(content: jsonContent, fileName: name);
   }
 
+  /// Trigger 1-click download/save of backup ZIP file (with photos)
+  static Future<void> downloadBackupZip({
+    required Uint8List zipBytes,
+    String? fileName,
+  }) async {
+    final dateStr = DateTime.now().toIso8601String().split('T').first;
+    final name = fileName ?? 'HaroonTailor_Backup_$dateStr.zip';
+    saveZipFileToDevice(zipBytes: zipBytes, fileName: name);
+  }
+
   /// Open native file picker dialog to let user select their backup JSON file
   static Future<String?> pickBackupJsonFile() async {
-    final pickedFiles = await FilePicker.pickFiles(
-      dialogTitle: 'Select Haroon Tailor Backup JSON File',
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-    );
+    return await pickJsonFileFromDevice();
+  }
 
-    if (pickedFiles.isEmpty) {
-      return null;
-    }
-
-    final picked = pickedFiles.first;
-    return await picked.xFile.readAsString();
+  /// Open native file picker dialog to let user select their backup ZIP file
+  static Future<Uint8List?> pickBackupZipFile() async {
+    return await pickZipFileFromDevice();
   }
 }

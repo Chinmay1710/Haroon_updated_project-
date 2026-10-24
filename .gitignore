@@ -20,6 +20,7 @@ venv.bak/
 uploads/
 backups/
 *.log
+*Master_Backup*.json
 
 # OS generated files
 .DS_Store

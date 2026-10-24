@@ -5,6 +5,7 @@ import '../services/local_storage_service.dart';
 import '../models/customer.dart';
 import 'customer_details_screen.dart';
 import 'new_order_screen.dart';
+import 'settings_screen.dart';
 
 class CustomersScreen extends StatefulWidget {
   final bool isSelectMode;
@@ -17,14 +18,18 @@ class CustomersScreen extends StatefulWidget {
   });
 
   @override
-  State<CustomersScreen> createState() => _CustomersScreenState();
+  State<CustomersScreen> createState() => CustomersScreenState();
 }
 
-class _CustomersScreenState extends State<CustomersScreen> {
+class CustomersScreenState extends State<CustomersScreen> {
   bool _isLoading = true;
   List<Customer> _allCustomers = [];
   List<Customer> _filteredCustomers = [];
   final TextEditingController _searchCtrl = TextEditingController();
+
+  void reloadCustomers() {
+    _loadCustomers();
+  }
 
   @override
   void initState() {
@@ -277,7 +282,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                           notes: notesCtrl.text.trim(),
                                         );
                                         final newCust = Customer(
-                                          id: (res['id'] ?? 0) as int,
+                                          id: (res['id'] is num ? (res['id'] as num).toInt() : int.tryParse(res['id']?.toString() ?? '') ?? 0),
                                           name: name,
                                           mobile: '+91 $cleanPhone',
                                           address: addressCtrl.text.trim(),
@@ -367,7 +372,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                           notes: notesCtrl.text.trim(),
                                         );
                                         final newCust = Customer(
-                                          id: (res['id'] ?? 0) as int,
+                                          id: (res['id'] is num ? (res['id'] as num).toInt() : int.tryParse(res['id']?.toString() ?? '') ?? 0),
                                           name: name,
                                           mobile: '+91 $cleanPhone',
                                           address: addressCtrl.text.trim(),
@@ -632,6 +637,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
         backgroundColor: const Color(0xFF0F172A),
         title: const Text('Customers (Grahak)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'customers_add_fab',

@@ -30,18 +30,52 @@ class DeliveryAlertInfo {
 
 class OrdersScreen extends StatefulWidget {
   final String initialStatus;
-  const OrdersScreen({super.key, this.initialStatus = 'INCOMPLETE'});
+  const OrdersScreen({super.key, this.initialStatus = 'ALL'});
 
   @override
-  State<OrdersScreen> createState() => _OrdersScreenState();
+  State<OrdersScreen> createState() => OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
+class OrdersScreenState extends State<OrdersScreen> {
   bool _isLoading = true;
   List<dynamic> _allOrders = [];
   List<dynamic> _filteredOrders = [];
   late String _selectedStatus;
   final TextEditingController _searchCtrl = TextEditingController();
+
+  int _safeId(dynamic val) {
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    if (val != null) return int.tryParse(val.toString()) ?? 0;
+    return 0;
+  }
+
+  int _extractBillNumber(dynamic o) {
+    if (o is! Map) return 0;
+    final onum = (o['order_number'] ?? '').toString();
+    final matches = RegExp(r'\d+').allMatches(onum);
+    if (matches.isNotEmpty) {
+      final lastDigits = matches.last.group(0);
+      if (lastDigits != null) {
+        final bNum = int.tryParse(lastDigits);
+        if (bNum != null && bNum > 0) return bNum;
+      }
+    }
+    return _safeId(o['id']);
+  }
+
+  void switchToAllOrders() {
+    if (mounted) {
+      setState(() {
+        _selectedStatus = 'ALL';
+        _applyFilter();
+      });
+    }
+  }
+
+  void reloadOrders() {
+    _loadOrders();
+  }
 
   @override
   void initState() {
@@ -90,7 +124,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         return status != 'DELIVERED' && status != 'STITCHING_COMPLETE' && status != 'CANCELLED';
       }).length;
 
-  DeliveryAlertInfo? _getDeliveryAlert(Map<String, dynamic> o) {
+  DeliveryAlertInfo? _getDeliveryAlert(Map o) {
     final status = (o['status'] ?? '').toString();
     if (status == 'DELIVERED' || status == 'CANCELLED' || status == 'STITCHING_COMPLETE') {
       return null;
@@ -163,11 +197,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
       if (_selectedStatus == 'INCOMPLETE' || _selectedStatus == 'PENDING') {
         matchesStatus = status != 'DELIVERED' && status != 'STITCHING_COMPLETE' && status != 'CANCELLED';
       } else if (_selectedStatus == 'PARTIALLY_COMPLETE') {
-        matchesStatus = status == 'PARTIALLY_COMPLETE';
-      } else if (_selectedStatus == 'COMPLETE') {
-        matchesStatus = status == 'STITCHING_COMPLETE';
+        final readyIds = o['ready_item_ids'];
+        final hasReadyItems = readyIds is List && readyIds.isNotEmpty;
+        matchesStatus = (status == 'PARTIALLY_COMPLETE' || hasReadyItems) &&
+            status != 'DELIVERED' &&
+            status != 'STITCHING_COMPLETE' &&
+            status != 'CANCELLED';
       } else if (_selectedStatus == 'DELIVERED') {
         matchesStatus = status == 'DELIVERED';
+      } else if (_selectedStatus == 'ALL') {
+        matchesStatus = true;
       }
 
       if (!matchesStatus) return false;
@@ -181,7 +220,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
       return true;
     }).toList();
 
-    // Sort: Incomplete orders sorted by delivery date (nearest first, overdue on top)
+    // Sort logic:
+    // Incomplete orders: nearest delivery date first (earliest / overdue delivery date at top)
+    // All Orders, Partially Complete, Delivered: sorted strictly by Bill Number descending (grater number display first)
     _filteredOrders.sort((a, b) {
       if (_selectedStatus == 'INCOMPLETE' || _selectedStatus == 'PENDING') {
         final dStrA = a['delivery_date']?.toString();
@@ -195,23 +236,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
             : null;
 
         if (dateA == null && dateB == null) {
-          return ((b['id'] ?? 0) as int).compareTo((a['id'] ?? 0) as int);
+          return _extractBillNumber(b).compareTo(_extractBillNumber(a));
         }
         if (dateA == null) return 1;
         if (dateB == null) return -1;
 
         final comp = dateA.compareTo(dateB);
         if (comp != 0) return comp;
-        return ((b['id'] ?? 0) as int).compareTo((a['id'] ?? 0) as int);
+        return _extractBillNumber(b).compareTo(_extractBillNumber(a));
       } else {
-        return ((b['id'] ?? 0) as int).compareTo((a['id'] ?? 0) as int);
+        final comp = _extractBillNumber(b).compareTo(_extractBillNumber(a));
+        if (comp != 0) return comp;
+        return _safeId(b['id']).compareTo(_safeId(a['id']));
       }
     });
   }
 
   // 1. COMPLETE BUTTON WITH WHATSAPP CONFIRMATION (Point 2 - Website Flow)
   void _handleComplete(Map<String, dynamic> o) async {
-    final orderId = o['id'] as int;
+    final orderId = _safeId(o['id']);
     final billNo = o['order_number'] ?? '#$orderId';
     bool sendWhatsapp = true;
 
@@ -309,29 +352,31 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   // 2. PARTIAL BUTTON WITH CHECKBOXES MODAL (Point 1 - Website Flow)
   Future<void> _handlePartial(Map<String, dynamic> o) async {
-    final orderId = o['id'] as int;
+    final orderId = _safeId(o['id']);
     final dynamic rawItemsVal = o['raw_items'];
     final dynamic itemsVal = o['items'];
 
     final List<Map<String, dynamic>> itemList = [];
 
     if (rawItemsVal is List && rawItemsVal.isNotEmpty) {
-      for (var it in rawItemsVal) {
+      for (int idx = 0; idx < rawItemsVal.length; idx++) {
+        final it = rawItemsVal[idx];
         if (it is Map) {
           itemList.add({
-            'id': it['id'] ?? 0,
+            'id': it['id'] ?? (idx + 1),
             'name': (it['name'] ?? 'Item').toString(),
-            'is_ready': it['is_ready'] == true,
+            'is_ready': it['is_ready'] == true || it['status'] == 'READY',
           });
         }
       }
     } else if (itemsVal is List && itemsVal.isNotEmpty) {
-      for (var it in itemsVal) {
+      for (int idx = 0; idx < itemsVal.length; idx++) {
+        final it = itemsVal[idx];
         if (it is Map) {
           itemList.add({
-            'id': it['id'] ?? 0,
+            'id': it['id'] ?? (idx + 1),
             'name': '${it['clothing_type'] ?? 'Custom Item'} (x${it['quantity'] ?? 1})',
-            'is_ready': it['is_ready'] == true,
+            'is_ready': it['is_ready'] == true || it['status'] == 'READY',
           });
         }
       }
@@ -341,12 +386,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
         final details = await ApiService.getOrderDetails(orderId);
         final detItems = details['items'];
         if (detItems is List && detItems.isNotEmpty) {
-          for (var it in detItems) {
+          for (int idx = 0; idx < detItems.length; idx++) {
+            final it = detItems[idx];
             if (it is Map) {
               itemList.add({
-                'id': it['id'] ?? 0,
+                'id': it['id'] ?? (idx + 1),
                 'name': '${it['clothing_type'] ?? 'Custom Item'} (x${it['quantity'] ?? 1})',
-                'is_ready': it['is_ready'] == true,
+                'is_ready': it['is_ready'] == true || it['status'] == 'READY',
               });
             }
           }
@@ -447,15 +493,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         .where((id) => id > 0)
                         .toList();
 
+                    final newStatus = allChecked
+                        ? 'STITCHING_COMPLETE'
+                        : (readyIds.isNotEmpty ? 'PARTIALLY_COMPLETE' : 'INCOMPLETE');
+
                     try {
                       await ApiService.updateOrderStatus(
                         orderId: orderId,
-                        status: allChecked ? 'STITCHING_COMPLETE' : 'PARTIALLY_COMPLETE',
+                        status: newStatus,
                         readyItemIds: readyIds,
                       );
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Items updated successfully!'), backgroundColor: Colors.green),
+                          SnackBar(
+                            content: Text(
+                              allChecked
+                                  ? 'Sabhi kapde tayyar! Stitching Complete marked.'
+                                  : (readyIds.isNotEmpty
+                                      ? 'Partially Complete marked (${readyIds.length} kapde tayyar)!'
+                                      : 'Incomplete status saved.'),
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
                         );
                       }
                       _loadOrders();
@@ -496,7 +555,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   void _deleteOrder(Map<String, dynamic> order) async {
-    final orderId = order['id'] as int;
+    final orderId = _safeId(order['id']);
     final billNo = order['order_number'] ?? '';
 
     final confirm = await showDialog<bool>(
@@ -600,10 +659,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                _buildFilterChip('INCOMPLETE', 'Incomplete Orders', count: _incompleteCount),
                 _buildFilterChip('ALL', 'All Orders'),
+                _buildFilterChip('INCOMPLETE', 'Incomplete Orders', count: _incompleteCount),
                 _buildFilterChip('PARTIALLY_COMPLETE', 'Partially Complete'),
-                _buildFilterChip('COMPLETE', 'Complete'),
                 _buildFilterChip('DELIVERED', 'Delivered'),
               ],
             ),
@@ -658,7 +716,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           itemCount: _filteredOrders.length,
                           itemBuilder: (context, idx) {
                             final o = _filteredOrders[idx];
-                            final orderId = o['id'] as int;
+                            final orderId = _safeId(o['id']);
                             final billNo = o['order_number'] ?? 'Bill-#$orderId';
                             final custName = o['customer_name'] ?? 'Walk-in';
                             final phone = (o['customer_mobile'] ?? '').toString();
@@ -755,6 +813,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                       ),
                                       if (phone.isNotEmpty)
                                         Text(phone, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                      Builder(builder: (context) {
+                                        final dynamic itVal = o['items'];
+                                        final String itemsDisplay = (itVal is String && itVal.isNotEmpty)
+                                            ? itVal
+                                            : ((o['items_summary'] ?? '').toString().isNotEmpty
+                                                ? (o['items_summary'] ?? '').toString()
+                                                : (itVal is List && itVal.isNotEmpty
+                                                    ? itVal.map((i) => '${i['quantity'] ?? 1}x ${i['clothing_type'] ?? 'Kapda'}').join(', ')
+                                                    : ''));
+                                        if (itemsDisplay.isEmpty) return const SizedBox.shrink();
+                                        return Padding(
+                                          padding: const EdgeInsets.only(top: 3),
+                                          child: Text(
+                                            itemsDisplay,
+                                            style: TextStyle(color: Colors.blueGrey.shade800, fontSize: 13, fontWeight: FontWeight.w600),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      }),
                                       if (o['delivery_date'] != null)
                                         Padding(
                                           padding: const EdgeInsets.only(top: 4),

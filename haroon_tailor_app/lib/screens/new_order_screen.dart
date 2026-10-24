@@ -9,6 +9,9 @@ import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
 import '../widgets/measurement_grid.dart';
 import '../widgets/custom_measurement_keypad.dart';
+import '../utils/io_helper_stub.dart'
+    if (dart.library.html) '../utils/io_helper_web.dart'
+    if (dart.library.io) '../utils/io_helper_io.dart';
 import 'customers_screen.dart';
 
 /// Single garment item draft inside a multi-garment order
@@ -50,15 +53,23 @@ class OrderItemDraft {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'clothing_type': clothingType,
-    'quantity': quantity,
-    'price': price,
-    'measurements': measurements,
-    'notes': notes,
-    'save_profile': true,
-    'image_base64': imageBase64List,
-  };
+  Map<String, dynamic> toJson() {
+    final clean = LocalStorageService.sanitizePhotoList(imageBase64List);
+    final nonData = clean.where((s) => !s.startsWith('data:')).toList();
+    final nonDataPath = existingImagePath.isNotEmpty
+        ? existingImagePath
+        : nonData.join(',');
+    return {
+      'clothing_type': clothingType,
+      'quantity': quantity,
+      'price': price,
+      'measurements': measurements,
+      'notes': notes,
+      'save_profile': true,
+      'image_base64': clean,
+      'image_path': nonDataPath.isNotEmpty ? nonDataPath : (clean.isNotEmpty ? clean.first : ''),
+    };
+  }
 }
 
 class NewOrderScreen extends StatefulWidget {
@@ -95,6 +106,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   bool _sendWhatsapp = true;
   bool _isSubmitting = false;
   bool _isEditMode = false;
+  String _nextBillNo = '';
 
   // Saved profiles for current customer
   List<dynamic> _savedProfiles = [];
@@ -112,6 +124,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     if (_isEditMode) {
       _initEditOrder(widget.editOrder!);
     } else {
+      LocalStorageService.getNextBillNumber().then((b) {
+        if (mounted) setState(() => _nextBillNo = b);
+      });
       if (widget.initialMeasurements != null || widget.initialClothingType != null) {
         final Map<String, String> m = {};
         widget.initialMeasurements?.forEach((k, v) {
@@ -140,67 +155,216 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     }
   }
 
-  Future<void> _initEditOrder(Map<String, dynamic> o) async {
-    final orderId = o['id'] as int?;
-    if (orderId != null && o['items'] is! List) {
-      try {
-        final fullOrder = await ApiService.getOrderDetails(orderId);
-        o = fullOrder;
-      } catch (_) {}
-    }
-
-    final custId = o['customer_id'] ?? 0;
-    final custName = o['customer_name'] ?? '';
-    final custMobile = o['customer_mobile'] ?? '';
-    _customer = Customer(id: custId, name: custName, mobile: custMobile);
-
-    if (o['delivery_date'] != null) {
-      try {
-        _deliveryDate = DateTime.parse(o['delivery_date'].toString().split('T')[0]);
-      } catch (_) {}
-    }
-
-    _orderNotesCtrl.text = (o['special_instructions'] ?? o['notes'] ?? '').toString();
-    _advanceCtrl.text = (o['advance_amount'] ?? 0).toString();
-    _discountCtrl.text = (o['discount'] ?? 0).toString();
-
-    final dynamic itemsRaw = o['items'];
-    _items.clear();
-    if (itemsRaw is List && itemsRaw.isNotEmpty) {
-      for (var it in itemsRaw) {
-        if (it is Map) {
-          final Map<String, String> m = {};
-          final rawMeas = it['measurements'];
-          if (rawMeas is Map) {
-            rawMeas.forEach((k, v) {
-              if (v != null && v.toString().trim().isNotEmpty) {
-                m[k.toString().trim()] = v.toString().trim();
-              }
-            });
-          }
-
-          final List<String> b64 = [];
-          if (it['image_base64'] is List) {
-            b64.addAll((it['image_base64'] as List).map((e) => e.toString()));
-          }
-
-          _items.add(OrderItemDraft(
-            clothingType: (it['clothing_type'] ?? 'Shirt').toString(),
-            quantity: int.tryParse(it['quantity']?.toString() ?? '1') ?? 1,
-            price: double.tryParse(it['price']?.toString() ?? '0') ?? 0.0,
-            measurements: m,
-            notes: (it['notes'] ?? '').toString(),
-            imageBase64List: b64,
-            existingImagePath: (it['image_path'] ?? '').toString(),
-          ));
+  OrderItemDraft _parseItemDraft(Map it, {double defaultPrice = 0.0}) {
+    final Map<String, String> m = {};
+    final rawMeas = it['measurements'];
+    if (rawMeas is Map) {
+      rawMeas.forEach((k, v) {
+        if (v != null && v.toString().trim().isNotEmpty) {
+          m[k.toString().trim()] = v.toString().trim();
         }
+      });
+    }
+
+    final List<String> b64 = [];
+    if (it['image_base64'] != null) {
+      b64.addAll(LocalStorageService.sanitizePhotoList(it['image_base64']));
+    }
+    if (it['cloth_photos'] != null) {
+      b64.addAll(LocalStorageService.sanitizePhotoList(it['cloth_photos']));
+    }
+    if (it['image_path'] != null || it['photo'] != null || it['image_url'] != null) {
+      final p = it['image_path'] ?? it['photo'] ?? it['image_url'];
+      b64.addAll(LocalStorageService.sanitizePhotoList(p));
+    }
+    final cleanPhotos = LocalStorageService.sanitizePhotoList(b64);
+
+    String type = (it['clothing_type'] ?? it['clothingType'] ?? '').toString().trim();
+    int qty = int.tryParse((it['quantity'] ?? '').toString()) ?? 1;
+
+    if (type.isEmpty && it['name'] != null) {
+      final nameStr = it['name'].toString().trim();
+      final match = RegExp(r'^(\d+)\s*(?:x\s*)?(.+)$', caseSensitive: false).firstMatch(nameStr);
+      if (match != null) {
+        qty = int.tryParse(match.group(1) ?? '1') ?? qty;
+        type = match.group(2)?.trim() ?? nameStr;
+      } else {
+        type = nameStr;
+      }
+    }
+    if (type.isEmpty) type = 'Shirt';
+
+    double price = (it['price'] as num?)?.toDouble() ??
+        double.tryParse((it['price'] ?? '').toString()) ??
+        defaultPrice;
+
+    return OrderItemDraft(
+      clothingType: type,
+      quantity: qty,
+      price: price,
+      measurements: m,
+      notes: (it['notes'] ?? '').toString(),
+      imageBase64List: cleanPhotos,
+      existingImagePath: cleanPhotos.where((s) => !s.startsWith('data:')).join(','),
+    );
+  }
+
+  List<OrderItemDraft> _parseItemsFromSummary(String summary, double totalAmount) {
+    final List<OrderItemDraft> parsed = [];
+    final parts = summary.split(',');
+    for (var part in parts) {
+      final clean = part.trim();
+      if (clean.isEmpty) continue;
+      final match = RegExp(r'^(\d+)\s*(?:x\s*)?(.+)$', caseSensitive: false).firstMatch(clean);
+      if (match != null) {
+        final qty = int.tryParse(match.group(1) ?? '1') ?? 1;
+        final type = match.group(2)?.trim() ?? 'Shirt';
+        parsed.add(OrderItemDraft(clothingType: type, quantity: qty, price: 0.0));
+      } else {
+        parsed.add(OrderItemDraft(clothingType: clean, quantity: 1, price: 0.0));
+      }
+    }
+    if (parsed.isNotEmpty && totalAmount > 0) {
+      int totalQty = parsed.fold(0, (sum, i) => sum + i.quantity);
+      if (totalQty > 0) {
+        final unitPrice = totalAmount / totalQty;
+        for (var it in parsed) {
+          it.price = unitPrice;
+        }
+      }
+    }
+    return parsed;
+  }
+
+  void _populateFromOrderMap(Map<String, dynamic> o) {
+    // 1. Bill Number
+    final int orderId = o['id'] is num
+        ? (o['id'] as num).toInt()
+        : int.tryParse(o['id']?.toString() ?? '0') ?? 0;
+    final billNo = (o['order_number'] ?? (orderId > 0 ? 'Bill-$orderId' : '')).toString();
+    if (billNo.isNotEmpty) {
+      _nextBillNo = billNo;
+    }
+
+    // 2. Customer
+    int custId = o['customer_id'] is num
+        ? (o['customer_id'] as num).toInt()
+        : int.tryParse(o['customer_id']?.toString() ?? '0') ?? 0;
+    String custName = (o['customer_name'] ?? '').toString().trim();
+    String custMobile = (o['customer_mobile'] ?? '').toString().trim();
+    String custAddress = (o['customer_address'] ?? '').toString().trim();
+
+    if (o['customer'] is Map) {
+      final cMap = o['customer'] as Map;
+      if (custId == 0 && cMap['id'] != null) {
+        custId = cMap['id'] is num ? (cMap['id'] as num).toInt() : int.tryParse(cMap['id'].toString()) ?? 0;
+      }
+      if (custName.isEmpty && cMap['name'] != null) custName = cMap['name'].toString().trim();
+      if (custMobile.isEmpty && cMap['mobile'] != null) custMobile = cMap['mobile'].toString().trim();
+      if (custAddress.isEmpty && cMap['address'] != null) custAddress = cMap['address'].toString().trim();
+    }
+
+    if (custName.isNotEmpty || custMobile.isNotEmpty) {
+      _customer = Customer(
+        id: custId,
+        name: custName,
+        mobile: custMobile,
+        address: custAddress,
+      );
+    }
+
+    // 3. Delivery Date
+    final delivStr = (o['delivery_date'] ?? o['deliveryDate'] ?? '').toString().trim();
+    if (delivStr.isNotEmpty) {
+      try {
+        _deliveryDate = DateTime.parse(delivStr.split('T')[0]);
+      } catch (_) {}
+    }
+
+    // 4. Notes & Financials
+    final notes = (o['special_instructions'] ?? o['notes'] ?? '').toString();
+    if (notes.isNotEmpty) {
+      _orderNotesCtrl.text = notes;
+    }
+
+    final adv = (o['advance_amount'] as num?)?.toDouble() ??
+        double.tryParse((o['advance_amount'] ?? o['advance'] ?? '').toString()) ??
+        0.0;
+    if (adv > 0) {
+      _advanceCtrl.text = adv == adv.toInt() ? adv.toInt().toString() : adv.toString();
+    }
+
+    final disc = (o['discount'] as num?)?.toDouble() ??
+        double.tryParse((o['discount'] ?? '').toString()) ??
+        0.0;
+    if (disc > 0) {
+      _discountCtrl.text = disc == disc.toInt() ? disc.toInt().toString() : disc.toString();
+    }
+
+    // 5. Garment Items
+    dynamic itemsSource = o['items'];
+    if (itemsSource is! List || itemsSource.isEmpty) {
+      if (o['items_detail'] is List && (o['items_detail'] as List).isNotEmpty) {
+        itemsSource = o['items_detail'];
+      } else if (o['raw_items'] is List && (o['raw_items'] as List).isNotEmpty) {
+        itemsSource = o['raw_items'];
+      }
+    }
+
+    final double totalAmt = (o['total_amount'] as num?)?.toDouble() ??
+        double.tryParse((o['total_amount'] ?? '').toString()) ??
+        0.0;
+
+    if (itemsSource is List && itemsSource.isNotEmpty) {
+      _items.clear();
+      for (var it in itemsSource) {
+        if (it is Map) {
+          _items.add(_parseItemDraft(it, defaultPrice: totalAmt > 0 && itemsSource.length == 1 ? totalAmt : 0.0));
+        }
+      }
+    } else if (_items.isEmpty) {
+      final summaryStr = (o['items_summary'] ?? (o['items'] is String ? o['items'] : '') ?? '').toString().trim();
+      if (summaryStr.isNotEmpty) {
+        _items.clear();
+        _items.addAll(_parseItemsFromSummary(summaryStr, totalAmt));
       }
     }
 
     if (custId > 0) {
       _loadCustomerProfiles(custId);
     }
-    setState(() {});
+  }
+
+  Future<void> _initEditOrder(Map<String, dynamic> initialOrder) async {
+    // 1. Immediately populate synchronously from initialOrder so screen is never blank!
+    _populateFromOrderMap(initialOrder);
+    if (mounted) setState(() {});
+
+    final int orderId = initialOrder['id'] is num
+        ? (initialOrder['id'] as num).toInt()
+        : int.tryParse(initialOrder['id']?.toString() ?? '0') ?? 0;
+
+    if (orderId <= 0) return;
+
+    // 2. Check cached full details (contains full 24-box naap & photos)
+    try {
+      final cachedDetail = await LocalStorageService.getCachedOrderDetails(orderId);
+      if (cachedDetail != null && cachedDetail.isNotEmpty) {
+        _populateFromOrderMap(cachedDetail);
+        if (mounted) setState(() {});
+      }
+    } catch (_) {}
+
+    // 3. If online mode is active, fetch cloud details in background
+    if (!await LocalStorageService.isOfflineMode()) {
+      try {
+        final fullOrder = await ApiService.getOrderDetails(orderId);
+        if (fullOrder.isNotEmpty) {
+          _populateFromOrderMap(fullOrder);
+          if (mounted) setState(() {});
+        }
+      } catch (_) {}
+    }
   }
 
   @override
@@ -218,8 +382,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
   Future<void> _loadCustomerProfiles(int customerId) async {
     try {
-      final profiles = await ApiService.getMeasurementsForCustomer(customerId);
-      setState(() => _savedProfiles = profiles);
+      final profiles = await LocalStorageService.getCustomerMeasurementsOffline(customerId);
+      if (mounted) {
+        setState(() => _savedProfiles = profiles);
+      }
     } catch (_) {}
   }
 
@@ -261,8 +427,17 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       );
     }
 
-    final List<Uint8List> tempBytes = List<Uint8List>.from(existingItem?.imageBytesList ?? []);
-    final List<String> tempB64 = List<String>.from(existingItem?.imageBase64List ?? []);
+    // Unified photos list for this garment (Uint8List for new picks, String for existing)
+    final List<dynamic> tempPhotos = [];
+    if (existingItem != null) {
+      if (existingItem.imageBytesList.isNotEmpty) {
+        tempPhotos.addAll(existingItem.imageBytesList);
+      } else if (existingItem.imageBase64List.isNotEmpty) {
+        tempPhotos.addAll(LocalStorageService.sanitizePhotoList(existingItem.imageBase64List));
+      } else if (existingItem.existingImagePath.isNotEmpty) {
+        tempPhotos.addAll(LocalStorageService.sanitizePhotoList(existingItem.existingImagePath));
+      }
+    }
     int? activeBoxNum;
 
     if (!mounted) return;
@@ -449,7 +624,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                           Text('$tempType ke naap darj karein', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                                         ],
                                       ),
-                                      if (_customer != null && _savedProfiles.isNotEmpty)
+                                      if (_customer != null)
                                         ElevatedButton.icon(
                                           icon: const Icon(Icons.history_edu, size: 16, color: Colors.white),
                                           label: const Text('Purana Naap', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
@@ -458,7 +633,22 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                           ),
-                                          onPressed: () {
+                                          onPressed: () async {
+                                            final fresh = await LocalStorageService.getCustomerMeasurementsOffline(_customer!.id);
+                                            if (fresh.isNotEmpty) {
+                                              setEditorState(() => _savedProfiles = fresh);
+                                            }
+                                            if (_savedProfiles.isEmpty) {
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text('Is grahak ka koi purana naap record nahi mila.'),
+                                                    backgroundColor: Colors.orange,
+                                                  ),
+                                                );
+                                              }
+                                              return;
+                                            }
                                             _showOldMeasurementsPicker(
                                               onSelect: (vals) {
                                                 setEditorState(() {
@@ -518,10 +708,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                               final picked = await _picker.pickImage(source: ImageSource.camera, maxWidth: 1920, maxHeight: 1920, imageQuality: 85);
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
-                                                final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
                                                 setEditorState(() {
-                                                  tempBytes.add(bytes);
-                                                  tempB64.add(b64);
+                                                  tempPhotos.add(bytes);
                                                 });
                                               }
                                             },
@@ -533,10 +721,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                               final picked = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1920, maxHeight: 1920, imageQuality: 85);
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
-                                                final b64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
                                                 setEditorState(() {
-                                                  tempBytes.add(bytes);
-                                                  tempB64.add(b64);
+                                                  tempPhotos.add(bytes);
                                                 });
                                               }
                                             },
@@ -545,40 +731,55 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                       ),
                                     ],
                                   ),
-                                  if (tempBytes.isNotEmpty) ...[
+                                  // Show unified attached photos with remove (X) button
+                                  if (tempPhotos.isNotEmpty) ...[
                                     const SizedBox(height: 12),
+                                    const Text('Attached Photos (Hataney ke liye X dabayein):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                                    const SizedBox(height: 6),
                                     SizedBox(
                                       height: 80,
                                       child: ListView.builder(
                                         scrollDirection: Axis.horizontal,
-                                        itemCount: tempBytes.length,
+                                        itemCount: tempPhotos.length,
                                         itemBuilder: (ctx, idx) {
+                                          final p = tempPhotos[idx];
                                           return Stack(
+                                            clipBehavior: Clip.none,
                                             children: [
-                                              Container(
-                                                margin: const EdgeInsets.only(right: 8),
-                                                width: 80,
-                                                height: 80,
-                                                decoration: BoxDecoration(
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  border: Border.all(color: Colors.grey.shade300),
-                                                  image: DecorationImage(image: MemoryImage(tempBytes[idx]), fit: BoxFit.cover),
+                                              GestureDetector(
+                                                onTap: () => _viewFullImage(p),
+                                                child: Container(
+                                                  margin: const EdgeInsets.only(right: 12),
+                                                  width: 80,
+                                                  height: 80,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    border: Border.all(color: Colors.blue.shade400, width: 2),
+                                                  ),
+                                                  clipBehavior: Clip.antiAlias,
+                                                  child: p is Uint8List
+                                                      ? Image.memory(p, fit: BoxFit.cover, width: 80, height: 80)
+                                                      : buildSmartImage(p.toString(), fit: BoxFit.cover, width: 80, height: 80),
                                                 ),
                                               ),
                                               Positioned(
-                                                top: 2,
-                                                right: 10,
+                                                top: -6,
+                                                right: 4,
                                                 child: GestureDetector(
                                                   onTap: () {
                                                     setEditorState(() {
-                                                      tempBytes.removeAt(idx);
-                                                      tempB64.removeAt(idx);
+                                                      tempPhotos.removeAt(idx);
                                                     });
                                                   },
-                                                  child: const CircleAvatar(
-                                                    radius: 10,
-                                                    backgroundColor: Colors.red,
-                                                    child: Icon(Icons.close, size: 12, color: Colors.white),
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.red,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(color: Colors.white, width: 2),
+                                                      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                                                    ),
+                                                    padding: const EdgeInsets.all(4),
+                                                    child: const Icon(Icons.close, size: 14, color: Colors.white),
                                                   ),
                                                 ),
                                               ),
@@ -587,10 +788,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                         },
                                       ),
                                     ),
-                                  ] else
+                                  ],
+                                  if (tempPhotos.isEmpty)
                                     Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 8),
-                                      child: Text('Sample kapda ya design ki photo jodne ke liye camera/gallery button dabayein.', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                      child: Text(
+                                        'Sample kapda ya design ki photo jodne ke liye camera/gallery button dabayein.',
+                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                      ),
                                     ),
                                 ],
                               ),
@@ -738,15 +943,26 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                             }
                           });
 
+                          final List<Uint8List> finalBytes = [];
+                          final List<String> finalB64 = [];
+                          for (var p in tempPhotos) {
+                            if (p is Uint8List) {
+                              finalBytes.add(p);
+                              finalB64.add('data:image/jpeg;base64,${base64Encode(p)}');
+                            } else if (p is String && p.trim().isNotEmpty) {
+                              finalB64.add(p.trim());
+                            }
+                          }
+
                           final draft = OrderItemDraft(
                             clothingType: tempType,
                             quantity: parsedQty,
                             price: parsedPrice,
                             measurements: m,
                             notes: notesCtrl.text.trim(),
-                            imageBytesList: tempBytes,
-                            imageBase64List: tempB64,
-                            existingImagePath: existingItem?.existingImagePath ?? '',
+                            imageBytesList: finalBytes,
+                            imageBase64List: finalB64,
+                            existingImagePath: finalB64.where((s) => !s.startsWith('data:')).join(','),
                           );
 
                           setState(() {
@@ -887,7 +1103,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     );
   }
 
-  void _viewFullImage(Uint8List bytes) {
+  void _viewFullImage(dynamic imgSource) {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -898,7 +1114,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             InteractiveViewer(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.memory(bytes, fit: BoxFit.contain),
+                child: imgSource is Uint8List
+                    ? Image.memory(imgSource, fit: BoxFit.contain)
+                    : buildSmartImage(imgSource.toString(), fit: BoxFit.contain),
               ),
             ),
             IconButton(
@@ -963,11 +1181,51 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
       if (_isEditMode) {
         // UPDATE EXISTING ORDER
+        final itemsStr = _items.map((i) => '${i.quantity} ${i.clothingType}').join(', ');
+        final allPhotos = <String>[];
+        for (var i in _items) {
+          allPhotos.addAll(LocalStorageService.sanitizePhotoList(i.imageBase64List));
+          if (i.existingImagePath.isNotEmpty) {
+            allPhotos.addAll(LocalStorageService.sanitizePhotoList(i.existingImagePath));
+          }
+        }
+        final cleanAllPhotos = LocalStorageService.sanitizePhotoList(allPhotos);
+
+        final int orderIdNum = widget.editOrder!['id'] is num
+            ? (widget.editOrder!['id'] as num).toInt()
+            : int.tryParse(widget.editOrder!['id']?.toString() ?? '0') ?? 0;
+
+        final updatePayload = {
+          'id': orderIdNum,
+          'order_number': widget.editOrder!['order_number'] ?? _nextBillNo,
+          'customer_id': _customer?.id ?? widget.editOrder!['customer_id'] ?? 0,
+          'customer_name': _customer?.name ?? widget.editOrder!['customer_name'] ?? '',
+          'customer_mobile': _customer?.mobile ?? widget.editOrder!['customer_mobile'] ?? '',
+          'customer_address': _customer?.address ?? widget.editOrder!['customer_address'] ?? '',
+          'order_date': widget.editOrder!['order_date'] ?? DateTime.now().toIso8601String().split('T')[0],
+          'status': widget.editOrder!['status'] ?? 'NEW',
+          'delivery_date': DateFormat('yyyy-MM-dd').format(_deliveryDate),
+          'deliveryDate': DateFormat('yyyy-MM-dd').format(_deliveryDate),
+          'total_amount': _totalAmount,
+          'subtotal': _subtotal,
+          'advance': _advance,
+          'advance_amount': _advance,
+          'discount': _discount,
+          'remaining_amount': _remainingBalance < 0 ? 0.0 : _remainingBalance,
+          'notes': _orderNotesCtrl.text.trim(),
+          'special_instructions': _orderNotesCtrl.text.trim(),
+          'items_summary': itemsStr,
+          'cloth_photos': cleanAllPhotos,
+          'image_path': cleanAllPhotos.where((p) => !p.startsWith('data:')).isNotEmpty
+              ? cleanAllPhotos.where((p) => !p.startsWith('data:')).join(',')
+              : (cleanAllPhotos.isNotEmpty ? cleanAllPhotos.first : ''),
+          'items': itemsPayload,
+          'payments': widget.editOrder!['payments'] ?? [],
+        };
+
         await ApiService.updateOrder(
-          orderId: widget.editOrder!['id'],
-          deliveryDate: DateFormat('yyyy-MM-dd').format(_deliveryDate),
-          notes: _orderNotesCtrl.text.trim(),
-          items: itemsPayload,
+          orderId: orderIdNum,
+          orderPayload: updatePayload,
         );
 
         if (mounted) {
@@ -979,23 +1237,40 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             ),
           );
           widget.onOrderUpdated?.call();
-          Navigator.pop(context);
+          Navigator.pop(context, true);
         }
       } else {
         // CREATE NEW ORDER
+        final itemsStr = _items.map((i) => '${i.quantity} ${i.clothingType}').join(', ');
+        final allPhotos = <String>[];
+        for (var i in _items) {
+          allPhotos.addAll(LocalStorageService.sanitizePhotoList(i.imageBase64List));
+          if (i.existingImagePath.isNotEmpty) {
+            allPhotos.addAll(LocalStorageService.sanitizePhotoList(i.existingImagePath));
+          }
+        }
+        final cleanAllPhotos = LocalStorageService.sanitizePhotoList(allPhotos);
         final payload = {
           'customerId': _customer!.id,
           'customer_id': _customer!.id,
           'customer_name': _customer!.name,
           'customer_mobile': _customer!.mobile,
+          'customer_address': _customer!.address,
           'deliveryDate': DateFormat('yyyy-MM-dd').format(_deliveryDate),
           'delivery_date': DateFormat('yyyy-MM-dd').format(_deliveryDate),
+          'total_amount': _totalAmount,
+          'subtotal': _subtotal,
           'advance': _advance,
           'advance_amount': _advance,
           'discount': _discount,
           'notes': _orderNotesCtrl.text.trim(),
           'special_instructions': _orderNotesCtrl.text.trim(),
+          'items_summary': itemsStr,
           'send_whatsapp': _sendWhatsapp,
+          'cloth_photos': cleanAllPhotos,
+          'image_path': cleanAllPhotos.where((p) => !p.startsWith('data:')).isNotEmpty
+              ? cleanAllPhotos.where((p) => !p.startsWith('data:')).join(',')
+              : (cleanAllPhotos.isNotEmpty ? cleanAllPhotos.first : ''),
           'items': itemsPayload,
         };
 
@@ -1011,35 +1286,37 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             ),
           );
 
-          // WhatsApp notification
-          if (res['whatsapp_url'] != null) {
-            await PhoneUtils.openBackendWhatsAppUrl(res['whatsapp_url'].toString());
-          } else if (_sendWhatsapp) {
-            final shopSettings = await ApiService.getShopSettings();
-            final shopName = shopSettings['shop_name'] ?? 'Haroon Tailor';
-            final totalAmt = _totalAmount;
-            final remainingAmt = _remainingBalance;
-            final delivDateStr = DateFormat('dd/MM/yyyy').format(_deliveryDate);
-            final itemsStr = _items.map((i) => '${i.quantity} ${i.clothingType}').join(', ');
+          // WhatsApp notification (safe try-catch so WhatsApp never blocks order save)
+          try {
+            if (res['whatsapp_url'] != null) {
+              await PhoneUtils.openBackendWhatsAppUrl(res['whatsapp_url'].toString());
+            } else if (_sendWhatsapp) {
+              final shopSettings = await ApiService.getShopSettings();
+              final shopName = shopSettings['shop_name'] ?? 'Haroon Tailor';
+              final totalAmt = _totalAmount;
+              final remainingAmt = _remainingBalance;
+              final delivDateStr = DateFormat('dd/MM/yyyy').format(_deliveryDate);
 
-            final msg = await PhoneUtils.formatTemplate('new_order', {
-              'customer_name': _customer!.name,
-              'order_number': billNo.toString(),
-              'garments': itemsStr,
-              'total_amount': totalAmt.toStringAsFixed(0),
-              'advance_amount': _advance.toStringAsFixed(0),
-              'balance_amount': remainingAmt.toStringAsFixed(0),
-              'delivery_date': delivDateStr,
-              'shop_name': shopName.toString(),
-              'shop_phone': shopSettings['phone']?.toString() ?? '',
-            });
+              final msg = await PhoneUtils.formatTemplate('new_order', {
+                'customer_name': _customer!.name,
+                'order_number': billNo.toString(),
+                'garments': itemsStr,
+                'total_amount': totalAmt.toStringAsFixed(0),
+                'advance_amount': _advance.toStringAsFixed(0),
+                'balance_amount': remainingAmt.toStringAsFixed(0),
+                'delivery_date': delivDateStr,
+                'shop_name': shopName.toString(),
+                'shop_phone': shopSettings['phone']?.toString() ?? '',
+              });
 
-            await PhoneUtils.openWhatsApp(_customer!.mobile, msg);
-          }
+              await PhoneUtils.openWhatsApp(_customer!.mobile, msg);
+            }
+          } catch (_) {}
 
           widget.onOrderCreated?.call();
+
           if (mounted) {
-            Navigator.pop(context);
+            Navigator.pop(context, true);
           }
         }
       }
@@ -1057,7 +1334,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   Widget build(BuildContext context) {
     final titleText = _isEditMode
         ? 'Edit Order #${widget.editOrder!['order_number'] ?? widget.editOrder!['id']}'
-        : 'Naya Order Banayein';
+        : (_nextBillNo.isNotEmpty ? 'Naya Order ($_nextBillNo)' : 'Naya Order Banayein');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -1342,31 +1619,58 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                 ],
 
                                 // Photo Thumbnails Preview
-                                if (item.imageBytesList.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  SizedBox(
-                                    height: 44,
-                                    child: ListView.builder(
-                                      scrollDirection: Axis.horizontal,
-                                      itemCount: item.imageBytesList.length,
-                                      itemBuilder: (ctx, pIdx) {
-                                        return GestureDetector(
-                                          onTap: () => _viewFullImage(item.imageBytesList[pIdx]),
-                                          child: Container(
-                                            margin: const EdgeInsets.only(right: 6),
-                                            width: 44,
-                                            height: 44,
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: Colors.grey.shade300),
-                                              image: DecorationImage(image: MemoryImage(item.imageBytesList[pIdx]), fit: BoxFit.cover),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
+                                Builder(
+                                  builder: (context) {
+                                    final List<dynamic> cardPhotos = [];
+                                    if (item.imageBytesList.isNotEmpty) {
+                                      cardPhotos.addAll(item.imageBytesList);
+                                    } else if (item.imageBase64List.isNotEmpty) {
+                                      cardPhotos.addAll(LocalStorageService.sanitizePhotoList(item.imageBase64List));
+                                    } else if (item.existingImagePath.isNotEmpty) {
+                                      cardPhotos.addAll(LocalStorageService.sanitizePhotoList(item.existingImagePath));
+                                    }
+
+                                    if (cardPhotos.isEmpty) return const SizedBox.shrink();
+
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: SizedBox(
+                                        height: 44,
+                                        child: ListView.builder(
+                                          scrollDirection: Axis.horizontal,
+                                          itemCount: cardPhotos.length,
+                                          itemBuilder: (ctx, pIdx) {
+                                            final photo = cardPhotos[pIdx];
+                                            return GestureDetector(
+                                              onTap: () => _viewFullImage(photo),
+                                              child: Container(
+                                                margin: const EdgeInsets.only(right: 6),
+                                                width: 44,
+                                                height: 44,
+                                                decoration: BoxDecoration(
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: Colors.grey.shade300),
+                                                ),
+                                                child: ClipRRect(
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  child: photo is Uint8List
+                                                      ? Image.memory(photo, fit: BoxFit.cover, width: 44, height: 44)
+                                                      : buildSmartImage(
+                                                          photo.toString(),
+                                                          fit: BoxFit.cover,
+                                                          width: 44,
+                                                          height: 44,
+                                                          errorWidget: const SizedBox.shrink(),
+                                                        ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
 
                                 // Notes Preview
                                 if (item.notes.isNotEmpty) ...[

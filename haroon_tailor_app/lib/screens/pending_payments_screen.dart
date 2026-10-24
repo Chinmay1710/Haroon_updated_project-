@@ -33,68 +33,69 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
   }
 
   Future<void> _loadPendingOrders({bool showLoading = true}) async {
-    // 1. Instant local cache load (0 milliseconds delay!)
-    final cached = await LocalStorageService.getCachedPendingOrders();
-    final cachedAllOrders = await LocalStorageService.getCachedOrders();
-    final Map<int, String> statusMap = {};
-    if (cachedAllOrders != null) {
-      for (var o in cachedAllOrders) {
-        if (o['id'] != null && o['status'] != null) {
-          statusMap[o['id'] as int] = o['status'].toString();
-        }
-      }
-    }
-
-    if (cached != null && cached.isNotEmpty && mounted) {
-      final list = List<dynamic>.from(cached);
-      for (var o in list) {
-        if (o is Map) {
-          if (o['status'] == null && o['id'] != null) {
-            o['status'] = statusMap[o['id']] ?? 'NEW';
-          }
-        }
-      }
-      setState(() {
-        _allPending = list;
-        _filterList();
-        _isLoading = false;
-      });
-    } else if (showLoading && _allPending.isEmpty) {
+    if (showLoading && _allPending.isEmpty) {
       setState(() => _isLoading = true);
     }
 
-    // 2. Fetch fresh updates from server in background
     try {
-      final data = await ApiService.getPendingOrders();
-      final allOrders = await ApiService.getAllOrders();
-      for (var o in allOrders) {
-        if (o['id'] != null && o['status'] != null) {
-          statusMap[o['id'] as int] = o['status'].toString();
-        }
-      }
-
-      final list = List<dynamic>.from(data);
-      for (var o in list) {
-        if (o is Map) {
-          if (o['status'] == null && o['id'] != null) {
-            o['status'] = statusMap[o['id']] ?? 'NEW';
+      // 1. Instant local computation directly from local orders
+      final localPending = await LocalStorageService.computePendingOrdersFromOrders();
+      final cachedAllOrders = await LocalStorageService.getCachedOrders();
+      final Map<String, String> statusMap = {};
+      if (cachedAllOrders != null) {
+        for (var o in cachedAllOrders) {
+          if (o is Map && o['id'] != null) {
+            statusMap[o['id'].toString()] = (o['status'] ?? 'NEW').toString();
           }
         }
       }
 
-      if (!mounted) return;
-      setState(() {
-        _allPending = list;
-        _filterList();
-        _isLoading = false;
-      });
+      final list = List<dynamic>.from(localPending);
+      for (var o in list) {
+        if (o is Map && o['id'] != null) {
+          final idKey = o['id'].toString();
+          if (statusMap.containsKey(idKey)) {
+            o['status'] = statusMap[idKey];
+          } else if (o['status'] == null) {
+            o['status'] = 'NEW';
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _allPending = list;
+          _filterList();
+          _isLoading = false;
+        });
+      }
+
+      // 2. Background sync only if online mode is enabled
+      if (!await LocalStorageService.isOfflineMode()) {
+        try {
+          final cloudData = await ApiService.getPendingOrders();
+          if (cloudData.isNotEmpty && mounted) {
+            final cloudList = List<dynamic>.from(cloudData);
+            for (var o in cloudList) {
+              if (o is Map && o['id'] != null) {
+                final idKey = o['id'].toString();
+                if (statusMap.containsKey(idKey)) {
+                  o['status'] = statusMap[idKey];
+                } else if (o['status'] == null) {
+                  o['status'] = 'NEW';
+                }
+              }
+            }
+            setState(() {
+              _allPending = cloudList;
+              _filterList();
+            });
+          }
+        } catch (_) {}
+      }
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      if (_allPending.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load pending payments: $e'), backgroundColor: Colors.red),
-        );
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -113,37 +114,30 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
     }
   }
 
-  List<dynamic> get _allDeliveredOrders => _allPending.where((o) {
-        final status = (o['status'] ?? '').toString();
-        return status == 'DELIVERED';
-      }).toList();
-
-  List<dynamic> get _allUndeliveredOrders => _allPending.where((o) {
-        final status = (o['status'] ?? '').toString();
-        return status != 'DELIVERED';
-      }).toList();
 
   List<dynamic> get _filteredDeliveredOrders => _filteredPending.where((o) {
-        final status = (o['status'] ?? '').toString();
+        final status = (o['status'] ?? '').toString().toUpperCase();
         return status == 'DELIVERED';
       }).toList();
 
   List<dynamic> get _filteredUndeliveredOrders => _filteredPending.where((o) {
-        final status = (o['status'] ?? '').toString();
+        final status = (o['status'] ?? '').toString().toUpperCase();
         return status != 'DELIVERED';
       }).toList();
 
   double _calculateTotal(List<dynamic> orders) {
     double sum = 0.0;
     for (var o in orders) {
-      sum += double.tryParse((o['remaining_amount'] ?? 0).toString()) ?? 0.0;
+      sum += (o['remaining_amount'] as num?)?.toDouble() ??
+          double.tryParse((o['remaining_amount'] ?? 0).toString()) ??
+          0.0;
     }
     return sum;
   }
 
   double get _totalDue => _calculateTotal(_filteredPending);
-  double get _deliveredTotalDue => _calculateTotal(_allDeliveredOrders);
-  double get _undeliveredTotalDue => _calculateTotal(_allUndeliveredOrders);
+  double get _deliveredFilteredTotal => _calculateTotal(_filteredDeliveredOrders);
+  double get _undeliveredFilteredTotal => _calculateTotal(_filteredUndeliveredOrders);
 
   void _sendReminder(Map<String, dynamic> order) {
     final phone = (order['customer_mobile'] ?? '').toString();
@@ -554,10 +548,23 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Total Pending Balance', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        Text(
+                          _selectedTab == 'DELIVERED'
+                              ? 'Delivery Ho Gayi • Pending'
+                              : _selectedTab == 'UNDELIVERED'
+                                  ? 'Delivery Baki • Pending'
+                                  : 'Total Pending Balance',
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
                         const SizedBox(height: 2),
-                        Text(currency.format(_totalDue),
-                            style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 24)),
+                        Text(
+                          currency.format(_selectedTab == 'DELIVERED'
+                              ? _deliveredFilteredTotal
+                              : _selectedTab == 'UNDELIVERED'
+                                  ? _undeliveredFilteredTotal
+                                  : _totalDue),
+                          style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 24),
+                        ),
                       ],
                     ),
                     Container(
@@ -566,8 +573,10 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
                         color: Colors.white.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text('${_filteredPending.length} Orders Due',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Text(
+                        '${_selectedTab == 'DELIVERED' ? deliveredList.length : _selectedTab == 'UNDELIVERED' ? undeliveredList.length : _filteredPending.length} Orders Due',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
                     ),
                   ],
                 ),
@@ -610,9 +619,9 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text(currency.format(_deliveredTotalDue),
+                              Text(currency.format(_deliveredFilteredTotal),
                                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                              Text('${_allDeliveredOrders.length} orders pending',
+                              Text('${deliveredList.length} orders pending',
                                   style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 10)),
                             ],
                           ),
@@ -655,9 +664,9 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text(currency.format(_undeliveredTotalDue),
+                              Text(currency.format(_undeliveredFilteredTotal),
                                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                              Text('${_allUndeliveredOrders.length} orders pending',
+                              Text('${undeliveredList.length} orders pending',
                                   style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 10)),
                             ],
                           ),
@@ -755,12 +764,23 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.check_circle_outline, size: 56, color: Colors.green.shade400),
+                            Icon(
+                              _searchCtrl.text.trim().isNotEmpty ? Icons.search_off : Icons.check_circle_outline,
+                              size: 56,
+                              color: _searchCtrl.text.trim().isNotEmpty ? Colors.grey.shade400 : Colors.green.shade400,
+                            ),
                             const SizedBox(height: 12),
-                            const Text('Koi Pending Payment nahi hai!',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+                            Text(
+                              _searchCtrl.text.trim().isNotEmpty ? 'Koi order nahi mila' : 'Koi Pending Payment nahi hai!',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                            ),
                             const SizedBox(height: 4),
-                            Text('Sabhi grahak ka hisaab clear hai.', style: TextStyle(color: Colors.grey.shade600)),
+                            Text(
+                              _searchCtrl.text.trim().isNotEmpty
+                                  ? 'Is search query ke sath koi pending payment match nahi hua.'
+                                  : 'Sabhi grahak ka hisaab clear hai.',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
                           ],
                         ),
                       )

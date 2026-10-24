@@ -1,5 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:html' as html;
 
 void saveFileToDevice({required String content, required String fileName}) {
@@ -10,4 +12,77 @@ void saveFileToDevice({required String content, required String fileName}) {
     ..setAttribute('download', fileName)
     ..click();
   html.Url.revokeObjectUrl(url);
+}
+
+void saveZipFileToDevice({required Uint8List zipBytes, required String fileName}) {
+  final blob = html.Blob([zipBytes], 'application/zip');
+  final url = html.Url.createObjectUrlFromBlob(blob);
+  html.AnchorElement(href: url)
+    ..setAttribute('download', fileName)
+    ..click();
+  html.Url.revokeObjectUrl(url);
+}
+
+Future<Uint8List?> pickZipFileFromDevice() async {
+  final completer = Completer<Uint8List?>();
+  final uploadInput = html.FileUploadInputElement()
+    ..accept = '.zip,application/zip,application/x-zip-compressed';
+  uploadInput.click();
+
+  uploadInput.onChange.listen((e) {
+    final files = uploadInput.files;
+    if (files != null && files.isNotEmpty) {
+      final file = files[0];
+      final reader = html.FileReader();
+      reader.onLoadEnd.listen((e) {
+        final res = reader.result;
+        if (res != null) {
+          if (res is Uint8List) {
+            completer.complete(res);
+          } else if (res is ByteBuffer) {
+            completer.complete(res.asUint8List());
+          } else if (res is List<int>) {
+            completer.complete(Uint8List.fromList(res));
+          } else {
+            completer.complete(null);
+          }
+        } else {
+          completer.complete(null);
+        }
+      });
+      reader.onError.listen((e) {
+        completer.complete(null);
+      });
+      reader.readAsArrayBuffer(file);
+    } else {
+      completer.complete(null);
+    }
+  });
+
+  return completer.future;
+}
+
+Future<String?> pickJsonFileFromDevice() async {
+  final completer = Completer<String?>();
+  final uploadInput = html.FileUploadInputElement()..accept = '.json,application/json';
+  uploadInput.click();
+
+  uploadInput.onChange.listen((e) {
+    final files = uploadInput.files;
+    if (files != null && files.isNotEmpty) {
+      final file = files[0];
+      final reader = html.FileReader();
+      reader.onLoadEnd.listen((e) {
+        completer.complete(reader.result as String?);
+      });
+      reader.onError.listen((e) {
+        completer.complete(null);
+      });
+      reader.readAsText(file);
+    } else {
+      completer.complete(null);
+    }
+  });
+
+  return completer.future;
 }

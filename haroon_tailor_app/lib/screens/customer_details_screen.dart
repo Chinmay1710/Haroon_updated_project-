@@ -30,8 +30,9 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
   Future<void> _loadCustomerDetails({bool showLoading = true}) async {
     // 1. Instant local cache load (0 milliseconds delay!)
-    final cached = await LocalStorageService.getCachedCustomerDetails(widget.customerId);
-    if (cached != null && cached.isNotEmpty && mounted) {
+    final cached = await LocalStorageService.getCachedCustomerDetails(widget.customerId) ??
+        await LocalStorageService.computeCustomerDetailsOffline(widget.customerId);
+    if (cached.isNotEmpty && mounted) {
       setState(() {
         _customerData = cached;
         _isLoading = false;

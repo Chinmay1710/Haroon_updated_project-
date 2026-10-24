@@ -38,8 +38,12 @@ class LocalStorageService {
   // -------------------------------------------------------------
   static Future<void> saveOrderDetails(int orderId, Map<String, dynamic> order) async {
     try {
+      final cleanOrder = Map<String, dynamic>.from(order);
+      if (cleanOrder['cloth_photos'] != null) {
+        cleanOrder['cloth_photos'] = sanitizePhotoList(cleanOrder['cloth_photos']);
+      }
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ht_cache_order_$orderId', jsonEncode(order));
+      await prefs.setString('ht_cache_order_$orderId', jsonEncode(cleanOrder));
     } catch (_) {}
   }
 
@@ -49,10 +53,111 @@ class LocalStorageService {
       final raw = prefs.getString('ht_cache_order_$orderId');
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map<String, dynamic>) {
+          if (decoded['cloth_photos'] != null) {
+            decoded['cloth_photos'] = sanitizePhotoList(decoded['cloth_photos']);
+          }
+          return decoded;
+        }
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Safely extracts and sanitizes photo strings without breaking base64 data URLs.
+  /// Discards broken fragments (like 'data:image/jpeg;base64' or raw comma-split base64 chunks)
+  /// and ensures only intact, valid photo paths/URLs/data-URLs are returned without duplicates.
+  static List<String> sanitizePhotoList(dynamic source) {
+    final List<String> result = [];
+    if (source == null) return result;
+
+    void addCandidate(String? candidate) {
+      if (candidate == null) return;
+      final s = candidate.trim();
+      if (s.isEmpty) return;
+      if (s == 'null' || s == 'NULL' || s == 'undefined' || s == '[]' || s == '{}') return;
+
+      // 1. Intact Data URL (e.g. data:image/jpeg;base64,xxxx)
+      if (s.startsWith('data:image')) {
+        final commaIdx = s.indexOf(',');
+        // Must contain comma and at least 20 chars of payload
+        if (commaIdx != -1 && s.length > commaIdx + 20) {
+          if (!result.contains(s)) result.add(s);
+        }
+        return;
+      }
+
+      // 2. Broken header fragment (e.g. 'data:image/jpeg;base64' without payload)
+      if (s.startsWith('data:') || s == 'base64') {
+        return;
+      }
+
+      // 3. Broken payload fragment (e.g. comma-split tail starting with /9j/ or iVBORw0KGgo)
+      if ((s.startsWith('/9j/') || s.startsWith('iVBORw0KGgo')) && !s.contains('.') && !s.contains('http')) {
+        final alreadyPresent = result.any((existing) => existing.contains(s.substring(0, s.length > 30 ? 30 : s.length)));
+        if (!alreadyPresent && s.length > 50) {
+          final restored = 'data:image/jpeg;base64,$s';
+          if (!result.contains(restored)) {
+            result.add(restored);
+          }
+        }
+        return;
+      }
+
+      // 4. Remote HTTP/HTTPS URLs, IndexedDB/local paths (photos/..., assets/...), or valid file extensions
+      if (s.startsWith('http://') ||
+          s.startsWith('https://') ||
+          s.startsWith('photos/') ||
+          s.startsWith('/photos/') ||
+          s.startsWith('assets/') ||
+          s.startsWith('blob:') ||
+          s.toLowerCase().endsWith('.jpg') ||
+          s.toLowerCase().endsWith('.jpeg') ||
+          s.toLowerCase().endsWith('.png') ||
+          s.toLowerCase().endsWith('.webp') ||
+          s.toLowerCase().endsWith('.gif') ||
+          (!s.contains('/') && s.length > 50)) {
+        if (!result.contains(s)) result.add(s);
+      }
+    }
+
+    void processString(String str) {
+      final trimmed = str.trim();
+      if (trimmed.isEmpty) return;
+
+      if (trimmed.startsWith('data:image')) {
+        // If multiple data URLs were joined together with comma
+        if (trimmed.contains(',data:image')) {
+          final parts = trimmed.split(',data:image');
+          for (int i = 0; i < parts.length; i++) {
+            final p = i == 0 ? parts[i] : 'data:image${parts[i]}';
+            addCandidate(p);
+          }
+        } else {
+          addCandidate(trimmed);
+        }
+      } else if (trimmed.contains(',')) {
+        for (final part in trimmed.split(',')) {
+          addCandidate(part);
+        }
+      } else {
+        addCandidate(trimmed);
+      }
+    }
+
+    if (source is List) {
+      for (final item in source) {
+        if (item is String) {
+          processString(item);
+        } else if (item != null) {
+          processString(item.toString());
+        }
+      }
+    } else if (source is String) {
+      processString(source);
+    }
+
+    return result;
   }
 
   // -------------------------------------------------------------
@@ -76,6 +181,397 @@ class LocalStorageService {
       }
     } catch (_) {}
     return null;
+  }
+
+  // -------------------------------------------------------------
+  // OFFLINE-FIRST CRUD HELPERS (Ensures zero errors in Offline Mode)
+  // -------------------------------------------------------------
+  static Future<Map<String, dynamic>> saveCustomerOffline({
+    int? id,
+    required String name,
+    required String mobile,
+    String address = '',
+    String notes = '',
+  }) async {
+    final cached = (await getCachedCustomers()) ?? [];
+    final List<dynamic> customers = List<dynamic>.from(cached);
+
+    int finalId = id ?? 0;
+    if (finalId <= 0) {
+      int maxId = 0;
+      for (var c in customers) {
+        if (c is Map && c['id'] is num) {
+          final cid = (c['id'] as num).toInt();
+          if (cid > maxId) maxId = cid;
+        }
+      }
+      finalId = maxId > 0 ? maxId + 1 : (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    }
+
+    final newCust = {
+      'id': finalId,
+      'name': name,
+      'mobile': mobile,
+      'address': address,
+      'notes': notes,
+      'created_at': DateTime.now().toIso8601String(),
+    };
+
+    final index = customers.indexWhere((c) => c is Map && c['id'] == finalId);
+    if (index >= 0) {
+      customers[index] = newCust;
+    } else {
+      customers.insert(0, newCust);
+    }
+
+    await saveCustomers(customers);
+    return newCust;
+  }
+
+  static Future<String> getNextBillNumber() async {
+    final cached = (await getCachedOrders()) ?? [];
+    int maxBill = 0;
+    for (var o in cached) {
+      if (o is Map) {
+        final onumStr = (o['order_number'] ?? '').toString();
+        final match = RegExp(r'\d+').allMatches(onumStr);
+        if (match.isNotEmpty) {
+          final lastDigits = match.last.group(0);
+          final bNum = int.tryParse(lastDigits ?? '');
+          if (bNum != null && bNum > maxBill) {
+            maxBill = bNum;
+          }
+        }
+      }
+    }
+    final nextBill = maxBill + 1;
+    return 'Bill-${nextBill.toString().padLeft(6, '0')}';
+  }
+
+  static Future<Map<String, dynamic>> saveOrderOffline(Map<String, dynamic> payload) async {
+    final cached = (await getCachedOrders()) ?? [];
+    final List<dynamic> orders = List<dynamic>.from(cached);
+
+    int finalId = (payload['id'] as num?)?.toInt() ?? 0;
+    String billNo = (payload['order_number'] ?? '').toString();
+
+    int maxId = 0;
+    int maxBill = 0;
+    for (var o in orders) {
+      if (o is Map) {
+        final idVal = o['id'];
+        int idNum = 0;
+        if (idVal is int) {
+          idNum = idVal;
+        } else if (idVal is num) {
+          idNum = idVal.toInt();
+        } else if (idVal != null) {
+          idNum = int.tryParse(idVal.toString()) ?? 0;
+        }
+        if (idNum > maxId) maxId = idNum;
+
+        final onumStr = (o['order_number'] ?? '').toString();
+        final match = RegExp(r'\d+').allMatches(onumStr);
+        if (match.isNotEmpty) {
+          final lastDigits = match.last.group(0);
+          final bNum = int.tryParse(lastDigits ?? '');
+          if (bNum != null && bNum > maxBill) {
+            maxBill = bNum;
+          }
+        }
+      }
+    }
+
+    if (billNo.isEmpty || !billNo.startsWith('Bill-')) {
+      final nextBill = maxBill + 1;
+      billNo = 'Bill-${nextBill.toString().padLeft(6, '0')}';
+    }
+    if (finalId <= 0) {
+      finalId = maxId > 0 ? maxId + 1 : 1;
+    }
+
+    final totalAmount = (payload['total_amount'] as num?)?.toDouble() ??
+        (payload['subtotal'] as num?)?.toDouble() ??
+        0.0;
+    final advanceAmount = (payload['advance_amount'] as num?)?.toDouble() ??
+        (payload['advance'] as num?)?.toDouble() ??
+        0.0;
+    final discount = (payload['discount'] as num?)?.toDouble() ?? 0.0;
+    final remainingAmount = totalAmount - advanceAmount - discount;
+
+    final todayStr = DateTime.now().toIso8601String().split('T').first;
+    final orderDate = (payload['order_date'] ?? todayStr).toString().split('T').first;
+    final deliveryDate = (payload['delivery_date'] ?? payload['deliveryDate'] ?? '').toString().split('T').first;
+
+    final rawItems = payload['items'];
+    final List<dynamic> formattedItems = [];
+    final List<String> gatheredPhotos = [];
+
+    // Safely add cloth_photos from payload
+    gatheredPhotos.addAll(sanitizePhotoList(payload['cloth_photos']));
+
+    if (rawItems is List) {
+      for (int i = 0; i < rawItems.length; i++) {
+        if (rawItems[i] is Map) {
+          final itemMap = Map<String, dynamic>.from(rawItems[i] as Map);
+          if (itemMap['id'] == null || itemMap['id'] == 0) {
+            itemMap['id'] = i + 1;
+          }
+
+          // Safely extract item photos without comma-splitting base64 data URLs
+          final itemPhotos = <String>[];
+          if (itemMap['image_base64'] != null) {
+            itemPhotos.addAll(sanitizePhotoList(itemMap['image_base64']));
+          }
+          if (itemMap['image_path'] != null) {
+            itemPhotos.addAll(sanitizePhotoList(itemMap['image_path']));
+          }
+
+          final cleanItemPhotos = sanitizePhotoList(itemPhotos);
+          itemMap['image_base64'] = cleanItemPhotos.where((p) => p.startsWith('data:')).toList();
+          itemMap['image_path'] = cleanItemPhotos.isNotEmpty ? cleanItemPhotos.first : '';
+
+          for (final p in cleanItemPhotos) {
+            if (!gatheredPhotos.contains(p)) {
+              gatheredPhotos.add(p);
+            }
+          }
+
+          formattedItems.add(itemMap);
+        }
+      }
+    }
+
+    final List<Map<String, dynamic>> rawItemsList = [];
+    final List<String> itemSummaryParts = [];
+    for (int i = 0; i < formattedItems.length; i++) {
+      final it = formattedItems[i];
+      final qty = it['quantity'] ?? 1;
+      final type = it['clothing_type'] ?? 'Kapda';
+      final nameStr = '$qty $type';
+      itemSummaryParts.add(nameStr);
+      rawItemsList.add({
+        'id': it['id'] ?? (i + 1),
+        'name': nameStr,
+        'is_ready': it['is_ready'] == true,
+      });
+    }
+    final summaryStr = itemSummaryParts.isNotEmpty
+        ? itemSummaryParts.join(', ')
+        : (payload['items_summary'] ?? 'Kapde').toString();
+
+    final orderMap = {
+      'id': finalId,
+      'order_number': billNo,
+      'customer_id': (payload['customer_id'] as num?)?.toInt() ?? (payload['customerId'] as num?)?.toInt() ?? 0,
+      'customer_name': (payload['customer_name'] ?? 'Customer').toString(),
+      'customer_mobile': (payload['customer_mobile'] ?? '').toString(),
+      'customer_address': (payload['customer_address'] ?? '').toString(),
+      'status': (payload['status'] ?? 'NEW').toString(),
+      'order_date': orderDate,
+      'delivery_date': deliveryDate,
+      'total_amount': totalAmount,
+      'advance_amount': advanceAmount,
+      'discount': discount,
+      'remaining_amount': remainingAmount < 0 ? 0.0 : remainingAmount,
+      'notes': payload['notes'] ?? '',
+      'special_instructions': payload['special_instructions'] ?? payload['notes'] ?? '',
+      'items': summaryStr,
+      'items_summary': summaryStr,
+      'raw_items': rawItemsList,
+      'items_detail': formattedItems,
+      'payments': payload['payments'] is List
+          ? payload['payments']
+          : (orders.indexWhere((o) => o is Map && o['id']?.toString() == finalId.toString()) >= 0 &&
+                  orders.firstWhere((o) => o is Map && o['id']?.toString() == finalId.toString())['payments'] is List
+              ? orders.firstWhere((o) => o is Map && o['id']?.toString() == finalId.toString())['payments']
+              : []),
+      'cloth_photos': gatheredPhotos,
+      'image_path': gatheredPhotos.where((p) => !p.startsWith('data:')).isNotEmpty
+          ? gatheredPhotos.where((p) => !p.startsWith('data:')).join(',')
+          : (gatheredPhotos.isNotEmpty ? gatheredPhotos.first : ''),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    final index = orders.indexWhere((o) => o is Map && o['id']?.toString() == finalId.toString());
+    if (index >= 0) {
+      orders[index] = orderMap;
+    } else {
+      orders.insert(0, orderMap); // Insert at 0 so it immediately appears at the top!
+    }
+
+    await saveOrders(orders);
+    await saveOrderDetails(finalId, orderMap);
+    await computeDashboardStatsFromOrders();
+    await computePendingOrdersFromOrders();
+
+    return {
+      'status': 'success',
+      'id': finalId,
+      'order_number': billNo,
+      'order': orderMap,
+    };
+  }
+
+  static Future<Map<String, dynamic>> updateOrderStatusOffline({
+    required int orderId,
+    required String status,
+    List<int>? readyItemIds,
+    List<int>? deliveredItemIds,
+  }) async {
+    final cached = (await getCachedOrders()) ?? [];
+    final List<dynamic> orders = List<dynamic>.from(cached);
+    final index = orders.indexWhere((o) {
+      if (o is! Map) return false;
+      final idNum = int.tryParse((o['id'] ?? '').toString()) ?? 0;
+      return idNum == orderId;
+    });
+
+    Map<String, dynamic>? targetOrder;
+    if (index >= 0 && orders[index] is Map) {
+      targetOrder = Map<String, dynamic>.from(orders[index] as Map);
+      targetOrder['status'] = status;
+      if (readyItemIds != null) {
+        targetOrder['ready_item_ids'] = readyItemIds;
+      }
+      targetOrder['updated_at'] = DateTime.now().toIso8601String();
+
+      // If raw_items exist, update is_ready for checkboxes
+      if (targetOrder['raw_items'] is List) {
+        final rawList = List<dynamic>.from(targetOrder['raw_items'] as List);
+        for (int i = 0; i < rawList.length; i++) {
+          if (rawList[i] is Map) {
+            final itemMap = Map<String, dynamic>.from(rawList[i] as Map);
+            final itemId = int.tryParse((itemMap['id'] ?? (i + 1)).toString()) ?? (i + 1);
+            if (status == 'STITCHING_COMPLETE' || status == 'DELIVERED') {
+              itemMap['is_ready'] = true;
+            } else if (readyItemIds != null) {
+              itemMap['is_ready'] = readyItemIds.contains(itemId);
+            }
+            rawList[i] = itemMap;
+          }
+        }
+        targetOrder['raw_items'] = rawList;
+      }
+
+      // If items_detail exists, update it too
+      if (targetOrder['items_detail'] is List) {
+        final itemsList = List<dynamic>.from(targetOrder['items_detail'] as List);
+        for (int i = 0; i < itemsList.length; i++) {
+          if (itemsList[i] is Map) {
+            final itemMap = Map<String, dynamic>.from(itemsList[i] as Map);
+            final itemId = int.tryParse((itemMap['id'] ?? (i + 1)).toString()) ?? (i + 1);
+            if (status == 'STITCHING_COMPLETE') {
+              itemMap['is_ready'] = true;
+              itemMap['status'] = 'READY';
+            } else if (status == 'DELIVERED') {
+              itemMap['is_ready'] = true;
+              itemMap['status'] = 'DELIVERED';
+            } else if (readyItemIds != null) {
+              final isReady = readyItemIds.contains(itemId);
+              itemMap['is_ready'] = isReady;
+              itemMap['status'] = isReady ? 'READY' : 'IN_PROGRESS';
+            }
+            itemsList[i] = itemMap;
+          }
+        }
+        targetOrder['items_detail'] = itemsList;
+      }
+
+      orders[index] = targetOrder;
+      await saveOrders(orders);
+    }
+
+    // Also update order details cache
+    final details = await getCachedOrderDetails(orderId);
+    if (details != null && details.isNotEmpty) {
+      final updatedDetails = Map<String, dynamic>.from(details);
+      updatedDetails['status'] = status;
+      updatedDetails['updated_at'] = DateTime.now().toIso8601String();
+
+      if (updatedDetails['items'] is List) {
+        final itemsList = List<dynamic>.from(updatedDetails['items'] as List);
+        for (int i = 0; i < itemsList.length; i++) {
+          if (itemsList[i] is Map) {
+            final itemMap = Map<String, dynamic>.from(itemsList[i] as Map);
+            final itemId = int.tryParse((itemMap['id'] ?? (i + 1)).toString()) ?? (i + 1);
+            if (status == 'STITCHING_COMPLETE') {
+              itemMap['is_ready'] = true;
+              itemMap['status'] = 'READY';
+            } else if (status == 'DELIVERED') {
+              itemMap['is_ready'] = true;
+              itemMap['status'] = 'DELIVERED';
+            } else if (readyItemIds != null) {
+              final isReady = readyItemIds.contains(itemId);
+              itemMap['is_ready'] = isReady;
+              itemMap['status'] = isReady ? 'READY' : 'IN_PROGRESS';
+            } else if (deliveredItemIds != null) {
+              final isDelivered = deliveredItemIds.contains(itemId);
+              if (isDelivered) {
+                itemMap['status'] = 'DELIVERED';
+                itemMap['is_ready'] = true;
+              }
+            }
+            itemsList[i] = itemMap;
+          }
+        }
+        updatedDetails['items'] = itemsList;
+      }
+      await saveOrderDetails(orderId, updatedDetails);
+    } else if (targetOrder != null) {
+      await saveOrderDetails(orderId, targetOrder);
+    }
+
+    // Recompute dashboard stats and refresh deliveries and pending orders cache
+    await computeDashboardStatsFromOrders();
+    await computePendingOrdersFromOrders();
+
+    return {
+      'status': 'success',
+      'order_id': orderId,
+      'new_status': status,
+    };
+  }
+
+  static Future<void> deleteOrderOffline(int orderId) async {
+    final cached = (await getCachedOrders()) ?? [];
+    final List<dynamic> orders = List<dynamic>.from(cached);
+    final targetIdStr = orderId.toString();
+    orders.removeWhere((o) => o is Map && o['id']?.toString() == targetIdStr);
+    await saveOrders(orders);
+    await computeDashboardStatsFromOrders();
+    await computePendingOrdersFromOrders();
+  }
+
+  static Future<Map<String, dynamic>> createPaymentOffline({
+    required int orderId,
+    required double amount,
+    String paymentMethod = 'Cash',
+  }) async {
+    final cached = (await getCachedOrders()) ?? [];
+    final List<dynamic> orders = List<dynamic>.from(cached);
+    final targetIdStr = orderId.toString();
+    final index = orders.indexWhere((o) => o is Map && o['id']?.toString() == targetIdStr);
+
+    if (index >= 0 && orders[index] is Map) {
+      final order = Map<String, dynamic>.from(orders[index] as Map);
+      final currentAdvance = (order['advance_amount'] as num?)?.toDouble() ?? double.tryParse((order['advance_amount'] ?? 0).toString()) ?? 0.0;
+      final currentRemaining = (order['remaining_amount'] as num?)?.toDouble() ?? double.tryParse((order['remaining_amount'] ?? 0).toString()) ?? 0.0;
+
+      final newAdvance = currentAdvance + amount;
+      final newRemaining = (currentRemaining - amount) < 0 ? 0.0 : (currentRemaining - amount);
+
+      order['advance_amount'] = newAdvance;
+      order['remaining_amount'] = newRemaining;
+      orders[index] = order;
+
+      await saveOrders(orders);
+      await saveOrderDetails(orderId, order);
+      await computeDashboardStatsFromOrders();
+      await computePendingOrdersFromOrders();
+    }
+
+    return {'status': 'success', 'order_id': orderId, 'amount': amount};
   }
 
   // -------------------------------------------------------------
@@ -119,6 +615,137 @@ class LocalStorageService {
     return null;
   }
 
+  static Future<List<Map<String, dynamic>>> getCustomerMeasurementsOffline(int customerId) async {
+    final List<Map<String, dynamic>> results = [];
+    final seenKeys = <String>{};
+
+    // 1. Check explicitly saved customer profiles
+    final cachedProfiles = await getCachedMeasurements(customerId);
+    if (cachedProfiles != null && cachedProfiles.isNotEmpty) {
+      for (var p in cachedProfiles) {
+        if (p is Map) {
+          final map = Map<String, dynamic>.from(p);
+          final vals = (map['values'] as Map?) ?? {};
+          if (vals.isNotEmpty) {
+            final key = '${map['template_type'] ?? ''}_${vals.toString()}';
+            if (!seenKeys.contains(key)) {
+              seenKeys.add(key);
+              results.add(map);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Scan all previous orders of this customer for past garment measurements
+    final orders = (await getCachedOrders()) ?? [];
+    for (var o in orders) {
+      if (o is! Map) continue;
+      final cid = (o['customer_id'] as num?)?.toInt() ??
+          (o['customerId'] as num?)?.toInt() ??
+          int.tryParse(o['customer_id']?.toString() ?? '') ??
+          int.tryParse(o['customerId']?.toString() ?? '');
+      if (cid != customerId) continue;
+
+      final billNo = o['order_number'] ?? '#${o['id']}';
+      final orderDate = (o['order_date'] ?? '').toString();
+
+      List<dynamic> items = [];
+      if (o['items_detail'] is List && (o['items_detail'] as List).isNotEmpty) {
+        items = o['items_detail'] as List;
+      } else if (o['raw_items'] is List && (o['raw_items'] as List).isNotEmpty) {
+        items = o['raw_items'] as List;
+      } else if (o['items'] is List) {
+        items = o['items'] as List;
+      }
+
+      for (var it in items) {
+        if (it is! Map) continue;
+        final cType = (it['clothing_type'] ?? it['type'] ?? 'Garment').toString();
+        final rawMeas = it['measurements'];
+        if (rawMeas is Map && rawMeas.isNotEmpty) {
+          final Map<String, dynamic> cleanMeas = {};
+          rawMeas.forEach((k, v) {
+            if (v != null && v.toString().trim().isNotEmpty) {
+              cleanMeas[k.toString().trim()] = v.toString().trim();
+            }
+          });
+
+          if (cleanMeas.isNotEmpty) {
+            final key = '${cType}_${cleanMeas.toString()}';
+            if (!seenKeys.contains(key)) {
+              seenKeys.add(key);
+              results.add({
+                'id': it['id'] ?? results.length + 1,
+                'name': '$cType ($billNo)',
+                'template_type': cType,
+                'created_at': orderDate,
+                'values': cleanMeas,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return results;
+  }
+
+  static Future<Map<String, dynamic>> computeCustomerDetailsOffline(int customerId) async {
+    final customers = (await getCachedCustomers()) ?? [];
+    Map<String, dynamic>? customer;
+    for (var c in customers) {
+      if (c is Map) {
+        final id = (c['id'] as num?)?.toInt() ?? int.tryParse(c['id']?.toString() ?? '');
+        if (id == customerId) {
+          customer = Map<String, dynamic>.from(c);
+          break;
+        }
+      }
+    }
+
+    final orders = (await getCachedOrders()) ?? [];
+    final customerOrders = orders.where((o) {
+      if (o is! Map) return false;
+      final cid = (o['customer_id'] as num?)?.toInt() ??
+          (o['customerId'] as num?)?.toInt() ??
+          int.tryParse(o['customer_id']?.toString() ?? '') ??
+          int.tryParse(o['customerId']?.toString() ?? '');
+      return cid == customerId;
+    }).toList();
+
+    if (customer == null) {
+      String name = 'Customer';
+      String phone = '';
+      String address = '';
+      String notes = '';
+      if (customerOrders.isNotEmpty) {
+        final first = customerOrders.first as Map;
+        name = (first['customer_name'] ?? 'Customer').toString();
+        phone = (first['customer_mobile'] ?? '').toString();
+        address = (first['customer_address'] ?? '').toString();
+      }
+      customer = {
+        'id': customerId,
+        'name': name,
+        'mobile': phone,
+        'address': address,
+        'notes': notes,
+      };
+    }
+
+    final profiles = await getCustomerMeasurementsOffline(customerId);
+
+    final result = {
+      'customer': customer,
+      'orders': customerOrders,
+      'profiles': profiles,
+    };
+
+    await saveCustomerDetails(customerId, result);
+    return result;
+  }
+
   // -------------------------------------------------------------
   // DASHBOARD STATS CACHE
   // -------------------------------------------------------------
@@ -136,10 +763,115 @@ class LocalStorageService {
       final raw = prefs.getString(_keyDashboard);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map<String, dynamic>) {
+          if (decoded['recent_orders'] != null &&
+              (decoded['recent_orders'] as List).isNotEmpty &&
+              decoded['pending_payments'] != null) {
+            return decoded;
+          }
+        }
       }
     } catch (_) {}
-    return null;
+
+    // Auto-heal from cached orders if stats was empty or missing keys
+    return await computeDashboardStatsFromOrders();
+  }
+
+  static Future<Map<String, dynamic>> computeDashboardStatsFromOrders() async {
+    final orders = await getCachedOrders();
+    if (orders == null || orders.isEmpty) {
+      return {
+        'total_orders': 0,
+        'active_orders': 0,
+        'delivered_orders': 0,
+        'total_revenue': 0,
+        'pending_balance': 0,
+        'pending_payments': 0,
+        'orders_today': 0,
+        'deliveries_today': 0,
+        'completed_today': 0,
+        'recent_orders': [],
+      };
+    }
+
+    final todayStr = DateTime.now().toIso8601String().split('T').first;
+    double totalRevenue = 0.0;
+    double pendingBalance = 0.0;
+    int activeOrders = 0;
+    int deliveredOrders = 0;
+    int ordersToday = 0;
+    int deliveriesToday = 0;
+    final List<dynamic> deliveriesList = [];
+
+    for (var o in orders) {
+      if (o is Map) {
+        final total = (o['total_amount'] as num?)?.toDouble() ?? 0.0;
+        final remaining = (o['remaining_amount'] as num?)?.toDouble() ?? 0.0;
+        final status = o['status']?.toString().toUpperCase() ?? 'NEW';
+        final oDate = (o['order_date'] ?? '').toString();
+        final dDate = (o['delivery_date'] ?? '').toString();
+
+        if (status == 'DELIVERED') {
+          deliveredOrders++;
+        } else if (status != 'CANCELLED') {
+          activeOrders++;
+        }
+
+        totalRevenue += (total - remaining);
+        if (remaining > 0) {
+          pendingBalance += remaining;
+        }
+
+        if (oDate.startsWith(todayStr)) {
+          ordersToday++;
+        }
+
+        // Only add to deliveries if stitching is complete (user clicked Complete button)
+        // This matches the website workflow: orders appear in deliveries only after Complete
+        final isReadyForDelivery = status == 'STITCHING_COMPLETE' || status == 'PARTIALLY_COMPLETE';
+        if (isReadyForDelivery) {
+          deliveriesList.add(o);
+          if (dDate.startsWith(todayStr) || (dDate.isNotEmpty && dDate.compareTo(todayStr) <= 0)) {
+            deliveriesToday++;
+          }
+        }
+      }
+    }
+
+    final recentOrders = orders.take(15).map((o) {
+      if (o is Map) {
+        return {
+          'id': o['id'],
+          'order_number': o['order_number'] ?? '#${o['id']}',
+          'customer_name': o['customer_name'] ?? 'Customer',
+          'status': o['status'] ?? 'NEW',
+          'total_amount': o['total_amount'] ?? 0,
+          'remaining_amount': o['remaining_amount'] ?? 0,
+          'order_date': o['order_date'] ?? '',
+          'delivery_date': o['delivery_date'] ?? '',
+          'image_path': o['image_path'] ?? '',
+        };
+      }
+      return o;
+    }).toList();
+
+    final stats = {
+      'total_orders': orders.length,
+      'active_orders': activeOrders,
+      'delivered_orders': deliveredOrders,
+      'total_revenue': totalRevenue,
+      'pending_balance': pendingBalance,
+      'pending_payments': pendingBalance,
+      'orders_today': ordersToday,
+      'deliveries_today': deliveriesToday,
+      'completed_today': 0,
+      'recent_orders': recentOrders,
+    };
+
+    await saveDashboardStats(stats);
+    await saveDeliveries({'deliveries': deliveriesList});
+
+    return stats;
   }
 
   // -------------------------------------------------------------
@@ -180,10 +912,48 @@ class LocalStorageService {
       final raw = prefs.getString(_keyPendingOrders);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is List) return decoded;
+        if (decoded is List && decoded.isNotEmpty) return decoded;
       }
     } catch (_) {}
-    return null;
+    return await computePendingOrdersFromOrders();
+  }
+
+  static Future<List<dynamic>> computePendingOrdersFromOrders() async {
+    final cached = (await getCachedOrders()) ?? [];
+    final List<dynamic> pending = [];
+    for (var o in cached) {
+      if (o is Map) {
+        double remaining = (o['remaining_amount'] as num?)?.toDouble() ??
+            double.tryParse((o['remaining_amount'] ?? 0).toString()) ??
+            0.0;
+        final status = (o['status'] ?? '').toString().toUpperCase();
+
+        // If remaining is not recorded or 0, check total - (advance + discount)
+        if (remaining <= 0.01 && status != 'CANCELLED') {
+          final total = (o['total_amount'] as num?)?.toDouble() ??
+              double.tryParse((o['total_amount'] ?? 0).toString()) ??
+              0.0;
+          final adv = (o['advance_amount'] as num?)?.toDouble() ??
+              double.tryParse((o['advance_amount'] ?? 0).toString()) ??
+              0.0;
+          final disc = (o['discount'] as num?)?.toDouble() ??
+              double.tryParse((o['discount'] ?? 0).toString()) ??
+              0.0;
+          if (total > (adv + disc)) {
+            remaining = total - (adv + disc);
+            o['remaining_amount'] = remaining;
+          }
+        }
+
+        if (remaining > 0.01 && status != 'CANCELLED') {
+          final item = Map<String, dynamic>.from(o);
+          item['remaining_amount'] = remaining;
+          pending.add(item);
+        }
+      }
+    }
+    await savePendingOrders(pending);
+    return pending;
   }
 
   // -------------------------------------------------------------
@@ -476,7 +1246,14 @@ class LocalStorageService {
           final orderData = det ?? o;
           detailedOrders.add(orderData);
 
-          final items = orderData['items'] as List<dynamic>? ?? [];
+          List<dynamic> items = [];
+          if (orderData['raw_items'] is List) {
+            items = orderData['raw_items'] as List;
+          } else if (orderData['items'] is List) {
+            items = orderData['items'] as List;
+          } else if (o['raw_items'] is List) {
+            items = o['raw_items'] as List;
+          }
           for (var it in items) {
             if (it is Map) {
               if ((it['image_path']?.toString() ?? '').isNotEmpty) {
@@ -612,8 +1389,16 @@ class LocalStorageService {
 
             // Summary format for list view
             String itemsSummary = orderMap['items_summary']?.toString() ?? '';
+            if (itemsSummary.isEmpty && orderMap['items'] is String) {
+              itemsSummary = orderMap['items'] as String;
+            }
             String photoUrl = '';
-            final items = orderMap['items'] as List<dynamic>? ?? [];
+            List<dynamic> items = [];
+            if (orderMap['raw_items'] is List) {
+              items = orderMap['raw_items'] as List;
+            } else if (orderMap['items'] is List) {
+              items = orderMap['items'] as List;
+            }
             for (var it in items) {
               if (it is Map) {
                 final p = it['image_path']?.toString() ?? '';
@@ -623,6 +1408,14 @@ class LocalStorageService {
                 }
                 final meas = it['measurements'] as Map<String, dynamic>? ?? {};
                 totalMeasurements += meas.length;
+              }
+            }
+
+            if (photoUrl.isEmpty) {
+              final topImg = orderMap['image_path']?.toString() ?? '';
+              if (topImg.isNotEmpty) {
+                photoUrl = topImg.split(',').first.trim();
+                totalPhotos++;
               }
             }
 
@@ -665,16 +1458,58 @@ class LocalStorageService {
         await saveOrders(ordersSummaryList);
         await savePendingOrders(pendingOrdersList);
 
-        // Save computed dashboard stats so everything loads instantly
+        // Compute full dashboard stats & deliveries
+        final todayStr = DateTime.now().toIso8601String().split('T').first;
+        int ordersToday = 0;
+        int deliveriesToday = 0;
+        final List<dynamic> deliveriesList = [];
+
+        for (var o in ordersSummaryList) {
+          final oDate = (o['order_date'] ?? '').toString();
+          if (oDate.startsWith(todayStr)) {
+            ordersToday++;
+          }
+
+          final dDate = (o['delivery_date'] ?? '').toString();
+          final s = (o['status'] ?? '').toString();
+          final isUndelivered = s != 'DELIVERED' && s != 'CANCELLED';
+
+          if (isUndelivered) {
+            deliveriesList.add(o);
+            if (dDate.startsWith(todayStr) || (dDate.isNotEmpty && dDate.compareTo(todayStr) <= 0)) {
+              deliveriesToday++;
+            }
+          }
+        }
+
+        final recentOrders = ordersSummaryList.take(15).map((o) => {
+          'id': o['id'],
+          'order_number': o['order_number'] ?? '#${o['id']}',
+          'customer_name': o['customer_name'] ?? 'Customer',
+          'status': o['status'] ?? 'NEW',
+          'total_amount': o['total_amount'] ?? 0,
+          'remaining_amount': o['remaining_amount'] ?? 0,
+          'order_date': o['order_date'] ?? '',
+          'delivery_date': o['delivery_date'] ?? '',
+          'image_path': o['image_path'] ?? '',
+        }).toList();
+
         final stats = {
           'total_orders': importedOrders,
           'active_orders': activeOrders,
           'delivered_orders': deliveredOrders,
           'total_revenue': totalRevenue,
           'pending_balance': pendingBalance,
+          'pending_payments': pendingBalance,
+          'orders_today': ordersToday,
+          'deliveries_today': deliveriesToday,
           'completed_today': 0,
+          'recent_orders': recentOrders,
         };
         await saveDashboardStats(stats);
+        if (deliveriesList.isNotEmpty) {
+          await saveDeliveries({'deliveries': deliveriesList});
+        }
       }
 
       await _recordSyncTime();
@@ -707,13 +1542,93 @@ class LocalStorageService {
   }
 
   // -------------------------------------------------------------
+  // OFFLINE MODE
+  // -------------------------------------------------------------
+  static const String _keyOfflineMode = 'ht_offline_mode_active';
+
+  static Future<bool> isOfflineMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_keyOfflineMode) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<void> setOfflineMode(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyOfflineMode, enabled);
+    } catch (_) {}
+  }
+
+  // -------------------------------------------------------------
+  // AUTO BACKUP SETTINGS
+  // -------------------------------------------------------------
+  static const String _keyAutoBackupEnabled = 'ht_auto_backup_enabled';
+  static const String _keyAutoBackupFreq = 'ht_auto_backup_freq';
+  static const String _keyLastAutoBackupTime = 'ht_last_auto_backup_time';
+
+  static Future<bool> isAutoBackupEnabled() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_keyAutoBackupEnabled) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<void> setAutoBackupEnabled(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyAutoBackupEnabled, enabled);
+    } catch (_) {}
+  }
+
+  static Future<String> getAutoBackupFrequency() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyAutoBackupFreq) ?? 'daily';
+    } catch (_) {
+      return 'daily';
+    }
+  }
+
+  static Future<void> setAutoBackupFrequency(String freq) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyAutoBackupFreq, freq);
+    } catch (_) {}
+  }
+
+  static Future<String?> getLastAutoBackupTime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyLastAutoBackupTime);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> recordAutoBackupTime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyLastAutoBackupTime, DateTime.now().toIso8601String());
+    } catch (_) {}
+  }
+
+  // -------------------------------------------------------------
   // CLEAR CACHE
   // -------------------------------------------------------------
-  static Future<void> clearAll() async {
+  static Future<void> clearAll({bool enableOfflineMode = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
+      if (enableOfflineMode) {
+        await prefs.setBool(_keyOfflineMode, true);
+      }
     } catch (_) {}
   }
 }
+
 

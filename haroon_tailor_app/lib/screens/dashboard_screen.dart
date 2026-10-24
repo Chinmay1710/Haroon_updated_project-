@@ -11,13 +11,17 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.onTabChange});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   Map<String, dynamic> _stats = {};
   List<dynamic> _recentOrders = [];
+
+  void reloadDashboard() {
+    _loadDashboard();
+  }
 
   @override
   void initState() {
@@ -145,7 +149,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 12),
                     _buildKpiCard(
                       title: 'Total Pending Balance (Tap for List)',
-                      value: currency.format(_stats['pending_payments'] ?? 0),
+                      value: currency.format(_stats['pending_payments'] ?? _stats['pending_balance'] ?? 0),
                       icon: Icons.account_balance_wallet,
                       color: const Color(0xFF059669),
                       isFullWidth: true,
@@ -195,7 +199,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         itemBuilder: (context, index) {
                           final o = _recentOrders[index];
                           final status = o['status']?.toString() ?? 'NEW';
-                          final orderId = o['id'] as int;
+                          final orderId = (o['id'] is int)
+                              ? o['id'] as int
+                              : int.tryParse(o['id']?.toString() ?? '0') ?? 0;
 
                           return Card(
                             elevation: 0,

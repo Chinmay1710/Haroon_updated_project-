@@ -137,35 +137,16 @@ class _MeasurementGridState extends State<MeasurementGrid> {
                         width: hasValue ? 1.5 : 1,
                       ),
                     ),
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          top: 2,
-                          left: 3,
-                          child: Text(
-                            '$boxNum',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: hasValue ? const Color(0xFF0F172A) : Colors.grey.shade400,
-                            ),
-                          ),
+                    child: Center(
+                      child: Text(
+                        val,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
                         ),
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              val,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ],
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   );
                 }
@@ -204,53 +185,35 @@ class _MeasurementGridState extends State<MeasurementGrid> {
                             ]
                           : null,
                     ),
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          top: 2,
-                          left: 3,
-                          child: Text(
-                            '$boxNum',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected
-                                  ? const Color(0xFF2563EB)
-                                  : (hasValue ? const Color(0xFF0F172A) : Colors.grey.shade400),
-                            ),
-                          ),
-                        ),
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 6, left: 2, right: 2),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    val,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                val,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF0F172A),
                                 ),
-                                if (isSelected)
-                                  Container(
-                                    width: 1.5,
-                                    height: 14,
-                                    margin: const EdgeInsets.only(left: 2),
-                                    color: const Color(0xFF2563EB),
-                                  ),
-                              ],
+                                textAlign: TextAlign.center,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
+                            if (isSelected)
+                              Container(
+                                width: 1.5,
+                                height: 14,
+                                margin: const EdgeInsets.only(left: 2),
+                                color: const Color(0xFF2563EB),
+                              ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 );

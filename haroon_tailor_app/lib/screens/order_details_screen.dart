@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +6,9 @@ import '../services/api_service.dart';
 import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
 import '../widgets/measurement_grid.dart';
+import '../utils/io_helper_stub.dart'
+    if (dart.library.html) '../utils/io_helper_web.dart'
+    if (dart.library.io) '../utils/io_helper_io.dart';
 import 'new_order_screen.dart';
 import 'receipt_print_screen.dart';
 import 'stitching_slip_print_screen.dart';
@@ -577,7 +579,11 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       name: _order!['customer_name'] ?? '',
       mobile: _order!['customer_mobile'] ?? '',
     );
-    final dynamic itemsRaw = _order!['items'];
+    final dynamic itemsRaw = (_order!['items_detail'] is List && (_order!['items_detail'] as List).isNotEmpty)
+        ? _order!['items_detail']
+        : (_order!['raw_items'] is List && (_order!['raw_items'] as List).isNotEmpty
+            ? _order!['raw_items']
+            : (_order!['items'] is List ? _order!['items'] : []));
     final List<dynamic> items = itemsRaw is List ? itemsRaw : [];
     Map<String, dynamic> measurements = {};
     String clothingType = 'Shirt';
@@ -663,7 +669,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(url, fit: BoxFit.contain),
+              child: InteractiveViewer(
+                clipBehavior: Clip.none,
+                child: buildSmartImage(url, fit: BoxFit.contain),
+              ),
             ),
             IconButton(
               icon: const CircleAvatar(
@@ -676,6 +685,22 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ),
       ),
     );
+  }
+
+  List<String> _extractItemPhotos(dynamic it) {
+    if (it is! Map) return [];
+    final List<String> raw = [];
+    if (it['image_path'] != null) raw.addAll(LocalStorageService.sanitizePhotoList(it['image_path']));
+    if (it['image_base64'] != null) raw.addAll(LocalStorageService.sanitizePhotoList(it['image_base64']));
+    if (it['images'] != null) raw.addAll(LocalStorageService.sanitizePhotoList(it['images']));
+    return LocalStorageService.sanitizePhotoList(raw);
+  }
+
+  List<String> _extractOrderPhotos(Map<String, dynamic> o) {
+    final List<String> raw = [];
+    if (o['cloth_photos'] != null) raw.addAll(LocalStorageService.sanitizePhotoList(o['cloth_photos']));
+    if (o['image_path'] != null) raw.addAll(LocalStorageService.sanitizePhotoList(o['image_path']));
+    return LocalStorageService.sanitizePhotoList(raw);
   }
 
   Color _getStatusColor(String status) {
@@ -831,7 +856,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final phone = (o['customer_mobile'] ?? '').toString();
     final address = (o['customer_address'] ?? '').toString();
     final status = (o['status'] ?? 'NEW').toString();
-    final dynamic itemsRaw = o['items'];
+    final dynamic itemsRaw = (o['items_detail'] is List && (o['items_detail'] as List).isNotEmpty)
+        ? o['items_detail']
+        : (o['items'] is List ? o['items'] : []);
     final List<dynamic> items = itemsRaw is List ? itemsRaw : [];
     final payments = (o['payments'] as List<dynamic>?) ?? [];
 
@@ -1009,7 +1036,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 final qty = it['quantity'] ?? 1;
                 final price = it['price'] ?? 0;
                 final notes = (it['notes'] ?? '').toString();
-                final imagePath = (it['image_path'] ?? '').toString();
+                final itemPhotos = _extractItemPhotos(it);
                 final meas = (it['measurements'] as Map<String, dynamic>?) ?? {};
 
                 return Card(
@@ -1039,70 +1066,90 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         ],
 
                         // Photos attached
-                        if (imagePath.isNotEmpty) ...[
+                        if (itemPhotos.isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          const Text('Photos:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(Icons.photo_library, size: 14, color: Colors.blueGrey),
+                              const SizedBox(width: 4),
+                              Text('Photos (${itemPhotos.length}):',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           SizedBox(
-                            height: 70,
-                            child: ListView(
+                            height: 80,
+                            child: ListView.builder(
                               scrollDirection: Axis.horizontal,
-                              children: imagePath.split(',').map((p) {
-                                final clean = p.trim();
-                                if (clean.isEmpty) return const SizedBox();
-
-                                Widget imgWidget;
-                                if (clean.startsWith('data:image')) {
-                                  final b64 = clean.split(',').last;
-                                  imgWidget = Image.memory(base64Decode(b64), fit: BoxFit.cover, width: 70, height: 70);
-                                } else {
-                                  final fullUrl = clean.startsWith('http')
-                                      ? clean
-                                      : '${ApiService.baseUrl}/${clean.replaceAll('../', '')}';
-                                  imgWidget = Image.network(
-                                    fullUrl,
-                                    fit: BoxFit.cover,
-                                    width: 70,
-                                    height: 70,
-                                    errorBuilder: (_, __, ___) => Container(
-                                      width: 70,
-                                      height: 70,
-                                      color: Colors.grey.shade200,
-                                      child: const Icon(Icons.broken_image, size: 24, color: Colors.grey),
-                                    ),
-                                  );
-                                }
-
+                              itemCount: itemPhotos.length,
+                              itemBuilder: (ctx, pIdx) {
+                                final clean = itemPhotos[pIdx];
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: InkWell(
-                                    onTap: () {
-                                      if (clean.startsWith('http')) {
-                                        _viewFullImage(clean);
-                                      }
-                                    },
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: imgWidget,
+                                    onTap: () => _viewFullImage(clean),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: buildSmartImage(
+                                          clean,
+                                          fit: BoxFit.cover,
+                                          width: 80,
+                                          height: 80,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 );
-                              }).toList(),
+                              },
                             ),
                           ),
                         ],
 
                         const SizedBox(height: 14),
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.05),
-                          child: const Center(
-                            child: Text(
-                              'MEASUREMENT TABLE (24 BOXES)',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'MEASUREMENTS (24 BOXES)',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5, color: Colors.blueGrey),
                             ),
-                          ),
+                            TextButton.icon(
+                              onPressed: () {
+                                final cust = Customer(
+                                  id: o['customer_id'] ?? 0,
+                                  name: o['customer_name'] ?? '',
+                                  mobile: o['customer_mobile'] ?? '',
+                                  address: o['customer_address'] ?? '',
+                                );
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => NewOrderScreen(
+                                      preSelectedCustomer: cust,
+                                      initialMeasurements: Map<String, dynamic>.from(meas),
+                                      initialClothingType: cType,
+                                      onOrderCreated: widget.onOrderUpdated,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.repeat, size: 14),
+                              label: const Text('Yeh Naap Use Karein', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
 
@@ -1116,6 +1163,81 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   ),
                 );
               }),
+
+            // Extra Order-level Photos (if not in items)
+            Builder(
+              builder: (ctx) {
+                final allItemPhotos = <String>{};
+                for (var it in items) {
+                  allItemPhotos.addAll(_extractItemPhotos(it));
+                }
+                final orderOnlyPhotos = _extractOrderPhotos(o)
+                    .where((p) => !allItemPhotos.contains(p))
+                    .toList();
+
+                if (orderOnlyPhotos.isEmpty) return const SizedBox.shrink();
+
+                return Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.collections, size: 16, color: Color(0xFF0F172A)),
+                            const SizedBox(width: 6),
+                            Text('Order Photos (${orderOnlyPhotos.length})',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 80,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: orderOnlyPhotos.length,
+                            itemBuilder: (ctx, pIdx) {
+                              final clean = orderOnlyPhotos[pIdx];
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: InkWell(
+                                  onTap: () => _viewFullImage(clean),
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.grey.shade300),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: buildSmartImage(
+                                        clean,
+                                        fit: BoxFit.cover,
+                                        width: 80,
+                                        height: 80,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
 
             // 5. PAYMENT BREAKDOWN
             Card(

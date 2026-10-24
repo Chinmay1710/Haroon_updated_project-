@@ -16,12 +16,23 @@ void main() {
 class HaroonTailorApp extends StatefulWidget {
   const HaroonTailorApp({super.key});
 
+  static void restartApp(BuildContext context) {
+    context.findAncestorStateOfType<_HaroonTailorAppState>()?.restartApp();
+  }
+
   @override
   State<HaroonTailorApp> createState() => _HaroonTailorAppState();
 }
 
 class _HaroonTailorAppState extends State<HaroonTailorApp> {
+  Key _key = UniqueKey();
   ThemeMode _themeMode = ThemeMode.system;
+
+  void restartApp() {
+    setState(() {
+      _key = UniqueKey();
+    });
+  }
 
   @override
   void initState() {
@@ -50,36 +61,39 @@ class _HaroonTailorAppState extends State<HaroonTailorApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Haroon Tailor',
-      debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0F172A),
-          primary: const Color(0xFF0F172A),
-          secondary: const Color(0xFF2563EB),
-          surface: Colors.white,
+    return KeyedSubtree(
+      key: _key,
+      child: MaterialApp(
+        title: 'Haroon Tailor',
+        debugShowCheckedModeBanner: false,
+        themeMode: _themeMode,
+        theme: ThemeData(
+          useMaterial3: true,
+          brightness: Brightness.light,
+          scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF0F172A),
+            primary: const Color(0xFF0F172A),
+            secondary: const Color(0xFF2563EB),
+            surface: Colors.white,
+          ),
+          textTheme: GoogleFonts.publicSansTextTheme(Theme.of(context).textTheme),
         ),
-        textTheme: GoogleFonts.publicSansTextTheme(Theme.of(context).textTheme),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF131418),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2563EB),
+        darkTheme: ThemeData(
+          useMaterial3: true,
           brightness: Brightness.dark,
-          primary: const Color(0xFF3B82F6),
-          secondary: const Color(0xFF60A5FA),
-          surface: const Color(0xFF1E1F24),
+          scaffoldBackgroundColor: const Color(0xFF131418),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF2563EB),
+            brightness: Brightness.dark,
+            primary: const Color(0xFF3B82F6),
+            secondary: const Color(0xFF60A5FA),
+            surface: const Color(0xFF1E1F24),
+          ),
+          textTheme: GoogleFonts.publicSansTextTheme(ThemeData.dark().textTheme),
         ),
-        textTheme: GoogleFonts.publicSansTextTheme(ThemeData.dark().textTheme),
+        home: MainNavigationScreen(onThemeChanged: _handleThemeChanged),
       ),
-      home: MainNavigationScreen(onThemeChanged: _handleThemeChanged),
     );
   }
 }
@@ -94,31 +108,50 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  final GlobalKey<DashboardScreenState> _dashboardKey = GlobalKey<DashboardScreenState>();
+  final GlobalKey<OrdersScreenState> _ordersKey = GlobalKey<OrdersScreenState>();
+  final GlobalKey<DeliveriesScreenState> _deliveriesKey = GlobalKey<DeliveriesScreenState>();
+  final GlobalKey<CustomersScreenState> _customersKey = GlobalKey<CustomersScreenState>();
 
   void _onTabTapped(int index) {
     setState(() => _currentIndex = index);
+    if (index == 0) _dashboardKey.currentState?.reloadDashboard();
+    if (index == 1) _ordersKey.currentState?.reloadOrders();
+    if (index == 2) _deliveriesKey.currentState?.reloadDeliveries();
+    if (index == 3) _customersKey.currentState?.reloadCustomers();
   }
 
-  void _openNewOrder() {
-    Navigator.push(
+  void _openNewOrder() async {
+    final res = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => NewOrderScreen(
           onOrderCreated: () {
             setState(() => _currentIndex = 1); // switch to orders tab
+            _ordersKey.currentState?.switchToAllOrders();
+            _ordersKey.currentState?.reloadOrders();
+            _deliveriesKey.currentState?.reloadDeliveries();
+            _dashboardKey.currentState?.reloadDashboard();
           },
         ),
       ),
     );
+    if (res == true) {
+      setState(() => _currentIndex = 1);
+      _ordersKey.currentState?.switchToAllOrders();
+      _ordersKey.currentState?.reloadOrders();
+      _deliveriesKey.currentState?.reloadDeliveries();
+      _dashboardKey.currentState?.reloadDashboard();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final screens = [
-      DashboardScreen(onTabChange: _onTabTapped),
-      const OrdersScreen(),
-      const DeliveriesScreen(),
-      const CustomersScreen(),
+      DashboardScreen(key: _dashboardKey, onTabChange: _onTabTapped),
+      OrdersScreen(key: _ordersKey),
+      DeliveriesScreen(key: _deliveriesKey),
+      CustomersScreen(key: _customersKey),
       SettingsScreen(onThemeChanged: widget.onThemeChanged),
     ];
 
@@ -218,7 +251,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             _buildNavItem(Icons.receipt_long, 'Orders', 1),
             const SizedBox(width: 48), // Space for floating center button
             _buildNavItem(Icons.local_shipping, 'Deliveries', 2),
-            _buildNavItem(Icons.settings, 'Settings', 4),
+            _buildNavItem(Icons.people, 'Customers', 3),
           ],
         ),
       ),
