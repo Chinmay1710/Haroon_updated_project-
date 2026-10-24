@@ -1,5 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/io_helper_stub.dart'
+    if (dart.library.html) '../utils/io_helper_web.dart'
+    if (dart.library.io) '../utils/io_helper_io.dart';
 
 class LocalStorageService {
   static const String _keyOrders = 'ht_cache_orders';
@@ -10,24 +14,67 @@ class LocalStorageService {
   static const String _keySettings = 'ht_cache_settings';
   static const String _keyLastSync = 'ht_cache_last_sync';
 
+  static bool _initialized = false;
+
+  /// Initializes local storage, verifies disk files, and auto-seeds initial master data on first launch
+  static Future<void> initStorage() async {
+    if (_initialized) return;
+    _initialized = true;
+
+    try {
+      // 1. Check if orders and customers exist on disk or in cache
+      final existingCust = await getCachedCustomers();
+      final existingOrders = await getCachedOrders();
+
+      if ((existingCust == null || existingCust.isEmpty) &&
+          (existingOrders == null || existingOrders.isEmpty)) {
+        // First-time app open on client's phone: load bundled master data
+        try {
+          final seedRaw = await rootBundle.loadString('assets/data/initial_data.json');
+          if (seedRaw.isNotEmpty) {
+            final seed = jsonDecode(seedRaw);
+            if (seed is Map<String, dynamic>) {
+              await importMasterBackupMap(seed);
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
   // -------------------------------------------------------------
-  // ORDERS CACHE
+  // ORDERS CACHE (Dual-Layer: Permanent Disk File + SharedPreferences)
   // -------------------------------------------------------------
   static Future<void> saveOrders(List<dynamic> orders) async {
     try {
+      final jsonStr = jsonEncode(orders);
+      // 1. Permanent file write directly to disk (never lost!)
+      await saveJsonToFile('haroon_orders_data.json', jsonStr);
+      // 2. Also keep SharedPreferences in sync
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyOrders, jsonEncode(orders));
+      await prefs.setString(_keyOrders, jsonStr);
       await _recordSyncTime();
     } catch (_) {}
   }
 
   static Future<List<dynamic>?> getCachedOrders() async {
     try {
+      // 1. Try reading from permanent disk file
+      final fromDisk = await readJsonFromFile('haroon_orders_data.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is List && decoded.isNotEmpty) return decoded;
+      }
+      // 2. Fallback to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_keyOrders);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is List) return decoded;
+        if (decoded is List) {
+          // Sync back to disk for durability
+          await saveJsonToFile('haroon_orders_data.json', raw);
+          return decoded;
+        }
       }
     } catch (_) {}
     return null;
@@ -42,13 +89,25 @@ class LocalStorageService {
       if (cleanOrder['cloth_photos'] != null) {
         cleanOrder['cloth_photos'] = sanitizePhotoList(cleanOrder['cloth_photos']);
       }
+      final jsonStr = jsonEncode(cleanOrder);
+      await saveJsonToFile('haroon_order_$orderId.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ht_cache_order_$orderId', jsonEncode(cleanOrder));
+      await prefs.setString('ht_cache_order_$orderId', jsonStr);
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>?> getCachedOrderDetails(int orderId) async {
     try {
+      final fromDisk = await readJsonFromFile('haroon_order_$orderId.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is Map<String, dynamic>) {
+          if (decoded['cloth_photos'] != null) {
+            decoded['cloth_photos'] = sanitizePhotoList(decoded['cloth_photos']);
+          }
+          return decoded;
+        }
+      }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('ht_cache_order_$orderId');
       if (raw != null && raw.isNotEmpty) {
@@ -57,6 +116,7 @@ class LocalStorageService {
           if (decoded['cloth_photos'] != null) {
             decoded['cloth_photos'] = sanitizePhotoList(decoded['cloth_photos']);
           }
+          await saveJsonToFile('haroon_order_$orderId.json', raw);
           return decoded;
         }
       }
@@ -165,19 +225,29 @@ class LocalStorageService {
   // -------------------------------------------------------------
   static Future<void> saveCustomers(List<dynamic> customers) async {
     try {
+      final jsonStr = jsonEncode(customers);
+      await saveJsonToFile('haroon_customers_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyCustomers, jsonEncode(customers));
+      await prefs.setString(_keyCustomers, jsonStr);
       await _recordSyncTime();
     } catch (_) {}
   }
 
   static Future<List<dynamic>?> getCachedCustomers() async {
     try {
+      final fromDisk = await readJsonFromFile('haroon_customers_data.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is List && decoded.isNotEmpty) return decoded;
+      }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_keyCustomers);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is List) return decoded;
+        if (decoded is List) {
+          await saveJsonToFile('haroon_customers_data.json', raw);
+          return decoded;
+        }
       }
     } catch (_) {}
     return null;
@@ -338,6 +408,18 @@ class LocalStorageService {
           }
 
           formattedItems.add(itemMap);
+
+          // Automatically save/update customer measurement profile for this clothing type
+          final measMap = itemMap['measurements'];
+          final cId = (payload['customer_id'] as num?)?.toInt() ?? (payload['customerId'] as num?)?.toInt() ?? 0;
+          if (cId > 0 && measMap is Map && measMap.isNotEmpty) {
+            saveCustomerMeasurementOffline(
+              customerId: cId,
+              clothingType: (itemMap['clothing_type'] ?? 'Garment').toString(),
+              measurements: Map<String, dynamic>.from(measMap),
+              sourceOrderNumber: billNo,
+            ).ignore();
+          }
         }
       }
     }
@@ -598,21 +680,65 @@ class LocalStorageService {
 
   static Future<void> saveMeasurements(int customerId, List<dynamic> measurements) async {
     try {
+      final jsonStr = jsonEncode(measurements);
+      await saveJsonToFile('haroon_measurements_$customerId.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ht_cache_measurements_$customerId', jsonEncode(measurements));
+      await prefs.setString('ht_cache_measurements_$customerId', jsonStr);
     } catch (_) {}
   }
 
   static Future<List<dynamic>?> getCachedMeasurements(int customerId) async {
     try {
+      final fromDisk = await readJsonFromFile('haroon_measurements_$customerId.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is List) return decoded;
+      }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('ht_cache_measurements_$customerId');
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is List) return decoded;
+        if (decoded is List) {
+          await saveJsonToFile('haroon_measurements_$customerId.json', raw);
+          return decoded;
+        }
       }
     } catch (_) {}
     return null;
+  }
+
+  static Future<void> saveCustomerMeasurementOffline({
+    required int customerId,
+    required String clothingType,
+    required Map<String, dynamic> measurements,
+    String? sourceOrderNumber,
+  }) async {
+    if (customerId <= 0 || measurements.isEmpty) return;
+    try {
+      final existing = (await getCachedMeasurements(customerId)) ?? [];
+      final List<dynamic> list = List<dynamic>.from(existing);
+
+      final cleanType = clothingType.trim();
+      final newProfile = {
+        'id': list.length + 1,
+        'customer_id': customerId,
+        'name': cleanType + (sourceOrderNumber != null ? ' ($sourceOrderNumber)' : ''),
+        'template_type': cleanType,
+        'values': measurements,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      final idx = list.indexWhere((p) =>
+          p is Map &&
+          (p['template_type'] ?? p['name'])?.toString().toLowerCase() == cleanType.toLowerCase());
+      if (idx >= 0) {
+        list[idx] = newProfile;
+      } else {
+        list.insert(0, newProfile);
+      }
+
+      await saveMeasurements(customerId, list);
+    } catch (_) {}
   }
 
   static Future<List<Map<String, dynamic>>> getCustomerMeasurementsOffline(int customerId) async {
@@ -961,18 +1087,28 @@ class LocalStorageService {
   // -------------------------------------------------------------
   static Future<void> saveShopSettings(Map<String, dynamic> settings) async {
     try {
+      final jsonStr = jsonEncode(settings);
+      await saveJsonToFile('haroon_settings_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keySettings, jsonEncode(settings));
+      await prefs.setString(_keySettings, jsonStr);
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>?> getCachedShopSettings() async {
     try {
+      final fromDisk = await readJsonFromFile('haroon_settings_data.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is Map<String, dynamic>) return decoded;
+      }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_keySettings);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map<String, dynamic>) {
+          await saveJsonToFile('haroon_settings_data.json', raw);
+          return decoded;
+        }
       }
     } catch (_) {}
     return null;
@@ -1112,9 +1248,9 @@ class LocalStorageService {
   static Future<String> getAppTheme() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(_keyAppTheme) ?? 'system';
+      return prefs.getString(_keyAppTheme) ?? 'light';
     } catch (_) {
-      return 'system';
+      return 'light';
     }
   }
 
@@ -1362,6 +1498,17 @@ class LocalStorageService {
           }
         }
         await saveCustomers(customersList);
+      }
+
+      // 2.1 Customer Measurements
+      if (data['customer_measurements'] is Map) {
+        final measMap = data['customer_measurements'] as Map;
+        for (var entry in measMap.entries) {
+          final cid = int.tryParse(entry.key.toString());
+          if (cid != null && entry.value is List) {
+            await saveMeasurements(cid, entry.value as List);
+          }
+        }
       }
 
       // 3. Orders

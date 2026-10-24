@@ -29,12 +29,30 @@ class ZipBackupService {
     final messageTemplates = await LocalStorageService.getMessageTemplates();
     final defaultRates = await LocalStorageService.getDefaultRates();
 
+    int totalPhotos = 0;
+    int totalMeasurements = 0;
+
+    // 1.1 Collect all customer measurements
+    final Map<String, dynamic> customerMeasurementsMap = {};
+    if (customers != null) {
+      for (var c in customers) {
+        if (c is Map && c['id'] != null) {
+          final cid = (c['id'] as num?)?.toInt() ?? int.tryParse(c['id'].toString()) ?? 0;
+          if (cid > 0) {
+            final meas = await LocalStorageService.getCustomerMeasurementsOffline(cid);
+            if (meas.isNotEmpty) {
+              customerMeasurementsMap['$cid'] = meas;
+              totalMeasurements += meas.length;
+            }
+          }
+        }
+      }
+    }
+
     // 2. Collect all detailed orders with measurements & photos
     final List<dynamic> detailedOrders = [];
     final List<_ImageEntry> remoteImageEntries = [];
     final Map<String, Uint8List> bundledImages = {};
-    int totalPhotos = 0;
-    int totalMeasurements = 0;
 
     if (orders != null) {
       for (var o in orders) {
@@ -171,6 +189,49 @@ class ZipBackupService {
             }
           }
 
+          // Also bundle any photos in cloth_photos
+          final clothPhotos = LocalStorageService.sanitizePhotoList(orderData['cloth_photos'] ?? o['cloth_photos']);
+          final List<String> updatedClothPhotos = [];
+          for (int cpIdx = 0; cpIdx < clothPhotos.length; cpIdx++) {
+            final pStr = clothPhotos[cpIdx];
+            final orderId = orderData['id'] ?? o['id'];
+            if (pStr.startsWith('data:image')) {
+              try {
+                final b64 = pStr.split(',').last;
+                final bytes = base64Decode(b64);
+                final photoFileName = 'photos/order_${orderId}_cloth_$cpIdx.jpg';
+                bundledImages[photoFileName] = bytes;
+                updatedClothPhotos.add(photoFileName);
+                totalPhotos++;
+              } catch (_) {}
+            } else if (pStr.startsWith('http://') || pStr.startsWith('https://')) {
+              final ext = _getExtension(pStr);
+              final photoFileName = 'photos/order_${orderId}_cloth_$cpIdx$ext';
+              remoteImageEntries.add(_ImageEntry(
+                url: pStr,
+                zipPath: photoFileName,
+                orderId: orderId,
+                itemIndex: -2,
+              ));
+              updatedClothPhotos.add(photoFileName);
+              totalPhotos++;
+            } else {
+              try {
+                final bytes = await readLocalPhotoFile(pStr);
+                if (bytes != null && bytes.isNotEmpty) {
+                  final ext = _getExtension(pStr);
+                  final photoFileName = 'photos/order_${orderId}_cloth_$cpIdx$ext';
+                  bundledImages[photoFileName] = bytes;
+                  updatedClothPhotos.add(photoFileName);
+                  totalPhotos++;
+                }
+              } catch (_) {}
+            }
+          }
+          if (updatedClothPhotos.isNotEmpty) {
+            orderData['cloth_photos'] = updatedClothPhotos;
+          }
+
           orderData['items'] = items;
           if (orderData.containsKey('raw_items')) {
             orderData['raw_items'] = items;
@@ -232,6 +293,7 @@ class ZipBackupService {
       'message_templates': messageTemplates,
       'default_rates': defaultRates,
       'customers': customers ?? [],
+      'customer_measurements': customerMeasurementsMap,
       'orders': detailedOrders,
     };
 

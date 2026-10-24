@@ -41,6 +41,30 @@ Future<Uint8List?> readLocalPhotoFile(String filePath) async {
   return null;
 }
 
+/// Permanent file-based JSON storage on device filesystem
+Future<void> saveJsonToFile(String fileName, String content) async {
+  try {
+    final appDir = await getApplicationDocumentsDirectory();
+    final file = File('${appDir.path}/$fileName');
+    await file.writeAsString(content, flush: true);
+  } catch (e) {
+    debugPrint('Error saving $fileName: $e');
+  }
+}
+
+Future<String?> readJsonFromFile(String fileName) async {
+  try {
+    final appDir = await getApplicationDocumentsDirectory();
+    final file = File('${appDir.path}/$fileName');
+    if (await file.exists()) {
+      return await file.readAsString();
+    }
+  } catch (e) {
+    debugPrint('Error reading $fileName: $e');
+  }
+  return null;
+}
+
 Widget _defaultErrorWidget(double? width, double? height) {
   return Container(
     width: width,

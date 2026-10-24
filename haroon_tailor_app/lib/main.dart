@@ -9,7 +9,9 @@ import 'screens/settings_screen.dart';
 import 'screens/pending_payments_screen.dart';
 import 'services/local_storage_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LocalStorageService.initStorage();
   runApp(const HaroonTailorApp());
 }
 
@@ -26,7 +28,7 @@ class HaroonTailorApp extends StatefulWidget {
 
 class _HaroonTailorAppState extends State<HaroonTailorApp> {
   Key _key = UniqueKey();
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.light;
 
   void restartApp() {
     setState(() {
@@ -44,12 +46,10 @@ class _HaroonTailorAppState extends State<HaroonTailorApp> {
     final theme = await LocalStorageService.getAppTheme();
     if (mounted) {
       setState(() {
-        if (theme == 'light') {
-          _themeMode = ThemeMode.light;
-        } else if (theme == 'dark') {
+        if (theme == 'dark') {
           _themeMode = ThemeMode.dark;
         } else {
-          _themeMode = ThemeMode.system;
+          _themeMode = ThemeMode.light;
         }
       });
     }

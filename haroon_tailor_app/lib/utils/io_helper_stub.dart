@@ -18,6 +18,12 @@ Future<Uint8List?> readLocalPhotoFile(String filePath) async {
   return null;
 }
 
+Future<void> saveJsonToFile(String fileName, String content) async {}
+
+Future<String?> readJsonFromFile(String fileName) async {
+  return null;
+}
+
 Widget buildSmartImage(
   String pathOrUrl, {
   double? width,

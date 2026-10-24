@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
-void saveFileToDevice({required String content, required String fileName}) {
+Future<String?> saveFileToDevice({required String content, required String fileName}) async {
   throw UnsupportedError('Platform not supported for direct file download.');
 }
 
-void saveZipFileToDevice({required Uint8List zipBytes, required String fileName}) {
+Future<String?> saveZipFileToDevice({required Uint8List zipBytes, required String fileName}) async {
   throw UnsupportedError('Platform not supported for direct ZIP file download.');
 }
 

@@ -36,7 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
 
   // 4. Language & Theme
-  String _currentTheme = 'system';
+  String _currentTheme = 'light';
   String _currentLanguage = 'en';
 
   // 5. Shop Profile & Defaults
@@ -346,14 +346,17 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       if (mounted) Navigator.of(context).pop();
 
       // Save the ZIP file
-      await FileHelper.downloadBackupZip(zipBytes: zipBytes);
+      final savedPath = await FileHelper.downloadBackupZip(zipBytes: zipBytes);
 
       if (mounted) {
+        final pathMsg = savedPath != null && savedPath.isNotEmpty
+            ? '\nSaved to: $savedPath'
+            : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ZIP Backup download ho gayi! (${_formatFileSize(zipBytes.length)})'),
+            content: Text('✅ ZIP Backup download ho gayi! (${_formatFileSize(zipBytes.length)})$pathMsg'),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 4),
+            duration: const Duration(seconds: 5),
           ),
         );
       }

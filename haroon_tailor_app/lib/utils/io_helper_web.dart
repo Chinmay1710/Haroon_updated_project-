@@ -38,6 +38,20 @@ Future<Uint8List?> readLocalPhotoFile(String filePath) async {
   return await WebPhotoStorage.getPhoto(key);
 }
 
+Future<void> saveJsonToFile(String fileName, String content) async {
+  try {
+    html.window.localStorage['ht_disk_$fileName'] = content;
+  } catch (_) {}
+}
+
+Future<String?> readJsonFromFile(String fileName) async {
+  try {
+    return html.window.localStorage['ht_disk_$fileName'];
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Download ZIP bytes as a file on web
 void downloadZipFileWeb(Uint8List bytes, String fileName) {
   final blob = html.Blob([bytes], 'application/zip');

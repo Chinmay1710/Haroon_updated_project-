@@ -5,23 +5,23 @@ import 'file_download_stub.dart'
 
 class FileHelper {
   /// Trigger 1-click download/save of backup JSON file to user's computer/phone
-  static Future<void> downloadBackupJson({
+  static Future<String?> downloadBackupJson({
     required String jsonContent,
     String? fileName,
   }) async {
     final dateStr = DateTime.now().toIso8601String().split('T').first;
     final name = fileName ?? 'HaroonTailor_Master_Backup_$dateStr.json';
-    saveFileToDevice(content: jsonContent, fileName: name);
+    return await saveFileToDevice(content: jsonContent, fileName: name);
   }
 
   /// Trigger 1-click download/save of backup ZIP file (with photos)
-  static Future<void> downloadBackupZip({
+  static Future<String?> downloadBackupZip({
     required Uint8List zipBytes,
     String? fileName,
   }) async {
     final dateStr = DateTime.now().toIso8601String().split('T').first;
     final name = fileName ?? 'HaroonTailor_Backup_$dateStr.zip';
-    saveZipFileToDevice(zipBytes: zipBytes, fileName: name);
+    return await saveZipFileToDevice(zipBytes: zipBytes, fileName: name);
   }
 
   /// Open native file picker dialog to let user select their backup JSON file

@@ -37,6 +37,13 @@ class ApiService {
 
   // Dashboard Stats
   static Future<Map<String, dynamic>> getDashboardStats() async {
+    if (await LocalStorageService.isOfflineMode()) {
+      final cached = await LocalStorageService.getCachedDashboardStats();
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+      return await LocalStorageService.computeDashboardStatsFromOrders();
+    }
     try {
       final res = await dispatch('get_dashboard_stats');
       final data = Map<String, dynamic>.from(res ?? {});
@@ -47,31 +54,32 @@ class ApiService {
       if (cached != null && cached.isNotEmpty) {
         return cached;
       }
-      return {
-        'total_orders': 0,
-        'active_orders': 0,
-        'delivered_orders': 0,
-        'total_revenue': 0,
-        'pending_balance': 0,
-        'completed_today': 0,
-        'recent_orders': [],
-      };
+      return await LocalStorageService.computeDashboardStatsFromOrders();
     }
   }
 
   // Customers
   static Future<List<dynamic>> getCustomers() async {
+    if (await LocalStorageService.isOfflineMode()) {
+      final cached = await LocalStorageService.getCachedCustomers();
+      return cached ?? [];
+    }
     try {
       final res = await dispatch('get_customers');
       final list = List<dynamic>.from(res ?? []);
-      await LocalStorageService.saveCustomers(list);
-      return list;
+      final local = (await LocalStorageService.getCachedCustomers()) ?? [];
+      final localIds = local.map((c) => c is Map ? c['id'] : null).toSet();
+      final merged = List<dynamic>.from(local);
+      for (var r in list) {
+        if (r is Map && !localIds.contains(r['id'])) {
+          merged.add(r);
+        }
+      }
+      await LocalStorageService.saveCustomers(merged);
+      return merged;
     } catch (e) {
       final cached = await LocalStorageService.getCachedCustomers();
-      if (cached != null) {
-        return cached;
-      }
-      return [];
+      return cached ?? [];
     }
   }
 
@@ -139,17 +147,26 @@ class ApiService {
 
   // Orders
   static Future<List<dynamic>> getAllOrders() async {
+    if (await LocalStorageService.isOfflineMode()) {
+      final cached = await LocalStorageService.getCachedOrders();
+      return cached ?? [];
+    }
     try {
       final res = await dispatch('get_all_orders');
       final list = List<dynamic>.from(res ?? []);
-      await LocalStorageService.saveOrders(list);
-      return list;
+      final local = (await LocalStorageService.getCachedOrders()) ?? [];
+      final localIds = local.map((o) => o is Map ? o['id'] : null).toSet();
+      final merged = List<dynamic>.from(local);
+      for (var r in list) {
+        if (r is Map && !localIds.contains(r['id'])) {
+          merged.add(r);
+        }
+      }
+      await LocalStorageService.saveOrders(merged);
+      return merged;
     } catch (e) {
       final cached = await LocalStorageService.getCachedOrders();
-      if (cached != null) {
-        return cached;
-      }
-      return [];
+      return cached ?? [];
     }
   }
 

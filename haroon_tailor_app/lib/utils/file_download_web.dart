@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:html' as html;
 
-void saveFileToDevice({required String content, required String fileName}) {
+Future<String?> saveFileToDevice({required String content, required String fileName}) async {
   final bytes = utf8.encode(content);
   final blob = html.Blob([bytes], 'application/json');
   final url = html.Url.createObjectUrlFromBlob(blob);
@@ -12,15 +12,17 @@ void saveFileToDevice({required String content, required String fileName}) {
     ..setAttribute('download', fileName)
     ..click();
   html.Url.revokeObjectUrl(url);
+  return fileName;
 }
 
-void saveZipFileToDevice({required Uint8List zipBytes, required String fileName}) {
+Future<String?> saveZipFileToDevice({required Uint8List zipBytes, required String fileName}) async {
   final blob = html.Blob([zipBytes], 'application/zip');
   final url = html.Url.createObjectUrlFromBlob(blob);
   html.AnchorElement(href: url)
     ..setAttribute('download', fileName)
     ..click();
   html.Url.revokeObjectUrl(url);
+  return fileName;
 }
 
 Future<Uint8List?> pickZipFileFromDevice() async {
