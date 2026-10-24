@@ -228,16 +228,21 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
     final delivDate = _order['delivery_date'] != null
         ? _order['delivery_date'].toString().split('T')[0]
         : '-';
+    final items = _extractItems();
+    final itemsStr = items.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ');
 
-    final msg =
-        'Assalam-o-Alaikum $custName ji,\n'
-        '$_shopName ko chunne ke liye shukriya!\n\n'
-        'Aapka Order $billNo safaltapoorvak darj kar liya gaya hai.\n\n'
-        '👔 Total Bill: Rs. ${total.toStringAsFixed(0)}\n'
-        '💵 Jama Rakam: Rs. ${advance.toStringAsFixed(0)}\n'
-        '⏳ Baqaya Rakam: Rs. ${remaining.toStringAsFixed(0)}\n'
-        '📅 Delivery Date: $delivDate\n\n'
-        'Thank you for your business!\n$_shopName';
+    final msg = await PhoneUtils.buildMessage(
+      templateKey: 'new_order',
+      customerName: custName,
+      orderNumber: billNo,
+      garments: itemsStr,
+      deliveryDate: delivDate,
+      totalAmount: total,
+      advanceAmount: advance,
+      balanceAmount: remaining,
+      shopName: _shopName,
+      shopPhone: _shopPhone,
+    );
 
     await PhoneUtils.openWhatsApp(custMobile, msg);
   }
@@ -264,200 +269,162 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
     doc.addPage(
       pw.Page(
         pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         build: (pw.Context context) {
+          final subtitle = [
+            if (_shopAddress.isNotEmpty) _shopAddress,
+            if (_shopPhone.isNotEmpty) 'Ph: $_shopPhone',
+          ].join(' • ');
+
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              // 1. Shop Info Header
+              // 1. Compact Shop Info Header
               pw.Center(
                 child: pw.Text(
                   _shopName.toUpperCase(),
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
                   textAlign: pw.TextAlign.center,
                 ),
               ),
-              if (_shopAddress.isNotEmpty)
+              if (subtitle.isNotEmpty)
                 pw.Center(
                   child: pw.Text(
-                    _shopAddress,
-                    style: const pw.TextStyle(fontSize: 8),
+                    subtitle,
+                    style: const pw.TextStyle(fontSize: 7),
                     textAlign: pw.TextAlign.center,
                   ),
                 ),
-              if (_shopPhone.isNotEmpty)
-                pw.Center(
-                  child: pw.Text(
-                    'Ph: $_shopPhone',
-                    style: const pw.TextStyle(fontSize: 8),
-                    textAlign: pw.TextAlign.center,
-                  ),
-                ),
-              pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
-
-              // 2. Receipt Title
-              pw.Center(
-                child: pw.Text(
-                  'RECEIPT',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                ),
-              ),
-              pw.SizedBox(height: 3),
-
-              // 3. Order Info
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Bill No:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Date:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text(orderDate, style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Delivery:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text(delivDate, style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.SizedBox(height: 3),
               pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 1),
 
-              // 4. Customer Info
+              // 2. Compact Order & Customer Meta Rows
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Customer:', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text(custName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                  pw.Text('RECEIPT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                  pw.Text('Bill: $billNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
                 ],
               ),
-              if (custMobile.isNotEmpty)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Ph:', style: const pw.TextStyle(fontSize: 8)),
-                    pw.Text(custMobile, style: const pw.TextStyle(fontSize: 8)),
-                  ],
-                ),
-              pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Date: $orderDate', style: const pw.TextStyle(fontSize: 7.5)),
+                  pw.Text('Due: $delivDate', style: const pw.TextStyle(fontSize: 7.5)),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Cust: $custName', style: const pw.TextStyle(fontSize: 7.5)),
+                  if (custMobile.isNotEmpty)
+                    pw.Text('Ph: $custMobile', style: const pw.TextStyle(fontSize: 7.5)),
+                ],
+              ),
               pw.SizedBox(height: 2),
+              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 1),
 
-              // 5. Items Header (50% / 15% / 35%)
+              // 3. Compact Items Header (50% / 15% / 35%)
               pw.Row(
                 children: [
                   pw.Expanded(
                     flex: 5,
-                    child: pw.Text('Item', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    child: pw.Text('Item', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
                   ),
                   pw.Expanded(
                     flex: 2,
-                    child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
                   ),
                   pw.Expanded(
                     flex: 3,
-                    child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
                   ),
                 ],
               ),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 1),
               pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 1),
 
-              // 6. Items Body
+              // 4. Compact Items Body
               ...items.map((it) {
                 final cType = it['clothing_type'] ?? 'Custom';
                 final qty = (it['quantity'] as num?)?.toInt() ?? 1;
                 final price = (it['price'] as num?)?.toDouble() ?? 0.0;
                 final lineTotal = qty * price;
                 return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 0.8),
                   child: pw.Row(
                     children: [
                       pw.Expanded(
                         flex: 5,
-                        child: pw.Text(cType, style: const pw.TextStyle(fontSize: 8)),
+                        child: pw.Text(cType, style: const pw.TextStyle(fontSize: 7.5)),
                       ),
                       pw.Expanded(
                         flex: 2,
-                        child: pw.Text('$qty', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 8)),
+                        child: pw.Text('$qty', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 7.5)),
                       ),
                       pw.Expanded(
                         flex: 3,
-                        child: pw.Text('Rs. ${lineTotal.toStringAsFixed(0)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 8)),
+                        child: pw.Text('Rs. ${lineTotal.toStringAsFixed(0)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 7.5)),
                       ),
                     ],
                   ),
                 );
               }),
-              pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
+              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 1),
 
-              // 7. TOTAL
+              // 5. Compact TOTAL & Payments
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.Text('Rs. ${total.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                  pw.Text('Rs. ${total.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
                 ],
               ),
 
-              // 8. Paid / Advance History
               if (payments.isNotEmpty) ...[
-                pw.SizedBox(height: 2),
                 ...payments.map((p) {
                   final pDate = p['payment_date'] != null ? p['payment_date'].toString().split('T')[0] : '';
                   final pAmt = (p['amount'] as num?)?.toDouble() ?? 0.0;
                   return pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('Paid ($pDate):', style: const pw.TextStyle(fontSize: 7.5)),
-                      pw.Text('-Rs. ${pAmt.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 7.5)),
+                      pw.Text('Paid ($pDate):', style: const pw.TextStyle(fontSize: 7)),
+                      pw.Text('-Rs. ${pAmt.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 7)),
                     ],
                   );
                 }),
               ] else if (advance > 0) ...[
-                pw.SizedBox(height: 2),
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Paid (Advance):', style: const pw.TextStyle(fontSize: 7.5)),
-                    pw.Text('-Rs. ${advance.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 7.5)),
+                    pw.Text('Paid (Advance):', style: const pw.TextStyle(fontSize: 7)),
+                    pw.Text('-Rs. ${advance.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 7)),
                   ],
                 ),
               ],
 
-              pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 2),
-
-              // 9. DUE Balance
+              // 6. Compact DUE Balance
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('DUE:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5)),
-                  pw.Text('Rs. ${remaining.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5)),
+                  pw.Text('DUE BALANCE:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.Text('Rs. ${remaining.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                 ],
               ),
-              pw.SizedBox(height: 3),
+              pw.SizedBox(height: 2),
               pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 2),
 
-              // 10. Footer
+              // 7. Compact Footer
               pw.Center(
                 child: pw.Text(
                   'Thank you for your business!',
-                  style: const pw.TextStyle(fontSize: 7.5),
+                  style: const pw.TextStyle(fontSize: 7),
                   textAlign: pw.TextAlign.center,
                 ),
               ),
@@ -516,7 +483,7 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
                   Center(
                     child: Container(
                       width: 320,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
@@ -527,186 +494,135 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // 1. Shop Info Header
+                          // 1. Compact Shop Info Header
                           Text(
                             _shopName,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black),
                           ),
-                          if (_shopAddress.isNotEmpty)
+                          if (_shopAddress.isNotEmpty || _shopPhone.isNotEmpty)
                             Text(
-                              _shopAddress,
+                              [
+                                if (_shopAddress.isNotEmpty) _shopAddress,
+                                if (_shopPhone.isNotEmpty) 'Ph: $_shopPhone',
+                              ].join(' • '),
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 12, color: Colors.black87),
+                              style: const TextStyle(fontSize: 11, color: Colors.black87),
                             ),
-                          if (_shopPhone.isNotEmpty)
-                            Text(
-                              'Ph: $_shopPhone',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 12, color: Colors.black87),
-                            ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           _buildDashedLine(),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
 
-                          // 2. Receipt Title
-                          const Text(
-                            'RECEIPT',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
+                          // 2. Receipt & Order Rows
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('RECEIPT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
+                              Text('Bill: $billNo', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Date: $orderDate', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                              Text('Due: $delivDate', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Cust: $custName', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                              if (custMobile.isNotEmpty)
+                                Text('Ph: $custMobile', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            ],
                           ),
                           const SizedBox(height: 6),
-
-                          // 3. Order Info
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Bill No:', style: TextStyle(fontSize: 13, color: Colors.black87)),
-                              Text(billNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Date:', style: TextStyle(fontSize: 13, color: Colors.black87)),
-                              Text(orderDate, style: const TextStyle(fontSize: 13, color: Colors.black)),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Delivery:', style: TextStyle(fontSize: 13, color: Colors.black87)),
-                              Text(delivDate, style: const TextStyle(fontSize: 13, color: Colors.black)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
                           _buildDashedLine(),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
 
-                          // 4. Customer Info
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Customer:', style: TextStyle(fontSize: 13, color: Colors.black87)),
-                              Text(custName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-                            ],
-                          ),
-                          if (custMobile.isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Ph:', style: TextStyle(fontSize: 13, color: Colors.black87)),
-                                Text(custMobile, style: const TextStyle(fontSize: 13, color: Colors.black)),
-                              ],
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          _buildDashedLine(),
-                          const SizedBox(height: 6),
-
-                          // 5. Items Header (50% / 15% / 35%)
+                          // 3. Items Header (50% / 15% / 35%)
                           Row(
                             children: const [
-                              Expanded(flex: 5, child: Text('Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                              Expanded(flex: 2, child: Text('Qty', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                              Expanded(flex: 3, child: Text('Total', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                              Expanded(flex: 5, child: Text('Item', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                              Expanded(flex: 2, child: Text('Qty', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                              Expanded(flex: 3, child: Text('Total', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                             ],
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           _buildDashedLine(),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
 
-                          // 6. Items Loop
+                          // 4. Items Body
                           ...items.map((it) {
                             final cType = it['clothing_type'] ?? 'Custom';
                             final qty = (it['quantity'] as num?)?.toInt() ?? 1;
                             final price = (it['price'] as num?)?.toDouble() ?? 0.0;
                             final lineTotal = qty * price;
                             return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              padding: const EdgeInsets.symmetric(vertical: 2),
                               child: Row(
                                 children: [
-                                  Expanded(flex: 5, child: Text(cType, style: const TextStyle(fontSize: 13, color: Colors.black))),
-                                  Expanded(flex: 2, child: Text('$qty', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: Colors.black))),
-                                  Expanded(
-                                    flex: 3,
-                                    child: Text(
-                                      currency.format(lineTotal),
-                                      textAlign: TextAlign.right,
-                                      style: const TextStyle(fontSize: 13, color: Colors.black),
-                                    ),
-                                  ),
+                                  Expanded(flex: 5, child: Text(cType, style: const TextStyle(fontSize: 12))),
+                                  Expanded(flex: 2, child: Text('$qty', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                                  Expanded(flex: 3, child: Text(currency.format(lineTotal), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12))),
                                 ],
                               ),
                             );
                           }),
-                          const SizedBox(height: 8),
-                          _buildDashedLine(),
                           const SizedBox(height: 6),
+                          _buildDashedLine(),
+                          const SizedBox(height: 4),
 
-                          // 7. TOTAL
+                          // 5. Total & Paid
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text(currency.format(total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              const Text('TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
+                              Text(currency.format(total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
                             ],
                           ),
-
-                          // 8. Paid / Advance History
                           if (payments.isNotEmpty) ...[
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 2),
                             ...payments.map((p) {
                               final pDate = p['payment_date'] != null ? p['payment_date'].toString().split('T')[0] : '';
                               final pAmt = (p['amount'] as num?)?.toDouble() ?? 0.0;
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 2),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('Paid ($pDate):', style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                                    Text('- ${currency.format(pAmt)}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                                  ],
-                                ),
+                              return Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Paid ($pDate):', style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                                  Text('- ${currency.format(pAmt)}', style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                                ],
                               );
                             }),
                           ] else if (advance > 0) ...[
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 2),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Paid (Advance):', style: TextStyle(fontSize: 12, color: Colors.black87)),
-                                Text('- ${currency.format(advance)}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                const Text('Paid (Advance):', style: TextStyle(fontSize: 11, color: Colors.black87)),
+                                Text('- ${currency.format(advance)}', style: const TextStyle(fontSize: 11, color: Colors.black87)),
                               ],
                             ),
                           ],
-                          const SizedBox(height: 6),
-                          _buildDashedLine(),
-                          const SizedBox(height: 6),
-
-                          // 9. DUE Balance
+                          const SizedBox(height: 2),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('DUE:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                              Text(
-                                currency.format(remaining),
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black),
-                              ),
+                              const Text('DUE BALANCE:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
+                              Text(currency.format(remaining), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
                             ],
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           _buildDashedLine(),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
 
-                          // 10. Footer
+                          // 6. Footer
                           const Text(
                             'Thank you for your business!',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11, color: Colors.black87),
+                            style: TextStyle(fontSize: 11, color: Colors.black54),
                           ),
                         ],
                       ),

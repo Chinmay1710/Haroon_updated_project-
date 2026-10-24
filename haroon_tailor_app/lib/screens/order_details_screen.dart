@@ -119,7 +119,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     if (confirm == true) {
       try {
-        final res = await ApiService.updateOrderStatus(
+        await ApiService.updateOrderStatus(
           orderId: widget.orderId,
           status: 'STITCHING_COMPLETE',
           sendWhatsapp: sendWhatsapp,
@@ -133,29 +133,37 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
         // WhatsApp notification (exact website message)
         if (sendWhatsapp) {
-          if (res['whatsapp_url'] != null) {
-            await PhoneUtils.openBackendWhatsAppUrl(res['whatsapp_url'].toString());
-          } else {
-            final phone = (_order!['customer_mobile'] ?? '').toString();
-            final custName = _order!['customer_name'] ?? 'Grahak';
-            final shopSettings = await ApiService.getShopSettings();
-            final shopName = shopSettings['shop_name'] ?? 'Haroon Tailor';
-            final dynamic itemsRaw = _order!['items'];
-            final String itemsStr = itemsRaw is String
-                ? (itemsRaw.isNotEmpty ? itemsRaw : 'Kapde')
-                : (itemsRaw is List && itemsRaw.isNotEmpty
-                    ? itemsRaw.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ')
-                    : 'Kapde');
+          final phone = (_order!['customer_mobile'] ?? '').toString();
+          final custName = _order!['customer_name'] ?? 'Grahak';
+          final shopSettings = await ApiService.getShopSettings();
+          final shopName = shopSettings['shop_name'] ?? 'Haroon Tailor';
+          final dynamic itemsRaw = _order!['items'];
+          final String itemsStr = itemsRaw is String
+              ? (itemsRaw.isNotEmpty ? itemsRaw : 'Kapde')
+              : (itemsRaw is List && itemsRaw.isNotEmpty
+                  ? itemsRaw.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ')
+                  : 'Kapde');
+          final total = (_order!['total_amount'] as num?)?.toDouble() ?? 0.0;
+          final advance = (_order!['advance_amount'] as num?)?.toDouble() ?? 0.0;
+          final remaining = (_order!['remaining_amount'] as num?)?.toDouble() ?? (total - advance);
+          final delivDate = _order!['delivery_date'] != null
+              ? _order!['delivery_date'].toString().split('T')[0]
+              : '-';
 
-            final msg =
-                '🎉 $custName! 🎉\n\n'
-                'Aapka order #$billNo ($itemsStr) ab bilkul tayyar hai! Aap ise $shopName se le ja sakte hain.\n\n'
-                'Kripya apni suvidha anusar dukan par aayein aur apne sile hue kapde prapt karein.\n\n'
-                'Note: Jummah (Friday) ko dukan band rehti hai.\n\n'
-                'Jald milenge!\n$shopName';
+          final msg = await PhoneUtils.buildMessage(
+            templateKey: 'order_ready',
+            customerName: custName,
+            orderNumber: billNo,
+            garments: itemsStr,
+            deliveryDate: delivDate,
+            totalAmount: total,
+            advanceAmount: advance,
+            balanceAmount: remaining,
+            shopName: shopName.toString(),
+            shopPhone: shopSettings['phone']?.toString() ?? '',
+          );
 
-            await PhoneUtils.openWhatsApp(phone, msg);
-          }
+          await PhoneUtils.openWhatsApp(phone, msg);
         }
 
         widget.onOrderUpdated?.call();
@@ -637,23 +645,29 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final phone = (_order!['customer_mobile'] ?? '').toString();
     final billNo = _order!['order_number'] ?? '';
     final custName = _order!['customer_name'] ?? 'Grahak';
-    final total = _order!['total_amount'] ?? 0;
-    final remaining = _order!['remaining_amount'] ?? 0;
-    final advance = _order!['advance_amount'] ?? 0;
+    final total = (_order!['total_amount'] as num?)?.toDouble() ?? 0.0;
+    final remaining = (_order!['remaining_amount'] as num?)?.toDouble() ?? 0.0;
+    final advance = (_order!['advance_amount'] as num?)?.toDouble() ?? (total - remaining);
     final delivDate = _order!['delivery_date'] != null
         ? _order!['delivery_date'].toString().split('T')[0]
         : '-';
+    final dynamic itemsRaw = _order!['items'];
+    final String itemsStr = itemsRaw is String
+        ? (itemsRaw.isNotEmpty ? itemsRaw : 'Kapde')
+        : (itemsRaw is List && itemsRaw.isNotEmpty
+            ? itemsRaw.map((i) => '${i['quantity'] ?? 1} ${i['clothing_type'] ?? 'Kapde'}').join(', ')
+            : 'Kapde');
 
-    final msg =
-        'Assalam-o-Alaikum $custName ji,\n'
-        'Haroon Tailor ko chunne ke liye shukriya!\n\n'
-        'Aapka order #$billNo details:\n'
-        '👔 Total Bill: Rs. $total\n'
-        '💵 Jama Rakam: Rs. $advance\n'
-        '⏳ Baqaya Rakam: Rs. $remaining\n'
-        '📅 Delivery Date: $delivDate\n\n'
-        'Note: Jummah (Friday) ko dukan band rehti hai.\n\n'
-        'Shukriya!\nHaroon Tailor';
+    final msg = await PhoneUtils.buildMessage(
+      templateKey: 'new_order',
+      customerName: custName,
+      orderNumber: billNo,
+      garments: itemsStr,
+      deliveryDate: delivDate,
+      totalAmount: total,
+      advanceAmount: advance,
+      balanceAmount: remaining,
+    );
 
     await PhoneUtils.openWhatsApp(phone, msg);
   }

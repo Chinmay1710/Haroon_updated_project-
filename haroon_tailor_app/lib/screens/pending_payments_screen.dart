@@ -139,22 +139,18 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
   double get _deliveredFilteredTotal => _calculateTotal(_filteredDeliveredOrders);
   double get _undeliveredFilteredTotal => _calculateTotal(_filteredUndeliveredOrders);
 
-  void _sendReminder(Map<String, dynamic> order) {
+  void _sendReminder(Map<String, dynamic> order) async {
     final phone = (order['customer_mobile'] ?? '').toString();
     final billNo = order['order_number'] ?? '';
     final custName = order['customer_name'] ?? '';
     final remaining = order['remaining_amount'] ?? 0;
-    final isDelivered = (order['status'] ?? '').toString() == 'DELIVERED';
 
-    final msg = isDelivered
-        ? 'Assalam-o-Alaikum $custName ji,\n'
-            'Haroon Tailor se vinamra anurodh:\n'
-            'Aapke order ($billNo) ke kapde deliver ho chuke hain, par ₹$remaining ka baqaya payment pending hai.\n'
-            'Kripya suvidhanusar jama karein. Shukriya!\nHaroon Tailor'
-        : 'Assalam-o-Alaikum $custName ji,\n'
-            'Haroon Tailor se vinamra anurodh:\n'
-            'Aapka order ($billNo) ka baqaya bhugtan ₹$remaining pending hai.\n'
-            'Kripya delivery se pehle jama karein. Shukriya!\nHaroon Tailor';
+    final msg = await PhoneUtils.buildMessage(
+      templateKey: 'payment_reminder',
+      customerName: custName,
+      orderNumber: billNo,
+      balanceAmount: remaining is num ? remaining : (num.tryParse(remaining.toString()) ?? 0),
+    );
 
     PhoneUtils.openWhatsApp(phone, msg);
   }

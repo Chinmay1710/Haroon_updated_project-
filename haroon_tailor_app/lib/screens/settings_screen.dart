@@ -48,6 +48,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   int _defaultDeliveryDays = 7;
   Map<String, double> _defaultRates = {};
 
+  List<String> _notesSuggestions = [];
+  final TextEditingController _newNoteCtrl = TextEditingController();
+
   final List<String> _suggestionChips = [
     'Sadri / Waistcoat',
     'Blouse',
@@ -65,7 +68,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadAllSettings();
   }
 
@@ -73,6 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   void dispose() {
     _tabController.dispose();
     _newTypeCtrl.dispose();
+    _newNoteCtrl.dispose();
     _templateEditorCtrl.dispose();
     _shopNameCtrl.dispose();
     _ownerNameCtrl.dispose();
@@ -96,6 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       final cachedCust = await LocalStorageService.getCachedCustomers();
       final shop = await ApiService.getShopSettings();
       final isOffline = await LocalStorageService.isOfflineMode();
+      final notesSugg = await LocalStorageService.getNotesSuggestions();
 
 
       if (!mounted) return;
@@ -112,6 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _cachedOrdersCount = cachedOrders?.length ?? 0;
         _cachedCustomersCount = cachedCust?.length ?? 0;
         _isOfflineMode = isOffline;
+        _notesSuggestions = notesSugg;
 
 
         _shopNameCtrl.text = shop['shop_name']?.toString() ?? 'Haroon Tailor';
@@ -653,6 +659,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             Tab(icon: Icon(Icons.cloud_sync, size: 20), text: '3. Backup & Sync'),
             Tab(icon: Icon(Icons.translate, size: 20), text: '4. Language'),
             Tab(icon: Icon(Icons.palette, size: 20), text: '5. Theme'),
+            Tab(icon: Icon(Icons.edit_note, size: 20), text: '6. Notes Suggestions'),
           ],
         ),
       ),
@@ -666,8 +673,158 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                 _buildBackupTab(),
                 _buildLanguageTab(),
                 _buildThemeTab(),
+                _buildNotesSuggestionsTab(),
               ],
             ),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 6. NOTES SUGGESTIONS ACTIONS & TAB
+  // ──────────────────────────────────────────────────────────────────────────
+  Future<void> _addNewNoteSuggestion(String text) async {
+    final clean = text.trim();
+    if (clean.isEmpty) return;
+    if (_notesSuggestions.any((s) => s.toLowerCase() == clean.toLowerCase())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ye suggestion pehle se maujood hai!'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    final updated = List<String>.from(_notesSuggestions)..add(clean);
+    await LocalStorageService.saveNotesSuggestions(updated);
+    setState(() {
+      _notesSuggestions = updated;
+      _newNoteCtrl.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Suggestion "$clean" jud gaya!'), backgroundColor: Colors.green),
+    );
+  }
+
+  Future<void> _removeNoteSuggestion(String item) async {
+    final updated = List<String>.from(_notesSuggestions)..removeWhere((s) => s == item);
+    await LocalStorageService.saveNotesSuggestions(updated);
+    setState(() => _notesSuggestions = updated);
+  }
+
+  Future<void> _resetNoteSuggestions() async {
+    await LocalStorageService.saveNotesSuggestions(List.from(LocalStorageService.defaultNotesSuggestions));
+    final updated = await LocalStorageService.getNotesSuggestions();
+    setState(() => _notesSuggestions = updated);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Default suggestions restore ho gaye!'), backgroundColor: Colors.blue),
+    );
+  }
+
+  Widget _buildNotesSuggestionsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Nayi Tippani Jodein (Add Note Suggestion)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Kapda darj karte waqt "Vishesh Tippani (Notes)" me ye suggestions turant chips ke roop me dikhenge.',
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _newNoteCtrl,
+                          decoration: InputDecoration(
+                            hintText: 'Jaise: Collar Chinese, 2 Pocket, Fitting Slim...',
+                            prefixIcon: const Icon(Icons.edit_note, size: 22),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onSubmitted: (v) => _addNewNoteSuggestion(v),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        label: const Text('Add', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () => _addNewNoteSuggestion(_newNoteCtrl.text),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Saved Note Suggestions (${_notesSuggestions.length})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.restore, size: 16),
+                        label: const Text('Reset Defaults', style: TextStyle(fontSize: 12)),
+                        onPressed: _resetNoteSuggestions,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_notesSuggestions.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: Text('Koi suggestion nahi hai. Upar se naya jodein.', style: TextStyle(color: Colors.grey)),
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _notesSuggestions.map((sugg) {
+                        return Chip(
+                          label: Text(sugg, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          deleteIcon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+                          onDeleted: () => _removeNoteSuggestion(sugg),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

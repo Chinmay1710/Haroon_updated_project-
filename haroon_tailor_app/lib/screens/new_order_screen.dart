@@ -439,6 +439,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       }
     }
     int? activeBoxNum;
+    final noteSuggestions = await LocalStorageService.getNotesSuggestions();
+    final ScrollController modalScrollCtrl = ScrollController();
 
     if (!mounted) return;
     await showModalBottomSheet(
@@ -452,15 +454,17 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             final priceVal = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
             final itemTotal = qtyVal * priceVal;
 
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.92,
-              decoration: const BoxDecoration(
-                color: Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                children: [
-                  // Top Drag Handle & Title Bar
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.92,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  children: [
+                    // Top Drag Handle & Title Bar
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: const BoxDecoration(
@@ -491,6 +495,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                   // Form Content Scrollable
                   Expanded(
                     child: SingleChildScrollView(
+                      controller: modalScrollCtrl,
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -816,7 +821,37 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text('Is Kapde Ki Vishesh Tippani (Notes)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                  const SizedBox(height: 8),
+                                  if (noteSuggestions.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    const Text('Tippani Suggestions (Tap karein jodne ke liye):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: noteSuggestions.map((sugg) {
+                                        return ActionChip(
+                                          label: Text(sugg, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                                          backgroundColor: const Color(0xFFEEF2F6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            side: BorderSide(color: Colors.grey.shade300),
+                                          ),
+                                          onPressed: () {
+                                            setEditorState(() {
+                                              final cur = notesCtrl.text.trim();
+                                              if (cur.isEmpty) {
+                                                notesCtrl.text = sugg;
+                                              } else if (!cur.contains(sugg)) {
+                                                notesCtrl.text = '$cur, $sugg';
+                                              }
+                                            });
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 10),
                                   TextFormField(
                                     controller: notesCtrl,
                                     maxLines: 2,
@@ -824,6 +859,15 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                       if (activeBoxNum != null) {
                                         setEditorState(() => activeBoxNum = null);
                                       }
+                                      Future.delayed(const Duration(milliseconds: 300), () {
+                                        if (modalScrollCtrl.hasClients) {
+                                          modalScrollCtrl.animateTo(
+                                            modalScrollCtrl.position.maxScrollExtent,
+                                            duration: const Duration(milliseconds: 300),
+                                            curve: Curves.easeOut,
+                                          );
+                                        }
+                                      });
                                     },
                                     decoration: InputDecoration(
                                       hintText: 'Jaise: Collar Chinese rahega, single pocket, etc.',
@@ -987,8 +1031,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -1288,9 +1333,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
           // WhatsApp notification (safe try-catch so WhatsApp never blocks order save)
           try {
-            if (res['whatsapp_url'] != null) {
-              await PhoneUtils.openBackendWhatsAppUrl(res['whatsapp_url'].toString());
-            } else if (_sendWhatsapp) {
+            if (_sendWhatsapp) {
               final shopSettings = await ApiService.getShopSettings();
               final shopName = shopSettings['shop_name'] ?? 'Haroon Tailor';
               final totalAmt = _totalAmount;

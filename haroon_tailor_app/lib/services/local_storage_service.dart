@@ -1216,6 +1216,18 @@ class LocalStorageService {
 
   static Future<Map<String, String>> getMessageTemplates() async {
     try {
+      final fromDisk = await readJsonFromFile('haroon_templates_data.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is Map) {
+          final res = Map<String, String>.from(defaultMessageTemplates);
+          decoded.forEach((k, v) {
+            if (v != null) res[k.toString()] = v.toString();
+          });
+          return res;
+        }
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_keyMsgTemplates);
       if (raw != null && raw.isNotEmpty) {
@@ -1225,6 +1237,7 @@ class LocalStorageService {
           decoded.forEach((k, v) {
             if (v != null) res[k.toString()] = v.toString();
           });
+          await saveJsonToFile('haroon_templates_data.json', raw);
           return res;
         }
       }
@@ -1234,8 +1247,74 @@ class LocalStorageService {
 
   static Future<void> saveMessageTemplates(Map<String, String> templates) async {
     try {
+      final jsonStr = jsonEncode(templates);
+      await saveJsonToFile('haroon_templates_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyMsgTemplates, jsonEncode(templates));
+      await prefs.setString(_keyMsgTemplates, jsonStr);
+    } catch (_) {}
+  }
+
+  // -------------------------------------------------------------
+  // NOTES SUGGESTIONS
+  // -------------------------------------------------------------
+  static const String _keyNotesSuggestions = 'ht_notes_suggestions';
+
+  static List<String> get defaultNotesSuggestions => [
+    'Collar Chinese',
+    'Collar Regular',
+    'Collar Button Down',
+    'Single Pocket',
+    'Double Pocket',
+    'Without Pocket',
+    'Cuff Square',
+    'Cuff Cut',
+    'Fitting Loose',
+    'Fitting Normal',
+    'Fitting Slim',
+    'Side Slit',
+    'Belt Loop Extra',
+    'Back Pocket Single',
+    'Back Pocket Double',
+    'Watch Pocket',
+    'Plate Single',
+    'Plate Double',
+    'Cross Pocket',
+    'Straight Pocket',
+  ];
+
+  static Future<List<String>> getNotesSuggestions() async {
+    try {
+      final fromDisk = await readJsonFromFile('haroon_notes_suggestions.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is List) {
+          final list = decoded.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+          if (list.isNotEmpty) return list;
+        }
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_keyNotesSuggestions);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final list = decoded.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+          if (list.isNotEmpty) {
+            await saveJsonToFile('haroon_notes_suggestions.json', raw);
+            return list;
+          }
+        }
+      }
+    } catch (_) {}
+    return List<String>.from(defaultNotesSuggestions);
+  }
+
+  static Future<void> saveNotesSuggestions(List<String> list) async {
+    try {
+      final jsonStr = jsonEncode(list);
+      await saveJsonToFile('haroon_notes_suggestions.json', jsonStr);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyNotesSuggestions, jsonStr);
     } catch (_) {}
   }
 

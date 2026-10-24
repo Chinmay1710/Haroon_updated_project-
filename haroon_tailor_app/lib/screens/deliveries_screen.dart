@@ -441,12 +441,13 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
                                               IconButton(
                                                 icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 22),
                                                 tooltip: 'WhatsApp Reminder',
-                                                onPressed: () {
-                                                  final msg =
-                                                      'Assalam-o-Alaikum $custName ji,\n'
-                                                      'Haroon Tailor se aapka order ($billNo) taiyar hai.\n'
-                                                      'Baqaya Rakam: ₹$remaining\n'
-                                                      'Shukriya!';
+                                                onPressed: () async {
+                                                  final msg = await PhoneUtils.buildMessage(
+                                                    templateKey: 'order_ready',
+                                                    customerName: custName,
+                                                    orderNumber: billNo,
+                                                    balanceAmount: remaining,
+                                                  );
                                                   PhoneUtils.openWhatsApp(phone, msg);
                                                 },
                                               ),

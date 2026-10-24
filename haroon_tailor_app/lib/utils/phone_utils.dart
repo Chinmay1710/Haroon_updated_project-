@@ -1,5 +1,6 @@
 import 'package:url_launcher/url_launcher.dart';
 import '../services/local_storage_service.dart';
+import '../services/api_service.dart';
 
 class PhoneUtils {
   /// Cleans any raw phone string to a strict 12-digit Indian format (e.g. 919876543210)
@@ -112,5 +113,43 @@ class PhoneUtils {
       tmpl = tmpl.replaceAll('{$k}', v);
     });
     return tmpl;
+  }
+
+  /// Helper to build and fill template with order and shop values
+  static Future<String> buildMessage({
+    required String templateKey,
+    required String customerName,
+    required String orderNumber,
+    String garments = '',
+    String deliveryDate = '',
+    num totalAmount = 0,
+    num advanceAmount = 0,
+    num balanceAmount = 0,
+    String? shopName,
+    String? shopPhone,
+  }) async {
+    String sName = shopName ?? '';
+    String sPhone = shopPhone ?? '';
+    if (sName.isEmpty || sPhone.isEmpty) {
+      try {
+        final settings = await ApiService.getShopSettings();
+        if (sName.isEmpty) sName = settings['shop_name']?.toString() ?? 'Haroon Tailor';
+        if (sPhone.isEmpty) sPhone = settings['phone']?.toString() ?? '';
+      } catch (_) {
+        if (sName.isEmpty) sName = 'Haroon Tailor';
+      }
+    }
+
+    return await formatTemplate(templateKey, {
+      'customer_name': customerName,
+      'order_number': orderNumber,
+      'garments': garments,
+      'delivery_date': deliveryDate,
+      'total_amount': totalAmount.toStringAsFixed(0),
+      'advance_amount': advanceAmount.toStringAsFixed(0),
+      'balance_amount': balanceAmount.toStringAsFixed(0),
+      'shop_name': sName,
+      'shop_phone': sPhone,
+    });
   }
 }

@@ -287,155 +287,160 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
   Future<Uint8List> _generatePdfSlip(PdfPageFormat format) async {
     final doc = pw.Document();
     final billNo = _order['order_number'] ?? '#${widget.orderId}';
-    final delivDate = _order['delivery_date'] != null
-        ? _order['delivery_date'].toString().split('T')[0]
-        : '-';
+    String delivDate = '-';
+    if (_order['delivery_date'] != null) {
+      try {
+        final d = DateTime.parse(_order['delivery_date'].toString());
+        delivDate = DateFormat('d MMM yyyy').format(d);
+      } catch (_) {
+        delivDate = _order['delivery_date'].toString().split('T')[0];
+      }
+    }
     final items = _extractItemsFrom(_order);
-    final nowStr = DateFormat('dd/MM/yyyy - hh:mm:ss a').format(DateTime.now());
+    final nowStr = DateFormat('d MMM yyyy - HH:mm:ss').format(DateTime.now());
 
     final pageFormat = PdfPageFormat.roll57;
 
-    // Single continuous page for thermal roll printing (Continuous paper roll, all garments together!)
-    doc.addPage(
-      pw.Page(
-        pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              // 1. Header (STITCHING SLIP - Haroon Tailor)
-              pw.Center(
-                child: pw.Text(
-                  'STITCHING SLIP',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
-                  textAlign: pw.TextAlign.center,
+    // Single or multiple garment slips - Each garment gets its own page so printer cuts between them!
+    final itemsToPrint = items.isNotEmpty ? items : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
+
+    for (final it in itemsToPrint) {
+      final cType = it['clothing_type'] ?? 'Custom Item';
+      final qty = (it['quantity'] as num?)?.toInt() ?? 1;
+      final notes = (it['notes'] ?? '').toString().trim();
+      final meas = (it['measurements'] as Map<String, dynamic>?) ?? {};
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                // 1. Header (STITCHING SLIP - Haroon Tailor)
+                pw.Center(
+                  child: pw.Text(
+                    'STITCHING SLIP',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
+                    textAlign: pw.TextAlign.center,
+                  ),
                 ),
-              ),
-              pw.Center(
-                child: pw.Text(
-                  _shopName,
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                  textAlign: pw.TextAlign.center,
+                pw.Center(
+                  child: pw.Text(
+                    _shopName,
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                    textAlign: pw.TextAlign.center,
+                  ),
                 ),
-              ),
-              pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 2),
+                pw.SizedBox(height: 3),
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                pw.SizedBox(height: 2),
 
-              // 2. Order Details (Note 1: NO CUSTOMER NAME)
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Delivery Due:', style: const pw.TextStyle(fontSize: 8.5)),
-                  pw.Text(delivDate, style: const pw.TextStyle(fontSize: 8.5)),
-                ],
-              ),
-              pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 2),
-
-              // 3. Garments Loop (Note 2: Separate block for each clothing type, printed CONTINUOUSLY!)
-              ...items.map((it) {
-                final cType = it['clothing_type'] ?? 'Custom Item';
-                final qty = (it['quantity'] as num?)?.toInt() ?? 1;
-                final notes = (it['notes'] ?? '').toString().trim();
-                final meas = (it['measurements'] as Map<String, dynamic>?) ?? {};
-
-                return pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                // 2. Order Details (NO CUSTOMER NAME as required)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    // Garment type header
-                    pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
-                    pw.Text('$cType (x$qty)', style: const pw.TextStyle(fontSize: 8.5)),
-                    if (notes.isNotEmpty) ...[
-                      pw.SizedBox(height: 2),
-                      pw.Text('Item Note: $notes', style: const pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic)),
-                    ],
-                    pw.SizedBox(height: 3),
-                    pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-                    pw.SizedBox(height: 2),
+                    pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  ],
+                ),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Due:', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text(delivDate, style: const pw.TextStyle(fontSize: 8.5)),
+                  ],
+                ),
+                pw.SizedBox(height: 3),
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                pw.SizedBox(height: 2),
 
-                    // Measurements Header
-                    pw.Center(
-                      child: pw.Text(
-                        'MEASUREMENTS',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
-                      ),
-                    ),
-                    pw.SizedBox(height: 1),
-                    pw.Text(
-                      '$cType - $billNo',
-                      style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold,
-                        fontSize: 8.5,
-                        decoration: pw.TextDecoration.underline,
-                      ),
-                    ),
-                    pw.SizedBox(height: 3),
+                // 3. Garments
+                pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                pw.Text('$cType (x$qty)', style: const pw.TextStyle(fontSize: 8.5)),
+                if (notes.isNotEmpty) ...[
+                  pw.SizedBox(height: 2),
+                  pw.Text('Item Note: $notes', style: const pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic)),
+                ],
+                pw.SizedBox(height: 3),
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                pw.SizedBox(height: 2),
 
-                    // Horizontal 4 columns x 6 rows Measurements Grid (Rotated 2 times clockwise / 180 deg)
-                    pw.Table(
-                      border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
-                      children: List.generate(6, (r) {
-                        return pw.TableRow(
-                          children: List.generate(4, (c) {
-                            final boxNum = c * 6 + (5 - r) + 1;
-                            final val = _getBoxValue(meas, boxNum);
-                            return pw.Container(
-                              height: 26,
-                              alignment: pw.Alignment.center,
-                              child: val.isNotEmpty
-                                  ? pw.Transform.rotateBox(
-                                      angle: -1.5707963267948966, // 270 deg clockwise (-90 deg)
-                                      child: pw.Text(
-                                        val,
-                                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                                      ),
-                                    )
-                                  : pw.SizedBox(),
-                            );
-                          }),
+                // 4. Measurements Header
+                pw.Center(
+                  child: pw.Text(
+                    'MEASUREMENTS',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+                  ),
+                ),
+                pw.SizedBox(height: 1),
+                pw.Text(
+                  '$cType - $billNo',
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 8.5,
+                    decoration: pw.TextDecoration.underline,
+                  ),
+                ),
+                pw.SizedBox(height: 3),
+
+                // 5. Exact Website 4 columns x 6 rows Measurements Grid
+                // (sideways_row = 3 - c, sideways_col = r => Box 1 is at 4th column!)
+                pw.Table(
+                  border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
+                  children: List.generate(6, (r) {
+                    return pw.TableRow(
+                      children: List.generate(4, (c) {
+                        final sidewaysRow = 3 - c;
+                        final sidewaysCol = r;
+                        final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
+                        final val = _getBoxValue(meas, boxNum);
+                        return pw.Container(
+                          height: 28,
+                          alignment: pw.Alignment.center,
+                          child: val.isNotEmpty
+                              ? pw.Transform.rotateBox(
+                                  angle: 1.5707963267948966, // +90 deg clockwise (matches website vertical-rl)
+                                  child: pw.Text(
+                                    val,
+                                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                                  ),
+                                )
+                              : pw.SizedBox(),
                         );
                       }),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-                    pw.SizedBox(height: 3),
-                  ],
-                );
-              }),
-
-              // 4. Sign-offs at end of continuous roll
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Cut By: _____', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text('Sewn By: _____', style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-
-              // 5. Generated Timestamp
-              pw.Center(
-                child: pw.Text(
-                  'Generated: $nowStr',
-                  style: const pw.TextStyle(fontSize: 6.5),
-                  textAlign: pw.TextAlign.center,
+                    );
+                  }),
                 ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+                pw.SizedBox(height: 4),
+                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+                pw.SizedBox(height: 3),
+
+                // 6. Sign-offs
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Cut By: _____', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text('Sewn By: _____', style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+                pw.SizedBox(height: 4),
+
+                // 7. Generated Timestamp
+                pw.Center(
+                  child: pw.Text(
+                    'Generated: $nowStr',
+                    style: const pw.TextStyle(fontSize: 6.5),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
 
     return doc.save();
   }
@@ -443,11 +448,18 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
   @override
   Widget build(BuildContext context) {
     final billNo = _order['order_number'] ?? '#${widget.orderId}';
-    final delivDate = _order['delivery_date'] != null
-        ? _order['delivery_date'].toString().split('T')[0]
-        : '-';
+    String delivDate = '-';
+    if (_order['delivery_date'] != null) {
+      try {
+        final d = DateTime.parse(_order['delivery_date'].toString());
+        delivDate = DateFormat('d MMM yyyy').format(d);
+      } catch (_) {
+        delivDate = _order['delivery_date'].toString().split('T')[0];
+      }
+    }
     final items = _extractItemsFrom(_order);
-    final nowStr = DateFormat('dd/MM/yyyy - hh:mm:ss a').format(DateTime.now());
+    final nowStr = DateFormat('d MMM yyyy - HH:mm:ss').format(DateTime.now());
+    final itemsToDisplay = items.isNotEmpty ? items : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
 
     return Scaffold(
       backgroundColor: const Color(0xFFE2E8F0),
@@ -458,7 +470,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.share),
-            tooltip: 'Share Slip',
+            tooltip: 'Share Stitching Slip',
             onPressed: _sharePdf,
           ),
           IconButton(
@@ -474,156 +486,177 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Exact Continuous Thermal Slip matching Website
-                  Center(
-                    child: Container(
-                      width: 320,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // 1. Header
-                          const Text(
-                            'STITCHING SLIP',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
-                          ),
-                          Text(
-                            _shopName,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildDashedLine(),
-                          const SizedBox(height: 6),
+                  ...itemsToDisplay.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final it = entry.value;
+                    final cType = it['clothing_type'] ?? 'Custom Item';
+                    final qty = (it['quantity'] as num?)?.toInt() ?? 1;
+                    final notes = (it['notes'] ?? '').toString().trim();
+                    final meas = (it['measurements'] as Map<String, dynamic>?) ?? {};
 
-                          // 2. Order Details (Note 1: NO CUSTOMER NAME)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Bill No:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text(billNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Delivery Due:', style: TextStyle(fontSize: 13)),
-                              Text(delivDate, style: const TextStyle(fontSize: 13)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          _buildDashedLine(),
-                          const SizedBox(height: 6),
-
-                          // 3. Garments Loop (Note 2: Separate block for each clothing type, printed CONTINUOUSLY!)
-                          ...items.map((it) {
-                            final cType = it['clothing_type'] ?? 'Custom Item';
-                            final qty = (it['quantity'] as num?)?.toInt() ?? 1;
-                            final notes = (it['notes'] ?? '').toString().trim();
-                            final meas = (it['measurements'] as Map<String, dynamic>?) ?? {};
-
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                const Text('Garments:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                Text('$cType (x$qty)', style: const TextStyle(fontSize: 13)),
-                                if (notes.isNotEmpty) ...[
-                                  const SizedBox(height: 3),
-                                  Text('Item Note: $notes', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
-                                ],
-                                const SizedBox(height: 8),
-                                _buildDashedLine(),
-                                const SizedBox(height: 6),
-
-                                // Measurements Header
-                                const Text(
-                                  'MEASUREMENTS',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '$cType - $billNo',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    decoration: TextDecoration.underline,
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            if (itemsToDisplay.length > 1)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0F172A),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'Slip ${idx + 1} of ${itemsToDisplay.length}: $cType (Cut Here ✂️)',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                                   ),
                                 ),
-                                const SizedBox(height: 6),
+                              ),
+                            Container(
+                              width: 320,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(4),
+                                boxShadow: const [
+                                  BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // 1. Header
+                                  const Text(
+                                    'STITCHING SLIP',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
+                                  ),
+                                  Text(
+                                    _shopName,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildDashedLine(),
+                                  const SizedBox(height: 6),
 
-                                // Horizontal 4 columns x 6 rows Measurements Grid (Rotated 2 times clockwise / 180 deg)
-                                Table(
-                                  border: TableBorder.all(color: Colors.black, width: 1.0),
-                                  columnWidths: const {
-                                    0: FlexColumnWidth(1),
-                                    1: FlexColumnWidth(1),
-                                    2: FlexColumnWidth(1),
-                                    3: FlexColumnWidth(1),
-                                  },
-                                  children: List.generate(6, (r) {
-                                    return TableRow(
-                                      children: List.generate(4, (c) {
-                                        final boxNum = c * 6 + (5 - r) + 1;
-                                        final val = _getBoxValue(meas, boxNum);
-                                        return Container(
-                                          height: 48,
-                                          alignment: Alignment.center,
-                                          color: Colors.white,
-                                          child: val.isNotEmpty
-                                              ? RotatedBox(
-                                                  quarterTurns: 3, // 270 deg clockwise
-                                                  child: Text(
-                                                    val,
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                      color: Colors.black,
+                                  // 2. Order Details (NO CUSTOMER NAME)
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Bill No:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                      Text(billNo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Due:', style: TextStyle(fontSize: 13)),
+                                      Text(delivDate, style: const TextStyle(fontSize: 13)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildDashedLine(),
+                                  const SizedBox(height: 6),
+
+                                  // 3. Garments
+                                  const Text('Garments:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  Text('$cType (x$qty)', style: const TextStyle(fontSize: 13)),
+                                  if (notes.isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text('Item Note: $notes', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  _buildDashedLine(),
+                                  const SizedBox(height: 6),
+
+                                  // Measurements Header
+                                  const Text(
+                                    'MEASUREMENTS',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '$cType - $billNo',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+
+                                  // Horizontal 4 columns x 6 rows Measurements Grid
+                                  // (sideways_row = 3 - c, sideways_col = r => Box 1 is at 4th column!)
+                                  Table(
+                                    border: TableBorder.all(color: Colors.black, width: 1.0),
+                                    columnWidths: const {
+                                      0: FlexColumnWidth(1),
+                                      1: FlexColumnWidth(1),
+                                      2: FlexColumnWidth(1),
+                                      3: FlexColumnWidth(1),
+                                    },
+                                    children: List.generate(6, (r) {
+                                      return TableRow(
+                                        children: List.generate(4, (c) {
+                                          final sidewaysRow = 3 - c;
+                                          final sidewaysCol = r;
+                                          final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
+                                          final val = _getBoxValue(meas, boxNum);
+                                          return Container(
+                                            height: 48,
+                                            alignment: Alignment.center,
+                                            color: Colors.white,
+                                            child: val.isNotEmpty
+                                                ? RotatedBox(
+                                                    quarterTurns: 1, // +90 deg clockwise (matches vertical-rl)
+                                                    child: Text(
+                                                      val,
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: Colors.black,
+                                                      ),
                                                     ),
-                                                  ),
-                                                )
-                                              : const SizedBox(),
-                                        );
-                                      }),
-                                    );
-                                  }),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildDashedLine(),
-                                const SizedBox(height: 6),
-                              ],
-                            );
-                          }),
+                                                  )
+                                                : const SizedBox(),
+                                          );
+                                        }),
+                                      );
+                                    }),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildDashedLine(),
+                                  const SizedBox(height: 6),
 
-                          // 4. Sign-offs
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: const [
-                              Text('Cut By: _____', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                              Text('Sewn By: _____', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
+                                  // 4. Sign-offs
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: const [
+                                      Text('Cut By: _____', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                                      Text('Sewn By: _____', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
 
-                          // 5. Timestamp
-                          Text(
-                            'Generated: $nowStr',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 9, color: Colors.black54),
-                          ),
-                        ],
+                                  // 5. Timestamp
+                                  Text(
+                                    'Generated: $nowStr',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontSize: 9, color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                   const SizedBox(height: 16),
 
                   // Bottom Print Button
