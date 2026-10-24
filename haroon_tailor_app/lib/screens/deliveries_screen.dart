@@ -114,142 +114,167 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
     final currency = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     if (remaining > 0) {
-      // Ask about remaining payment (Point 5)
-      showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (ctx) {
-          final amtCtrl = TextEditingController(text: remaining.toStringAsFixed(0));
-          String payMethod = 'Cash';
+      final amtCtrl = TextEditingController(text: remaining.toStringAsFixed(0));
+      String payMethod = 'Cash';
 
-          return StatefulBuilder(
-            builder: (ctx, setSheetState) {
-              return Padding(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 20,
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+      try {
+        await showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (ctx) {
+            return StatefulBuilder(
+              builder: (ctx, setSheetState) {
+                final enteredAmt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
+                final newRemaining = (remaining - enteredAmt) < 0 ? 0.0 : (remaining - enteredAmt);
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    top: 20,
+                    bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.payments, color: Colors.red, size: 28),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Deliver $billNo - $custName',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              Text('Baqaya (Due): ${currency.format(remaining)}',
-                                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    const Text('Grahak ne baqaya payment diya?', style: TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: amtCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                      ],
-                      decoration: InputDecoration(
-                        prefixText: '₹ ',
-                        labelText: 'Payment Amount',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: payMethod,
-                      decoration: InputDecoration(
-                        labelText: 'Payment Method',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'Cash', child: Text('Cash')),
-                        DropdownMenuItem(value: 'UPI', child: Text('UPI / QR')),
-                        DropdownMenuItem(value: 'Card', child: Text('Card')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setSheetState(() => payMethod = val);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        Row(
+                          children: [
+                            const Icon(Icons.payments, color: Colors.red, size: 28),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Deliver $billNo - $custName',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  Text('Baqaya (Due): ${currency.format(remaining)}',
+                                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14)),
+                                ],
+                              ),
                             ),
-                            onPressed: () async {
-                              Navigator.pop(ctx);
-                              // Deliver without collecting now
-                              await _markDeliveredApi(orderId);
-                            },
-                            child: const Text('Bina Payment Deliver',
-                                style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        const Text('Grahak ne kitna payment diya?', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: amtCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                          ],
+                          onChanged: (_) => setSheetState(() {}),
+                          decoration: InputDecoration(
+                            prefixText: '₹ ',
+                            labelText: 'Payment Amount',
+                            hintText: 'Jaise: 300',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green.shade700,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            onPressed: () async {
-                              final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
-                              if (amt <= 0) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Kripya 0 se zyada payment rashi bharein!'), backgroundColor: Colors.orange),
-                                );
-                                return;
-                              }
-                              if (amt > remaining) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Payment baqaya amount (${currency.format(remaining)}) se zyada nahi ho sakta!'), backgroundColor: Colors.orange),
-                                );
-                                return;
-                              }
-                              Navigator.pop(ctx);
-                              try {
-                                await ApiService.createPayment(
-                                  orderId: orderId,
-                                  amount: amt,
-                                  paymentMethod: payMethod,
-                                  sendWhatsapp: true,
-                                );
-                              } catch (_) {}
-                              await _markDeliveredApi(orderId);
-                            },
-                            child: const Text('Payment Jama & Deliver',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        if (enteredAmt > 0 && newRemaining > 0) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Baki bachega: ₹${newRemaining.toStringAsFixed(0)} (Pending Payments me rahega)',
+                            style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
                           ),
+                        ] else if (enteredAmt >= remaining && remaining > 0) ...[
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Poora payment jama ho jayega (Fully Paid)',
+                            style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          value: payMethod,
+                          decoration: InputDecoration(
+                            labelText: 'Payment Method',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                            DropdownMenuItem(value: 'UPI', child: Text('UPI / QR')),
+                            DropdownMenuItem(value: 'Card', child: Text('Card')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setSheetState(() => payMethod = val);
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: () async {
+                                  Navigator.pop(ctx);
+                                  // Deliver without collecting now
+                                  await _markDeliveredApi(orderId, remaining);
+                                },
+                                child: const Text('Bina Payment Deliver',
+                                    style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade700,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: () async {
+                                  final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
+                                  if (amt <= 0) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Kripya 0 se zyada payment rashi bharein!'), backgroundColor: Colors.orange),
+                                    );
+                                    return;
+                                  }
+                                  if (amt > remaining) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Payment baqaya amount (${currency.format(remaining)}) se zyada nahi ho sakta!'), backgroundColor: Colors.orange),
+                                    );
+                                    return;
+                                  }
+                                  Navigator.pop(ctx);
+                                  try {
+                                    await ApiService.createPayment(
+                                      orderId: orderId,
+                                      amount: amt,
+                                      paymentMethod: payMethod,
+                                      sendWhatsapp: true,
+                                    );
+                                  } catch (_) {}
+                                  final remDue = (remaining - amt) < 0 ? 0.0 : (remaining - amt);
+                                  await _markDeliveredApi(orderId, remDue);
+                                },
+                                child: const Text('Payment Jama & Deliver',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      );
+                  ),
+                );
+              },
+            );
+          },
+        );
+      } finally {
+        amtCtrl.dispose();
+      }
     } else {
       // Fully paid, direct confirm
       final confirm = await showDialog<bool>(
@@ -269,12 +294,12 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
       );
 
       if (confirm == true) {
-        await _markDeliveredApi(orderId);
+        await _markDeliveredApi(orderId, 0.0);
       }
     }
   }
 
-  Future<void> _markDeliveredApi(int orderId) async {
+  Future<void> _markDeliveredApi(int orderId, [double? remainingDue]) async {
     try {
       await ApiService.updateOrderStatus(
         orderId: orderId,
@@ -283,9 +308,18 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
       );
       _loadDeliveries();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Delivery marked as DELIVERED!'), backgroundColor: Colors.green),
-        );
+        if (remainingDue != null && remainingDue > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Deliver ho gaya! Baqaya ₹${remainingDue.toStringAsFixed(0)} Pending Payments me jod diya gaya hai.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Delivery marked as DELIVERED!'), backgroundColor: Colors.green),
+          );
+        }
       }
     } catch (err) {
       if (mounted) {

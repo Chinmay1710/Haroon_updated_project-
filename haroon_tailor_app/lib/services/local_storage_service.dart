@@ -633,7 +633,14 @@ class LocalStorageService {
     final cached = (await getCachedOrders()) ?? [];
     final List<dynamic> orders = List<dynamic>.from(cached);
     final targetIdStr = orderId.toString();
-    final index = orders.indexWhere((o) => o is Map && o['id']?.toString() == targetIdStr);
+    final index = orders.indexWhere((o) {
+      if (o is! Map) return false;
+      final idNum = int.tryParse((o['id'] ?? '').toString()) ?? 0;
+      if (idNum > 0 && idNum == orderId) return true;
+      if (o['id']?.toString() == targetIdStr) return true;
+      if (o['order_number'] != null && o['order_number'].toString() == targetIdStr) return true;
+      return false;
+    });
 
     if (index >= 0 && orders[index] is Map) {
       final order = Map<String, dynamic>.from(orders[index] as Map);
