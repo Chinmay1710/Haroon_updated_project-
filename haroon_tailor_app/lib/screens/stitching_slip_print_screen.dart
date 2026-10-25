@@ -395,6 +395,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                   style: pw.TextStyle(
                     fontWeight: pw.FontWeight.bold,
                     fontSize: 8.5,
+                    decoration: pw.TextDecoration.underline,
                   ),
                 ),
                 pw.SizedBox(height: 3),
