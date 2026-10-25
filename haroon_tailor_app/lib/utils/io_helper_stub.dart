@@ -24,6 +24,8 @@ Future<String?> readJsonFromFile(String fileName) async {
   return null;
 }
 
+Future<void> clearAllDiskFiles() async {}
+
 Widget buildSmartImage(
   String pathOrUrl, {
   double? width,

@@ -604,6 +604,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     if (confirmed == true) {
       await LocalStorageService.clearAll(enableOfflineMode: true);
       if (mounted) {
+        await _loadAllSettings();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ App 100% fresh reset ho gayi (0 Orders)! Ab "Restore ZIP" se backup restore karein.'),

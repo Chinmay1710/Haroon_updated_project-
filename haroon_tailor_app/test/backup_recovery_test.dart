@@ -141,7 +141,7 @@ void main() {
 
       // 5. Simulate restoring on a brand new blank app
       await LocalStorageService.clearAll();
-      expect(await LocalStorageService.getCachedOrders(), isNull);
+      expect(await LocalStorageService.getCachedOrders(), isEmpty);
 
       // Restore from the generated ZIP
       final restoreRes = await ZipBackupService.restoreFromZip(zipBytes: zipBytes);
@@ -204,6 +204,42 @@ void main() {
       // Verify the photo was extracted from the previous ZIP into the new backup without needing network
       final bundledPhoto = newArchive.files.firstWhere((f) => f.name == 'photos/cached_photo_1.jpg');
       expect(bundledPhoto.content as List<int>, equals(fakePhotoBytes));
+    });
+
+    test('5. Start Fresh Offline App resets all values to 00 and enables offline mode', () async {
+      // Seed some dummy orders and customers
+      await LocalStorageService.saveOrders([
+        {'id': 1, 'order_number': 'ORD-001', 'total_amount': 500}
+      ]);
+      await LocalStorageService.saveCustomers([
+        {'id': 1, 'name': 'Test Cust', 'mobile': '9999999999'}
+      ]);
+
+      expect((await LocalStorageService.getCachedOrders())?.length, equals(1));
+      expect((await LocalStorageService.getCachedCustomers())?.length, equals(1));
+
+      // Trigger Start Fresh Offline App (Clear All Data)
+      await LocalStorageService.clearAll(enableOfflineMode: true);
+
+      // Verify all cached datasets are now empty
+      final freshOrders = await LocalStorageService.getCachedOrders();
+      final freshCustomers = await LocalStorageService.getCachedCustomers();
+      final freshStats = await LocalStorageService.getCachedDashboardStats();
+      final isOffline = await LocalStorageService.isOfflineMode();
+
+      expect(freshOrders, isNotNull);
+      expect(freshOrders, isEmpty);
+      expect(freshCustomers, isNotNull);
+      expect(freshCustomers, isEmpty);
+      expect(isOffline, isTrue);
+
+      expect(freshStats, isNotNull);
+      expect(freshStats!['total_orders'], equals(0));
+      expect(freshStats['orders_today'], equals(0));
+      expect(freshStats['deliveries_today'], equals(0));
+      expect(freshStats['pending_payments'], equals(0));
+      expect(freshStats['total_revenue'], equals(0));
+      expect(freshStats['recent_orders'], isEmpty);
     });
   });
 }

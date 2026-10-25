@@ -40,7 +40,7 @@ class CustomersScreenState extends State<CustomersScreen> {
   Future<void> _loadCustomers({bool showLoading = true}) async {
     // 1. Instant local cache load (0 milliseconds delay!)
     final cached = await LocalStorageService.getCachedCustomers();
-    if (cached != null && cached.isNotEmpty && mounted) {
+    if (cached != null && mounted) {
       final list = cached.map((c) => Customer.fromJson(c)).toList();
       setState(() {
         _allCustomers = list;

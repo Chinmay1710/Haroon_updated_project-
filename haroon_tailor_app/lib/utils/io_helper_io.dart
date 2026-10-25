@@ -65,6 +65,22 @@ Future<String?> readJsonFromFile(String fileName) async {
   return null;
 }
 
+Future<void> clearAllDiskFiles() async {
+  try {
+    final appDir = await getApplicationDocumentsDirectory();
+    if (await appDir.exists()) {
+      final entities = appDir.listSync();
+      for (var entity in entities) {
+        if (entity is File && entity.path.endsWith('.json')) {
+          try {
+            entity.deleteSync();
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
+}
+
 Widget _defaultErrorWidget(double? width, double? height) {
   return Container(
     width: width,

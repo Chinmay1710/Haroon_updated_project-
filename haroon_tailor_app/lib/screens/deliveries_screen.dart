@@ -38,7 +38,7 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
   Future<void> _loadDeliveries({bool showLoading = true}) async {
     // 1. Instant local cache load (0 milliseconds delay!)
     final cached = await LocalStorageService.getCachedDeliveries();
-    if (cached != null && cached.isNotEmpty && mounted) {
+    if (cached != null && mounted) {
       setState(() {
         _deliveries = cached['deliveries'] ?? [];
         _filterList();

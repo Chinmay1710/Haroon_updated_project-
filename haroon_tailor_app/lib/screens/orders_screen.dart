@@ -87,7 +87,7 @@ class OrdersScreenState extends State<OrdersScreen> {
   Future<void> _loadOrders({bool showLoading = true}) async {
     // 1. Instant local cache load (0 milliseconds delay!)
     final cached = await LocalStorageService.getCachedOrders();
-    if (cached != null && cached.isNotEmpty && mounted) {
+    if (cached != null && mounted) {
       setState(() {
         _allOrders = cached;
         _applyFilter();

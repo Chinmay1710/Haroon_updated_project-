@@ -17,11 +17,20 @@ class LocalStorageService {
   static bool _initialized = false;
 
   /// Initializes local storage, verifies disk files, and auto-seeds initial master data on first launch
+  static const String _keyCleanFreshState = 'ht_is_clean_fresh_state';
+
   static Future<void> initStorage() async {
     if (_initialized) return;
     _initialized = true;
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final isCleanFresh = prefs.getBool(_keyCleanFreshState) ?? false;
+      if (isCleanFresh) {
+        // User explicitly started a fresh offline app; do not auto-seed
+        return;
+      }
+
       // 1. Check if orders and customers exist on disk or in cache
       final existingCust = await getCachedCustomers();
       final existingOrders = await getCachedOrders();
@@ -63,7 +72,7 @@ class LocalStorageService {
       final fromDisk = await readJsonFromFile('haroon_orders_data.json');
       if (fromDisk != null && fromDisk.isNotEmpty) {
         final decoded = jsonDecode(fromDisk);
-        if (decoded is List && decoded.isNotEmpty) return decoded;
+        if (decoded is List) return decoded;
       }
       // 2. Fallback to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
@@ -238,7 +247,7 @@ class LocalStorageService {
       final fromDisk = await readJsonFromFile('haroon_customers_data.json');
       if (fromDisk != null && fromDisk.isNotEmpty) {
         final decoded = jsonDecode(fromDisk);
-        if (decoded is List && decoded.isNotEmpty) return decoded;
+        if (decoded is List) return decoded;
       }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_keyCustomers);
@@ -897,8 +906,7 @@ class LocalStorageService {
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) {
-          if (decoded['recent_orders'] != null &&
-              (decoded['recent_orders'] as List).isNotEmpty &&
+          if (decoded['recent_orders'] is List &&
               decoded['pending_payments'] != null) {
             return decoded;
           }
@@ -917,13 +925,14 @@ class LocalStorageService {
         'total_orders': 0,
         'active_orders': 0,
         'delivered_orders': 0,
+        'urgent_orders': 0,
         'total_revenue': 0,
         'pending_balance': 0,
         'pending_payments': 0,
         'orders_today': 0,
         'deliveries_today': 0,
         'completed_today': 0,
-        'recent_orders': [],
+        'recent_orders': <dynamic>[],
       };
     }
 
@@ -1548,6 +1557,9 @@ class LocalStorageService {
     int totalMeasurements = 0;
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyCleanFreshState);
+
       // 1. Settings
       if (data['settings'] is Map) {
         final settings = Map<String, dynamic>.from(data['settings']);
@@ -1930,11 +1942,43 @@ class LocalStorageService {
   // -------------------------------------------------------------
   static Future<void> clearAll({bool enableOfflineMode = false}) async {
     try {
+      // 1. Delete all permanent disk JSON files & clear memory cache
+      await clearAllDiskFiles();
+
+      // 2. Clear SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
+
+      // 3. Mark offline mode & clean fresh state
       if (enableOfflineMode) {
         await prefs.setBool(_keyOfflineMode, true);
       }
+      await prefs.setBool(_keyCleanFreshState, true);
+
+      // 4. Overwrite caches with explicit empty zero values
+      await saveOrders([]);
+      await saveCustomers([]);
+      await savePendingOrders([]);
+      await saveDeliveries({
+        'deliveries': [],
+        'today': [],
+        'upcoming': [],
+        'overdue': [],
+      });
+      final zeroStats = {
+        'total_orders': 0,
+        'active_orders': 0,
+        'delivered_orders': 0,
+        'urgent_orders': 0,
+        'total_revenue': 0,
+        'pending_balance': 0,
+        'pending_payments': 0,
+        'orders_today': 0,
+        'deliveries_today': 0,
+        'completed_today': 0,
+        'recent_orders': <dynamic>[],
+      };
+      await saveDashboardStats(zeroStats);
     } catch (_) {}
   }
 }

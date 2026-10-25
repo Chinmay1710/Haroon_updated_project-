@@ -52,6 +52,21 @@ Future<String?> readJsonFromFile(String fileName) async {
   }
 }
 
+Future<void> clearAllDiskFiles() async {
+  try {
+    final keysToRemove = <String>[];
+    for (var key in html.window.localStorage.keys) {
+      if (key.startsWith('ht_disk_')) {
+        keysToRemove.add(key);
+      }
+    }
+    for (var key in keysToRemove) {
+      html.window.localStorage.remove(key);
+    }
+    WebPhotoStorage.memCache.clear();
+  } catch (_) {}
+}
+
 /// Download ZIP bytes as a file on web
 void downloadZipFileWeb(Uint8List bytes, String fileName) {
   final blob = html.Blob([bytes], 'application/zip');
