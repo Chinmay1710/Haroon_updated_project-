@@ -400,8 +400,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                 ),
                 pw.SizedBox(height: 3),
 
-                // 5. Exact Website 4 columns x 6 rows Measurements Grid
-                // FlexColumnWidth(1) ensures all 4 columns are visible and equal in width (25% each)
+                // 5. Measurements Grid: Rotated 90 deg clockwise to 6 columns x 4 rows
+                // Fits 58mm roll paper width with 6 equal columns and horizontal text
                 pw.Table(
                   border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
                   defaultColumnWidth: const pw.FlexColumnWidth(1),
@@ -410,23 +410,26 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                     1: pw.FlexColumnWidth(1),
                     2: pw.FlexColumnWidth(1),
                     3: pw.FlexColumnWidth(1),
+                    4: pw.FlexColumnWidth(1),
+                    5: pw.FlexColumnWidth(1),
                   },
-                  children: List.generate(6, (r) {
+                  children: List.generate(4, (r) {
                     return pw.TableRow(
-                      children: List.generate(4, (c) {
-                        final sidewaysRow = 3 - c;
-                        final sidewaysCol = r;
-                        final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
+                      children: List.generate(6, (c) {
+                        final boxNum = r * 6 + c + 1;
                         final val = _getBoxValue(meas, boxNum);
                         return pw.Container(
-                          height: 28,
+                          height: 22,
                           alignment: pw.Alignment.center,
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 1, vertical: 2),
                           child: val.isNotEmpty
-                              ? pw.Transform.rotateBox(
-                                  angle: -1.5707963267948966, // 180 deg rotated (-90 deg / 270 deg)
-                                  child: pw.Text(
-                                    val,
-                                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                              ? pw.Text(
+                                  val,
+                                  textAlign: pw.TextAlign.center,
+                                  maxLines: 1,
+                                  style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.bold,
+                                    fontSize: 8.5,
                                   ),
                                 )
                               : pw.SizedBox(),
@@ -615,8 +618,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                   ),
                                   const SizedBox(height: 6),
 
-                                  // Horizontal 4 columns x 6 rows Measurements Grid
-                                  // (sideways_row = 3 - c, sideways_col = r => Box 1 is at 4th column!)
+                                  // Horizontal 6 columns x 4 rows Measurements Grid (Rotated 90 deg clockwise)
                                   Table(
                                     border: TableBorder.all(color: Colors.black, width: 1.0),
                                     columnWidths: const {
@@ -624,31 +626,32 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                       1: FlexColumnWidth(1),
                                       2: FlexColumnWidth(1),
                                       3: FlexColumnWidth(1),
+                                      4: FlexColumnWidth(1),
+                                      5: FlexColumnWidth(1),
                                     },
-                                    children: List.generate(6, (r) {
+                                    children: List.generate(4, (r) {
                                       return TableRow(
-                                        children: List.generate(4, (c) {
-                                          final sidewaysRow = 3 - c;
-                                          final sidewaysCol = r;
-                                          final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
+                                        children: List.generate(6, (c) {
+                                          final boxNum = r * 6 + c + 1;
                                           final val = _getBoxValue(meas, boxNum);
                                           return Container(
-                                            height: 48,
+                                            height: 38,
                                             alignment: Alignment.center,
                                             color: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                                             child: val.isNotEmpty
-                                                ? RotatedBox(
-                                                    quarterTurns: 3, // 180 deg rotated (270 deg clockwise)
-                                                    child: Text(
-                                                      val,
-                                                      style: const TextStyle(
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 16,
-                                                        color: Colors.black,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : const SizedBox(),
+                                              ? Text(
+                                                  val,
+                                                  textAlign: TextAlign.center,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                    color: Colors.black,
+                                                  ),
+                                                )
+                                              : const SizedBox(),
                                           );
                                         }),
                                       );
