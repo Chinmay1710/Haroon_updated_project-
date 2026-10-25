@@ -420,17 +420,14 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                         final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
                         final val = _getBoxValue(meas, boxNum);
                         return pw.Container(
-                          height: 24,
+                          height: 28,
                           alignment: pw.Alignment.center,
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 1, vertical: 1),
                           child: val.isNotEmpty
-                              ? pw.Text(
-                                  val,
-                                  textAlign: pw.TextAlign.center,
-                                  maxLines: 1,
-                                  style: pw.TextStyle(
-                                    fontWeight: pw.FontWeight.bold,
-                                    fontSize: 10,
+                              ? pw.Transform.rotateBox(
+                                  angle: 1.5707963267948966, // +90 deg clockwise (matches vertical-rl / attached screenshot)
+                                  child: pw.Text(
+                                    val,
+                                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
                                   ),
                                 )
                               : pw.SizedBox(),
@@ -640,20 +637,19 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                             height: 48,
                                             alignment: Alignment.center,
                                             color: Colors.white,
-                                            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                                             child: val.isNotEmpty
-                                              ? Text(
-                                                  val,
-                                                  textAlign: TextAlign.center,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                    color: Colors.black,
-                                                  ),
-                                                )
-                                              : const SizedBox(),
+                                                ? RotatedBox(
+                                                    quarterTurns: 1, // +90 deg clockwise (matches vertical-rl / attached screenshot)
+                                                    child: Text(
+                                                      val,
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 16,
+                                                        color: Colors.black,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : const SizedBox(),
                                           );
                                         }),
                                       );
