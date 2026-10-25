@@ -304,20 +304,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
         ? items
         : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
 
-    // Determine uniform page height for all slips so multi-page roll printing
-    // has consistent geometry (preventing CUPS driver crashes and gibberish output)
-    double slipHeightMm = 175.0;
-    for (final it in itemsToPrint) {
-      final n = (it['notes'] ?? '').toString().trim();
-      if (n.length > 50) slipHeightMm = 195.0;
-      if (n.length > 120) slipHeightMm = 225.0;
-    }
-
-    final pageFormat = PdfPageFormat(
-      58 * PdfPageFormat.mm,
-      slipHeightMm * PdfPageFormat.mm,
-      marginAll: 4 * PdfPageFormat.mm,
-    );
+    // Standard continuous 58mm thermal roll format (same as receipt_print_screen.dart)
+    final pageFormat = PdfPageFormat.roll57;
 
     for (final it in itemsToPrint) {
       final cType = it['clothing_type'] ?? 'Custom Item';
@@ -424,7 +412,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                           alignment: pw.Alignment.center,
                           child: val.isNotEmpty
                               ? pw.Transform.rotateBox(
-                                  angle: 1.5707963267948966, // +90 deg clockwise (matches vertical-rl / attached screenshot)
+                                  angle: -1.5707963267948966, // -90 deg (Clockwise in PDF, matching screen RotatedBox)
                                   child: pw.Text(
                                     val,
                                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
@@ -459,8 +447,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                   ),
                 ),
 
-                // 8. Feed Space: Feeds paper past thermal printer cutter blade before cutting
-                pw.SizedBox(height: 35),
+                pw.SizedBox(height: 8),
               ],
             );
           },
