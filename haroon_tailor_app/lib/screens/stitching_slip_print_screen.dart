@@ -423,7 +423,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                           alignment: pw.Alignment.center,
                           child: val.isNotEmpty
                               ? pw.Transform.rotateBox(
-                                  angle: 1.5707963267948966, // +90 deg clockwise (matches vertical-rl)
+                                  angle: -1.5707963267948966, // 180 deg rotated (-90 deg / 270 deg)
                                   child: pw.Text(
                                     val,
                                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
@@ -638,7 +638,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                             color: Colors.white,
                                             child: val.isNotEmpty
                                                 ? RotatedBox(
-                                                    quarterTurns: 1, // +90 deg clockwise (matches vertical-rl)
+                                                    quarterTurns: 3, // 180 deg rotated (270 deg clockwise)
                                                     child: Text(
                                                       val,
                                                       style: const TextStyle(
