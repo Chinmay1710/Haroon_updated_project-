@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:http/http.dart' as http;
 import 'local_storage_service.dart';
@@ -408,43 +408,47 @@ class ZipBackupService {
       // 2. Restore all shop settings & preferences
       onProgress?.call('Restoring shop settings & preferences...', 0.5);
 
-      if (data['settings'] is Map) {
-        await LocalStorageService.saveShopSettings(Map<String, dynamic>.from(data['settings']));
-      }
-      if (data['clothing_types'] is List) {
-        await LocalStorageService.saveGarmentTypes(List<String>.from(data['clothing_types']));
-      }
-      if (data['message_templates'] is Map) {
-        await LocalStorageService.saveMessageTemplates(Map<String, String>.from(data['message_templates']));
-      }
-      if (data['default_rates'] is Map) {
-        final rates = (data['default_rates'] as Map).map(
-          (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
-        );
-        await LocalStorageService.saveDefaultRates(rates);
-      }
-      if (data['app_theme'] is String && (data['app_theme'] as String).isNotEmpty) {
-        await LocalStorageService.saveAppTheme(data['app_theme'] as String);
-      }
-      if (data['app_language'] is String && (data['app_language'] as String).isNotEmpty) {
-        await LocalStorageService.saveAppLanguage(data['app_language'] as String);
-      }
-      if (data['measurement_unit'] is String && (data['measurement_unit'] as String).isNotEmpty) {
-        await LocalStorageService.saveMeasurementUnit(data['measurement_unit'] as String);
-      }
-      if (data['default_delivery_days'] is int) {
-        await LocalStorageService.saveDefaultDeliveryDays(data['default_delivery_days'] as int);
-      } else if (data['default_delivery_days'] is num) {
-        await LocalStorageService.saveDefaultDeliveryDays((data['default_delivery_days'] as num).toInt());
-      }
-      if (data['notes_suggestions'] is List) {
-        await LocalStorageService.saveNotesSuggestions(List<String>.from(data['notes_suggestions']));
-      }
-      if (data['auto_backup_enabled'] is bool) {
-        await LocalStorageService.setAutoBackupEnabled(data['auto_backup_enabled'] as bool);
-      }
-      if (data['auto_backup_frequency'] is String && (data['auto_backup_frequency'] as String).isNotEmpty) {
-        await LocalStorageService.setAutoBackupFrequency(data['auto_backup_frequency'] as String);
+      try {
+        if (data['settings'] is Map) {
+          await LocalStorageService.saveShopSettings(Map<String, dynamic>.from(data['settings']));
+        }
+        if (data['clothing_types'] is List) {
+          await LocalStorageService.saveGarmentTypes(List<String>.from(data['clothing_types']));
+        }
+        if (data['message_templates'] is Map) {
+          await LocalStorageService.saveMessageTemplates(Map<String, String>.from(data['message_templates']));
+        }
+        if (data['default_rates'] is Map) {
+          final rates = (data['default_rates'] as Map).map(
+            (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+          );
+          await LocalStorageService.saveDefaultRates(rates);
+        }
+        if (data['app_theme'] is String && (data['app_theme'] as String).isNotEmpty) {
+          await LocalStorageService.saveAppTheme(data['app_theme'] as String);
+        }
+        if (data['app_language'] is String && (data['app_language'] as String).isNotEmpty) {
+          await LocalStorageService.saveAppLanguage(data['app_language'] as String);
+        }
+        if (data['measurement_unit'] is String && (data['measurement_unit'] as String).isNotEmpty) {
+          await LocalStorageService.saveMeasurementUnit(data['measurement_unit'] as String);
+        }
+        if (data['default_delivery_days'] is int) {
+          await LocalStorageService.saveDefaultDeliveryDays(data['default_delivery_days'] as int);
+        } else if (data['default_delivery_days'] is num) {
+          await LocalStorageService.saveDefaultDeliveryDays((data['default_delivery_days'] as num).toInt());
+        }
+        if (data['notes_suggestions'] is List) {
+          await LocalStorageService.saveNotesSuggestions(List<String>.from(data['notes_suggestions']));
+        }
+        if (data['auto_backup_enabled'] is bool) {
+          await LocalStorageService.setAutoBackupEnabled(data['auto_backup_enabled'] as bool);
+        }
+        if (data['auto_backup_frequency'] is String && (data['auto_backup_frequency'] as String).isNotEmpty) {
+          await LocalStorageService.setAutoBackupFrequency(data['auto_backup_frequency'] as String);
+        }
+      } catch (settingsErr) {
+        debugPrint('Settings restore non-fatal warning: $settingsErr');
       }
 
       // 3. Map orders photo paths to local storage

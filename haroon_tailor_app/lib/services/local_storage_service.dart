@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/io_helper_stub.dart'
@@ -1557,69 +1558,77 @@ class LocalStorageService {
     int totalMeasurements = 0;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_keyCleanFreshState);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_keyCleanFreshState);
+      } catch (e) {
+        debugPrint('Prefs init warning: $e');
+      }
 
-      // 1. Settings
-      if (data['settings'] is Map) {
-        final settings = Map<String, dynamic>.from(data['settings']);
-        await saveShopSettings(settings);
-        if (settings['clothing_types'] != null) {
-          final typesStr = settings['clothing_types'].toString();
-          final typesList = typesStr
-              .split(',')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty)
-              .toList();
-          if (typesList.isNotEmpty) {
-            await saveGarmentTypes(typesList);
+      // 1. Settings (safely guarded so settings failure never halts order restore)
+      try {
+        if (data['settings'] is Map) {
+          final settings = Map<String, dynamic>.from(data['settings']);
+          await saveShopSettings(settings);
+          if (settings['clothing_types'] != null) {
+            final typesStr = settings['clothing_types'].toString();
+            final typesList = typesStr
+                .split(',')
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+            if (typesList.isNotEmpty) {
+              await saveGarmentTypes(typesList);
+            }
           }
         }
-      }
 
-      if (data['clothing_types'] is List) {
-        await saveGarmentTypes(List<String>.from(data['clothing_types']));
-      }
+        if (data['clothing_types'] is List) {
+          await saveGarmentTypes(List<String>.from(data['clothing_types']));
+        }
 
-      if (data['message_templates'] is Map) {
-        await saveMessageTemplates(Map<String, String>.from(data['message_templates']));
-      }
+        if (data['message_templates'] is Map) {
+          await saveMessageTemplates(Map<String, String>.from(data['message_templates']));
+        }
 
-      if (data['default_rates'] is Map) {
-        final rates = (data['default_rates'] as Map).map(
-          (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
-        );
-        await saveDefaultRates(rates);
-      }
+        if (data['default_rates'] is Map) {
+          final rates = (data['default_rates'] as Map).map(
+            (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+          );
+          await saveDefaultRates(rates);
+        }
 
-      if (data['app_theme'] is String && (data['app_theme'] as String).isNotEmpty) {
-        await saveAppTheme(data['app_theme'] as String);
-      }
+        if (data['app_theme'] is String && (data['app_theme'] as String).isNotEmpty) {
+          await saveAppTheme(data['app_theme'] as String);
+        }
 
-      if (data['app_language'] is String && (data['app_language'] as String).isNotEmpty) {
-        await saveAppLanguage(data['app_language'] as String);
-      }
+        if (data['app_language'] is String && (data['app_language'] as String).isNotEmpty) {
+          await saveAppLanguage(data['app_language'] as String);
+        }
 
-      if (data['measurement_unit'] is String && (data['measurement_unit'] as String).isNotEmpty) {
-        await saveMeasurementUnit(data['measurement_unit'] as String);
-      }
+        if (data['measurement_unit'] is String && (data['measurement_unit'] as String).isNotEmpty) {
+          await saveMeasurementUnit(data['measurement_unit'] as String);
+        }
 
-      if (data['default_delivery_days'] is int) {
-        await saveDefaultDeliveryDays(data['default_delivery_days'] as int);
-      } else if (data['default_delivery_days'] is num) {
-        await saveDefaultDeliveryDays((data['default_delivery_days'] as num).toInt());
-      }
+        if (data['default_delivery_days'] is int) {
+          await saveDefaultDeliveryDays(data['default_delivery_days'] as int);
+        } else if (data['default_delivery_days'] is num) {
+          await saveDefaultDeliveryDays((data['default_delivery_days'] as num).toInt());
+        }
 
-      if (data['notes_suggestions'] is List) {
-        await saveNotesSuggestions(List<String>.from(data['notes_suggestions']));
-      }
+        if (data['notes_suggestions'] is List) {
+          await saveNotesSuggestions(List<String>.from(data['notes_suggestions']));
+        }
 
-      if (data['auto_backup_enabled'] is bool) {
-        await setAutoBackupEnabled(data['auto_backup_enabled'] as bool);
-      }
+        if (data['auto_backup_enabled'] is bool) {
+          await setAutoBackupEnabled(data['auto_backup_enabled'] as bool);
+        }
 
-      if (data['auto_backup_frequency'] is String && (data['auto_backup_frequency'] as String).isNotEmpty) {
-        await setAutoBackupFrequency(data['auto_backup_frequency'] as String);
+        if (data['auto_backup_frequency'] is String && (data['auto_backup_frequency'] as String).isNotEmpty) {
+          await setAutoBackupFrequency(data['auto_backup_frequency'] as String);
+        }
+      } catch (settingsErr) {
+        debugPrint('Settings import non-fatal error: $settingsErr');
       }
 
       // 2. Customers
