@@ -400,8 +400,9 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                 ),
                 pw.SizedBox(height: 3),
 
-                // 5. Measurements Grid: Rotated 90 deg clockwise to 6 columns x 4 rows
-                // Fits 58mm roll paper width with 6 equal columns and horizontal text
+                // 5. Measurements Grid: 4 columns x 6 rows
+                // (sideways_row = 3 - c, sideways_col = r => Box 1 is at 4th column)
+                // Fits 58mm roll paper width with 4 equal columns and horizontal text
                 pw.Table(
                   border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
                   defaultColumnWidth: const pw.FlexColumnWidth(1),
@@ -410,18 +411,18 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                     1: pw.FlexColumnWidth(1),
                     2: pw.FlexColumnWidth(1),
                     3: pw.FlexColumnWidth(1),
-                    4: pw.FlexColumnWidth(1),
-                    5: pw.FlexColumnWidth(1),
                   },
-                  children: List.generate(4, (r) {
+                  children: List.generate(6, (r) {
                     return pw.TableRow(
-                      children: List.generate(6, (c) {
-                        final boxNum = r * 6 + c + 1;
+                      children: List.generate(4, (c) {
+                        final sidewaysRow = 3 - c;
+                        final sidewaysCol = r;
+                        final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
                         final val = _getBoxValue(meas, boxNum);
                         return pw.Container(
-                          height: 22,
+                          height: 24,
                           alignment: pw.Alignment.center,
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 1, vertical: 1),
                           child: val.isNotEmpty
                               ? pw.Text(
                                   val,
@@ -429,7 +430,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                   maxLines: 1,
                                   style: pw.TextStyle(
                                     fontWeight: pw.FontWeight.bold,
-                                    fontSize: 8.5,
+                                    fontSize: 10,
                                   ),
                                 )
                               : pw.SizedBox(),
@@ -618,7 +619,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                   ),
                                   const SizedBox(height: 6),
 
-                                  // Horizontal 6 columns x 4 rows Measurements Grid (Rotated 90 deg clockwise)
+                                  // 4 columns x 6 rows Measurements Grid
+                                  // (sideways_row = 3 - c, sideways_col = r => Box 1 is at 4th column)
                                   Table(
                                     border: TableBorder.all(color: Colors.black, width: 1.0),
                                     columnWidths: const {
@@ -626,16 +628,16 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                       1: FlexColumnWidth(1),
                                       2: FlexColumnWidth(1),
                                       3: FlexColumnWidth(1),
-                                      4: FlexColumnWidth(1),
-                                      5: FlexColumnWidth(1),
                                     },
-                                    children: List.generate(4, (r) {
+                                    children: List.generate(6, (r) {
                                       return TableRow(
-                                        children: List.generate(6, (c) {
-                                          final boxNum = r * 6 + c + 1;
+                                        children: List.generate(4, (c) {
+                                          final sidewaysRow = 3 - c;
+                                          final sidewaysCol = r;
+                                          final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
                                           final val = _getBoxValue(meas, boxNum);
                                           return Container(
-                                            height: 38,
+                                            height: 48,
                                             alignment: Alignment.center,
                                             color: Colors.white,
                                             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
@@ -647,7 +649,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                                   overflow: TextOverflow.ellipsis,
                                                   style: const TextStyle(
                                                     fontWeight: FontWeight.bold,
-                                                    fontSize: 14,
+                                                    fontSize: 16,
                                                     color: Colors.black,
                                                   ),
                                                 )
