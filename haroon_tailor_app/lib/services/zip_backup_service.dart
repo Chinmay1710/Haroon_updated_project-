@@ -8,32 +8,43 @@ import '../utils/io_helper_stub.dart'
     if (dart.library.html) '../utils/io_helper_web.dart'
     if (dart.library.io) '../utils/io_helper_io.dart';
 
-/// Service to create and restore self-contained ZIP backup files
-/// containing both JSON data and embedded photos (no Cloudinary needed).
+/// Smart Incremental Backup & Recovery Service.
+///
+/// Features:
+/// 1. Stable single-file backup (`HaroonTailor_Backup.zip`) with atomic replacement.
+/// 2. Canonical URL deduplication — avoids duplicate photo downloads and duplicate entries in ZIP.
+/// 3. Incremental photo reuse — reuses unchanged photos from previous backup ZIP and local cache.
+/// 4. Concurrent download pool — downloads missing photos in parallel batches.
+/// 5. Complete settings preservation — shop profile, clothing types, templates, rates, theme,
+///    measurement units, and delivery days are 100% backed up and restored.
+/// 6. Reliable recovery — verified before saving, full backward compatibility.
 class ZipBackupService {
-  /// Creates a complete ZIP backup archive containing:
-  /// - backup.json (all orders, customers, measurements, settings)
-  /// - photos/ folder with all item images downloaded from Cloudinary or local storage
-  ///
-  /// Returns the ZIP file as bytes.
+  /// Creates an optimized, incremental single-file ZIP backup containing:
+  /// - `backup.json`: Orders, customers, naap measurements, and all shop settings.
+  /// - `photos/`: Unique photo files (deduplicated, incrementally reused).
   static Future<Uint8List> createZipBackup({
     Function(String status, double progress)? onProgress,
   }) async {
-    onProgress?.call('Preparing backup data...', 0.0);
+    onProgress?.call('Loading database records and settings...', 0.05);
 
-    // 1. Get all data from local storage
+    // 1. Fetch all data and settings from local storage
     final orders = await LocalStorageService.getCachedOrders();
     final customers = await LocalStorageService.getCachedCustomers();
-    final settings = await LocalStorageService.getCachedShopSettings();
+    final settings = await LocalStorageService.getCachedShopSettings() ?? {};
     final garmentTypes = await LocalStorageService.getGarmentTypes();
     final messageTemplates = await LocalStorageService.getMessageTemplates();
     final defaultRates = await LocalStorageService.getDefaultRates();
+    final appTheme = await LocalStorageService.getAppTheme();
+    final appLanguage = await LocalStorageService.getAppLanguage();
+    final measurementUnit = await LocalStorageService.getMeasurementUnit();
+    final defaultDeliveryDays = await LocalStorageService.getDefaultDeliveryDays();
+    final notesSuggestions = await LocalStorageService.getNotesSuggestions();
+    final isAutoBackup = await LocalStorageService.isAutoBackupEnabled();
+    final autoBackupFreq = await LocalStorageService.getAutoBackupFrequency();
 
-    int totalPhotos = 0;
-    int totalMeasurements = 0;
-
-    // 1.1 Collect all customer measurements
+    // 2. Collect all customer measurements
     final Map<String, dynamic> customerMeasurementsMap = {};
+    int totalMeasurements = 0;
     if (customers != null) {
       for (var c in customers) {
         if (c is Map && c['id'] != null) {
@@ -49,10 +60,11 @@ class ZipBackupService {
       }
     }
 
-    // 2. Collect all detailed orders with measurements & photos
+    // 3. Process orders with canonical URL deduplication
     final List<dynamic> detailedOrders = [];
-    final List<_ImageEntry> remoteImageEntries = [];
-    final Map<String, Uint8List> bundledImages = {};
+    final Map<String, String> photoPathMap = {}; // originalUrlOrData -> canonicalZipPath
+    final Map<String, Uint8List> bundledImages = {}; // canonicalZipPath -> bytes
+    int totalRawPhotoRefs = 0;
 
     if (orders != null) {
       for (var o in orders) {
@@ -60,8 +72,6 @@ class ZipBackupService {
           final det = await LocalStorageService.getCachedOrderDetails(o['id'] as int);
           final orderData = Map<String, dynamic>.from(det ?? o);
 
-          // In list summary, 'items' may be a String (e.g. "2x Kurta, 2x Pajama")
-          // while 'raw_items' or detail 'items' is the actual List<dynamic>
           List<dynamic> items = [];
           if (orderData['raw_items'] is List) {
             items = List<dynamic>.from(orderData['raw_items'] as List);
@@ -77,159 +87,66 @@ class ZipBackupService {
             orderData['items_summary'] = orderData['items'];
           }
 
+          // 3.1 Items photo deduplication
           for (int i = 0; i < items.length; i++) {
             if (items[i] is Map) {
               final itemMap = Map<String, dynamic>.from(items[i]);
-              final imageUrl = itemMap['image_path']?.toString() ?? '';
-              final orderId = orderData['id'] ?? o['id'];
+              final origUrl = (itemMap['image_path_original'] ?? itemMap['image_path'] ?? '').toString().trim();
 
-              if (imageUrl.isNotEmpty) {
-                if (imageUrl.startsWith('data:image')) {
-                  // Direct base64 image data
-                  try {
-                    final b64 = imageUrl.split(',').last;
-                    final bytes = base64Decode(b64);
-                    final photoFileName = 'photos/order_${orderId}_item_$i.jpg';
-                    bundledImages[photoFileName] = bytes;
-                    itemMap['image_path'] = photoFileName;
-                    totalPhotos++;
-                  } catch (_) {}
-                } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-                  // Remote Cloudinary or web URL
-                  final ext = _getExtension(imageUrl);
-                  final photoFileName = 'photos/order_${orderId}_item_$i$ext';
-
-                  remoteImageEntries.add(_ImageEntry(
-                    url: imageUrl,
-                    zipPath: photoFileName,
-                    orderId: orderId,
-                    itemIndex: i,
-                  ));
-
-                  itemMap['image_path_original'] = imageUrl;
-                  itemMap['image_path'] = photoFileName;
-                  totalPhotos++;
-                } else {
-                  // Local file path
-                  try {
-                    final bytes = await readLocalPhotoFile(imageUrl);
-                    if (bytes != null && bytes.isNotEmpty) {
-                      final ext = _getExtension(imageUrl);
-                      final photoFileName = 'photos/order_${orderId}_item_$i$ext';
-                      bundledImages[photoFileName] = bytes;
-                      itemMap['image_path'] = photoFileName;
-                      totalPhotos++;
-                    }
-                  } catch (_) {}
+              if (origUrl.isNotEmpty) {
+                totalRawPhotoRefs++;
+                final zipPath = getCanonicalZipPath(origUrl);
+                if (zipPath.isNotEmpty) {
+                  photoPathMap[origUrl] = zipPath;
+                  itemMap['image_path_original'] = origUrl;
+                  itemMap['image_path'] = zipPath;
                 }
               }
 
               final meas = itemMap['measurements'] as Map<String, dynamic>? ?? {};
               totalMeasurements += meas.length;
-
               items[i] = itemMap;
             }
           }
 
-          // Also check and bundle top-level order image_path (Cloudinary photos)
-          final topImgStr = (orderData['image_path'] ?? o['image_path'] ?? '').toString().trim();
+          // 3.2 Top-level order image_path deduplication
+          final topImgStr = (orderData['image_path_original'] ?? orderData['image_path'] ?? o['image_path'] ?? '').toString().trim();
           if (topImgStr.isNotEmpty) {
-            final List<String> updatedTopPaths = [];
             final parts = topImgStr.split(',');
-            final orderId = orderData['id'] ?? o['id'];
-
-            for (int pIdx = 0; pIdx < parts.length; pIdx++) {
-              final rawPart = parts[pIdx].trim();
-              if (rawPart.isEmpty) continue;
-
-              if (rawPart.startsWith('data:image')) {
-                try {
-                  final b64 = rawPart.split(',').last;
-                  final bytes = base64Decode(b64);
-                  final photoFileName = 'photos/order_${orderId}_top_$pIdx.jpg';
-                  bundledImages[photoFileName] = bytes;
-                  updatedTopPaths.add(photoFileName);
-                  totalPhotos++;
-                } catch (_) {}
-              } else if (rawPart.startsWith('http://') || rawPart.startsWith('https://')) {
-                final ext = _getExtension(rawPart);
-                final photoFileName = 'photos/order_${orderId}_top_$pIdx$ext';
-                remoteImageEntries.add(_ImageEntry(
-                  url: rawPart,
-                  zipPath: photoFileName,
-                  orderId: orderId,
-                  itemIndex: -1,
-                ));
-                updatedTopPaths.add(photoFileName);
-                totalPhotos++;
-              } else {
-                try {
-                  final bytes = await readLocalPhotoFile(rawPart);
-                  if (bytes != null && bytes.isNotEmpty) {
-                    final ext = _getExtension(rawPart);
-                    final photoFileName = 'photos/order_${orderId}_top_$pIdx$ext';
-                    bundledImages[photoFileName] = bytes;
-                    updatedTopPaths.add(photoFileName);
-                    totalPhotos++;
-                  }
-                } catch (_) {}
+            final List<String> updatedTopPaths = [];
+            for (var part in parts) {
+              final p = part.trim();
+              if (p.isEmpty) continue;
+              totalRawPhotoRefs++;
+              final zipPath = getCanonicalZipPath(p);
+              if (zipPath.isNotEmpty) {
+                photoPathMap[p] = zipPath;
+                updatedTopPaths.add(zipPath);
               }
             }
-
             if (updatedTopPaths.isNotEmpty) {
               orderData['image_path_original'] = topImgStr;
               orderData['image_path'] = updatedTopPaths.join(',');
-              if (items.isNotEmpty && items[0] is Map) {
-                final itMap = Map<String, dynamic>.from(items[0]);
-                if ((itMap['image_path'] ?? '').toString().isEmpty) {
-                  itMap['image_path'] = updatedTopPaths.first;
-                  items[0] = itMap;
-                }
-              }
             }
           }
 
-          // Also bundle any photos in cloth_photos
+          // 3.3 Cloth photos deduplication
           final clothPhotos = LocalStorageService.sanitizePhotoList(orderData['cloth_photos'] ?? o['cloth_photos']);
-          final List<String> updatedClothPhotos = [];
-          for (int cpIdx = 0; cpIdx < clothPhotos.length; cpIdx++) {
-            final pStr = clothPhotos[cpIdx];
-            final orderId = orderData['id'] ?? o['id'];
-            if (pStr.startsWith('data:image')) {
-              try {
-                final b64 = pStr.split(',').last;
-                final bytes = base64Decode(b64);
-                final photoFileName = 'photos/order_${orderId}_cloth_$cpIdx.jpg';
-                bundledImages[photoFileName] = bytes;
-                updatedClothPhotos.add(photoFileName);
-                totalPhotos++;
-              } catch (_) {}
-            } else if (pStr.startsWith('http://') || pStr.startsWith('https://')) {
-              final ext = _getExtension(pStr);
-              final photoFileName = 'photos/order_${orderId}_cloth_$cpIdx$ext';
-              remoteImageEntries.add(_ImageEntry(
-                url: pStr,
-                zipPath: photoFileName,
-                orderId: orderId,
-                itemIndex: -2,
-              ));
-              updatedClothPhotos.add(photoFileName);
-              totalPhotos++;
-            } else {
-              try {
-                final bytes = await readLocalPhotoFile(pStr);
-                if (bytes != null && bytes.isNotEmpty) {
-                  final ext = _getExtension(pStr);
-                  final photoFileName = 'photos/order_${orderId}_cloth_$cpIdx$ext';
-                  bundledImages[photoFileName] = bytes;
-                  updatedClothPhotos.add(photoFileName);
-                  totalPhotos++;
-                }
-              } catch (_) {}
+          if (clothPhotos.isNotEmpty) {
+            final List<String> updatedClothPhotos = [];
+            for (var pStr in clothPhotos) {
+              final cleanStr = pStr.trim();
+              if (cleanStr.isEmpty) continue;
+              totalRawPhotoRefs++;
+              final zipPath = getCanonicalZipPath(cleanStr);
+              if (zipPath.isNotEmpty) {
+                photoPathMap[cleanStr] = zipPath;
+                updatedClothPhotos.add(zipPath);
+              }
             }
-          }
-          if (updatedClothPhotos.isNotEmpty) {
-            orderData['cloth_photos'] = updatedClothPhotos;
+            if (updatedClothPhotos.isNotEmpty) {
+              orderData['cloth_photos'] = updatedClothPhotos;
+            }
           }
 
           orderData['items'] = items;
@@ -241,113 +158,207 @@ class ZipBackupService {
       }
     }
 
+    final uniqueZipPaths = photoPathMap.values.toSet();
+    final totalUniquePhotos = uniqueZipPaths.length;
+
     onProgress?.call(
-      'Data prepared. Found $totalPhotos photos (${remoteImageEntries.length} to download)...',
-      0.1,
+      'Indexed $totalUniquePhotos unique photos (from $totalRawPhotoRefs references). Checking cache...',
+      0.15,
     );
 
-    // 3. Download remote images (e.g. from Cloudinary)
-    int downloadedCount = 0;
-    int failedCount = 0;
-
-    if (remoteImageEntries.isNotEmpty) {
-      for (var entry in remoteImageEntries) {
-        try {
-          final response = await http.get(Uri.parse(entry.url)).timeout(
-            const Duration(seconds: 15),
-          );
-          if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
-            bundledImages[entry.zipPath] = response.bodyBytes;
-          } else {
-            failedCount++;
+    // 4. Incremental Photo Reuse: Check existing backup ZIP and local storage
+    final Map<String, List<int>> existingPhotosInZip = {};
+    try {
+      final existingZipBytes = await FileHelper.getExistingBackupZip();
+      if (existingZipBytes != null && existingZipBytes.isNotEmpty) {
+        final existingArchive = ZipDecoder().decodeBytes(existingZipBytes);
+        for (var file in existingArchive) {
+          if (file.isFile && file.name.startsWith('photos/')) {
+            existingPhotosInZip[file.name] = file.content as List<int>;
           }
-        } catch (_) {
-          failedCount++;
         }
+      }
+    } catch (_) {}
 
-        downloadedCount++;
-        final progress = 0.1 + (0.7 * downloadedCount / remoteImageEntries.length);
-        onProgress?.call(
-          'Downloading photo $downloadedCount/${remoteImageEntries.length}...',
-          progress,
-        );
+    int reusedFromZip = 0;
+    int reusedFromLocal = 0;
+
+    for (var entry in photoPathMap.entries) {
+      final orig = entry.key;
+      final zipPath = entry.value;
+
+      if (bundledImages.containsKey(zipPath)) continue;
+
+      // 4.1 Reuse from existing backup ZIP
+      if (existingPhotosInZip.containsKey(zipPath)) {
+        bundledImages[zipPath] = Uint8List.fromList(existingPhotosInZip[zipPath]!);
+        reusedFromZip++;
+        continue;
+      }
+
+      // 4.2 Decode embedded base64 data
+      if (orig.startsWith('data:image')) {
+        try {
+          final b64 = orig.split(',').last;
+          bundledImages[zipPath] = base64Decode(b64);
+          continue;
+        } catch (_) {}
+      }
+
+      // 4.3 Check local disk storage
+      try {
+        final localBytes = await readLocalPhotoFile(zipPath);
+        if (localBytes != null && localBytes.isNotEmpty) {
+          bundledImages[zipPath] = localBytes;
+          reusedFromLocal++;
+          continue;
+        }
+      } catch (_) {}
+    }
+
+    // 5. Identify missing photos to download from cloud
+    final List<MapEntry<String, String>> missingToDownload = [];
+    for (var entry in photoPathMap.entries) {
+      final orig = entry.key;
+      final zipPath = entry.value;
+      if (!bundledImages.containsKey(zipPath)) {
+        if (orig.startsWith('http://') || orig.startsWith('https://')) {
+          if (!missingToDownload.any((m) => m.value == zipPath)) {
+            missingToDownload.add(entry);
+          }
+        }
       }
     }
 
-    onProgress?.call('Creating ZIP archive...', 0.85);
+    final reusedTotal = reusedFromZip + reusedFromLocal;
+    int downloadedCount = 0;
+    int failedCount = 0;
 
-    // 4. Build the JSON backup data
+    // 6. Download genuinely new/missing photos with concurrent pool
+    if (missingToDownload.isNotEmpty) {
+      onProgress?.call(
+        'Reusing $reusedTotal cached photos. Downloading ${missingToDownload.length} new photos...',
+        0.25,
+      );
+
+      const poolSize = 5;
+      for (int i = 0; i < missingToDownload.length; i += poolSize) {
+        final chunk = missingToDownload.sublist(
+          i,
+          (i + poolSize > missingToDownload.length) ? missingToDownload.length : i + poolSize,
+        );
+
+        await Future.wait(chunk.map((item) async {
+          try {
+            final response = await http.get(Uri.parse(item.key)).timeout(
+              const Duration(seconds: 12),
+            );
+            if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+              bundledImages[item.value] = response.bodyBytes;
+              // Save to local cache in background for future instant access
+              savePhotoToLocal(filePath: item.value, bytes: response.bodyBytes).ignore();
+            } else {
+              failedCount++;
+            }
+          } catch (_) {
+            failedCount++;
+          } finally {
+            downloadedCount++;
+            final progress = 0.25 + (0.55 * downloadedCount / missingToDownload.length);
+            onProgress?.call(
+              'Downloading new photo $downloadedCount/${missingToDownload.length}...',
+              progress,
+            );
+          }
+        }));
+      }
+    } else {
+      onProgress?.call(
+        'All $totalUniquePhotos photos already cached! Skipping network downloads...',
+        0.80,
+      );
+    }
+
+    onProgress?.call('Building backup data and settings...', 0.85);
+
+    // 7. Assemble backup.json with complete database records and shop settings
     final Map<String, dynamic> backupData = {
       'app': 'Haroon Tailor',
-      'version': '1.0.0',
-      'backup_type': 'zip_with_photos',
+      'version': '1.1.0',
+      'backup_type': 'smart_incremental_zip',
       'export_timestamp': DateTime.now().toIso8601String(),
       'total_customers': customers?.length ?? 0,
       'total_orders': detailedOrders.length,
-      'total_photos': totalPhotos,
+      'total_unique_photos': totalUniquePhotos,
       'bundled_photos': bundledImages.length,
+      'reused_photos': reusedTotal,
+      'downloaded_photos': downloadedCount,
       'failed_photos': failedCount,
       'total_measurements': totalMeasurements,
-      'settings': settings ?? {},
+      // Complete settings preservation
+      'settings': settings,
       'clothing_types': garmentTypes,
       'message_templates': messageTemplates,
       'default_rates': defaultRates,
+      'app_theme': appTheme,
+      'app_language': appLanguage,
+      'measurement_unit': measurementUnit,
+      'default_delivery_days': defaultDeliveryDays,
+      'notes_suggestions': notesSuggestions,
+      'auto_backup_enabled': isAutoBackup,
+      'auto_backup_frequency': autoBackupFreq,
+      // Database entities
       'customers': customers ?? [],
       'customer_measurements': customerMeasurementsMap,
       'orders': detailedOrders,
     };
 
-    final jsonString = const JsonEncoder.withIndent('  ').convert(backupData);
+    onProgress?.call('Compressing single backup archive...', 0.90);
 
-    // 5. Create the ZIP archive
+    // 8. Create ZIP archive
     final archive = Archive();
-
-    // Add backup.json
+    final jsonString = const JsonEncoder.withIndent('  ').convert(backupData);
     final jsonBytes = utf8.encode(jsonString);
-    archive.addFile(ArchiveFile(
-      'backup.json',
-      jsonBytes.length,
-      jsonBytes,
-    ));
+    archive.addFile(ArchiveFile('backup.json', jsonBytes.length, jsonBytes));
 
-    // Add all bundled photos
     for (var entry in bundledImages.entries) {
-      archive.addFile(ArchiveFile(
-        entry.key,
-        entry.value.length,
-        entry.value,
-      ));
+      archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
     }
 
-    onProgress?.call('Compressing ZIP file...', 0.95);
-
-    // 6. Encode to ZIP bytes
     final zipBytes = ZipEncoder().encode(archive);
+    final result = Uint8List.fromList(zipBytes);
 
-    final size = _formatBytes(zipBytes.length);
+    // 9. Validate archive before returning
+    final verifyArchive = ZipDecoder().decodeBytes(result, verify: true);
+    final hasBackupJson = verifyArchive.files.any((f) => f.name == 'backup.json');
+    if (!hasBackupJson) {
+      throw Exception('Generated backup archive failed validation: backup.json missing');
+    }
+
+    final sizeStr = _formatBytes(result.length);
     onProgress?.call(
-      '✅ ZIP backup ready! $size (${bundledImages.length}/$totalPhotos photos)',
+      '✅ Backup ready! $sizeStr ($totalUniquePhotos unique photos, $reusedTotal reused)',
       1.0,
     );
-    return Uint8List.fromList(zipBytes);
+
+    return result;
   }
 
-  /// Restore data from a ZIP backup file.
-  /// Extracts backup.json and photos, stores photos locally,
-  /// and imports all data into LocalStorageService.
+  /// Restores data and settings from a backup ZIP file.
+  /// 1. Validates archive integrity.
+  /// 2. Extracts photos to local storage.
+  /// 3. Restores shop settings, rates, templates, garment types, theme, units.
+  /// 4. Imports orders, naap measurements, and customers into LocalStorageService.
   static Future<Map<String, dynamic>> restoreFromZip({
     required Uint8List zipBytes,
     Function(String status, double progress)? onProgress,
   }) async {
-    onProgress?.call('Opening ZIP file...', 0.0);
+    onProgress?.call('Opening & validating backup ZIP...', 0.0);
 
     try {
-      // 1. Decode the ZIP archive
-      final archive = ZipDecoder().decodeBytes(zipBytes);
+      final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);
+      onProgress?.call('Extracting files from backup...', 0.1);
 
-      onProgress?.call('Extracting files...', 0.1);
-
-      // 2. Find and parse backup.json
       String? jsonContent;
       final Map<String, Uint8List> photos = {};
 
@@ -365,21 +376,18 @@ class ZipBackupService {
         return {'success': false, 'error': 'backup.json not found in ZIP file'};
       }
 
-      onProgress?.call('Parsing backup data...', 0.2);
-
-      // 3. Parse the JSON data
+      onProgress?.call('Parsing backup data & settings...', 0.2);
       final data = jsonDecode(jsonContent);
       if (data is! Map<String, dynamic>) {
         return {'success': false, 'error': 'Invalid backup JSON format'};
       }
 
-      // 4. Save extracted photos to local storage directory
+      // 1. Save extracted photos to local storage directory
       int savedPhotos = 0;
       String localPhotosDir = '';
 
       if (photos.isNotEmpty) {
         onProgress?.call('Saving ${photos.length} photos locally...', 0.3);
-
         try {
           localPhotosDir = await getLocalPhotosDirectory();
           final isNativeDir = localPhotosDir.isNotEmpty && localPhotosDir != '/web_photos';
@@ -390,20 +398,57 @@ class ZipBackupService {
           for (var entry in photos.entries) {
             try {
               final targetPath = isNativeDir ? '$localPhotosDir/${entry.key}' : entry.key;
-              await savePhotoToLocal(
-                filePath: targetPath,
-                bytes: entry.value,
-              );
+              await savePhotoToLocal(filePath: targetPath, bytes: entry.value);
               savedPhotos++;
             } catch (_) {}
           }
-        } catch (_) {
-          // Fallback if local storage directory access fails
-        }
+        } catch (_) {}
       }
 
-      onProgress?.call('Restoring orders & customers...', 0.6);
+      // 2. Restore all shop settings & preferences
+      onProgress?.call('Restoring shop settings & preferences...', 0.5);
 
+      if (data['settings'] is Map) {
+        await LocalStorageService.saveShopSettings(Map<String, dynamic>.from(data['settings']));
+      }
+      if (data['clothing_types'] is List) {
+        await LocalStorageService.saveGarmentTypes(List<String>.from(data['clothing_types']));
+      }
+      if (data['message_templates'] is Map) {
+        await LocalStorageService.saveMessageTemplates(Map<String, String>.from(data['message_templates']));
+      }
+      if (data['default_rates'] is Map) {
+        final rates = (data['default_rates'] as Map).map(
+          (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+        );
+        await LocalStorageService.saveDefaultRates(rates);
+      }
+      if (data['app_theme'] is String && (data['app_theme'] as String).isNotEmpty) {
+        await LocalStorageService.saveAppTheme(data['app_theme'] as String);
+      }
+      if (data['app_language'] is String && (data['app_language'] as String).isNotEmpty) {
+        await LocalStorageService.saveAppLanguage(data['app_language'] as String);
+      }
+      if (data['measurement_unit'] is String && (data['measurement_unit'] as String).isNotEmpty) {
+        await LocalStorageService.saveMeasurementUnit(data['measurement_unit'] as String);
+      }
+      if (data['default_delivery_days'] is int) {
+        await LocalStorageService.saveDefaultDeliveryDays(data['default_delivery_days'] as int);
+      } else if (data['default_delivery_days'] is num) {
+        await LocalStorageService.saveDefaultDeliveryDays((data['default_delivery_days'] as num).toInt());
+      }
+      if (data['notes_suggestions'] is List) {
+        await LocalStorageService.saveNotesSuggestions(List<String>.from(data['notes_suggestions']));
+      }
+      if (data['auto_backup_enabled'] is bool) {
+        await LocalStorageService.setAutoBackupEnabled(data['auto_backup_enabled'] as bool);
+      }
+      if (data['auto_backup_frequency'] is String && (data['auto_backup_frequency'] as String).isNotEmpty) {
+        await LocalStorageService.setAutoBackupFrequency(data['auto_backup_frequency'] as String);
+      }
+
+      // 3. Map orders photo paths to local storage
+      onProgress?.call('Restoring orders & customers...', 0.65);
       final ordersRaw = data['orders'];
       if (ordersRaw is List) {
         for (var o in ordersRaw) {
@@ -420,17 +465,15 @@ class ZipBackupService {
                 final zipPath = item['image_path']?.toString() ?? '';
                 if (zipPath.startsWith('photos/')) {
                   if (localPhotosDir.isNotEmpty && localPhotosDir != '/web_photos') {
-                    // Native mobile/desktop: point directly to saved local file
                     item['image_path'] = '$localPhotosDir/$zipPath';
                   } else {
-                    // Web: store clean key, buildSmartImage loads from IndexedDB
                     item['image_path'] = zipPath;
                   }
                 }
               }
             }
 
-            // Also restore top-level order image_path
+            // Top-level image_path
             final topZipPath = o['image_path']?.toString() ?? '';
             if (topZipPath.isNotEmpty) {
               final parts = topZipPath.split(',');
@@ -451,34 +494,31 @@ class ZipBackupService {
                 o['image_path'] = restoredTopPaths.join(',');
               }
             }
+
+            // Cloth photos
+            final clothPhotos = LocalStorageService.sanitizePhotoList(o['cloth_photos']);
+            if (clothPhotos.isNotEmpty) {
+              final List<String> restoredCloth = [];
+              for (var cp in clothPhotos) {
+                final clean = cp.trim();
+                if (clean.startsWith('photos/')) {
+                  if (localPhotosDir.isNotEmpty && localPhotosDir != '/web_photos') {
+                    restoredCloth.add('$localPhotosDir/$clean');
+                  } else {
+                    restoredCloth.add(clean);
+                  }
+                } else if (clean.isNotEmpty) {
+                  restoredCloth.add(clean);
+                }
+              }
+              o['cloth_photos'] = restoredCloth;
+            }
           }
         }
       }
 
-      // 6. Restore clothing types if present
-      if (data['clothing_types'] is List) {
-        await LocalStorageService.saveGarmentTypes(
-          List<String>.from(data['clothing_types']),
-        );
-      }
-
-      // 7. Restore message templates if present
-      if (data['message_templates'] is Map) {
-        await LocalStorageService.saveMessageTemplates(
-          Map<String, String>.from(data['message_templates']),
-        );
-      }
-
-      // 8. Restore default rates if present
-      if (data['default_rates'] is Map) {
-        final rates = (data['default_rates'] as Map).map(
-          (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
-        );
-        await LocalStorageService.saveDefaultRates(rates);
-      }
-
-      // 9. Import orders & customers via existing master backup importer
-      onProgress?.call('Importing all data into app...', 0.7);
+      // 4. Import orders, customers, naap measurements into LocalStorageService
+      onProgress?.call('Importing all records into local cache...', 0.85);
       final result = await LocalStorageService.importMasterBackupMap(data);
 
       onProgress?.call('✅ Restore complete!', 1.0);
@@ -497,6 +537,54 @@ class ZipBackupService {
     }
   }
 
+  /// Generates a deterministic canonical ZIP path for any URL or local path.
+  /// Prevents duplicate entries when the same photo is referenced across items,
+  /// top-level orders, and cloth photos.
+  static String getCanonicalZipPath(String rawUrlOrPath) {
+    final clean = rawUrlOrPath.trim();
+    if (clean.isEmpty) return '';
+
+    if (clean.startsWith('photos/') || clean.startsWith('/photos/')) {
+      return clean.replaceFirst(RegExp(r'^/+'), '');
+    }
+
+    final ext = _getExtension(clean);
+
+    // If Cloudinary or web URL
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      final uri = Uri.tryParse(clean);
+      if (uri != null && uri.pathSegments.isNotEmpty) {
+        final lastSeg = uri.pathSegments.last;
+        final dotIdx = lastSeg.lastIndexOf('.');
+        final nameOnly = dotIdx != -1 ? lastSeg.substring(0, dotIdx) : lastSeg;
+        final cleanName = nameOnly.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+        if (cleanName.isNotEmpty) {
+          final shortHash = _hashString(clean).substring(0, 6);
+          return 'photos/${shortHash}_$cleanName$ext';
+        }
+      }
+    }
+
+    // Base64 data URL
+    if (clean.startsWith('data:image')) {
+      final shortHash = _hashString(clean);
+      return 'photos/b64_$shortHash$ext';
+    }
+
+    // Local device path
+    final shortHash = _hashString(clean);
+    return 'photos/img_$shortHash$ext';
+  }
+
+  static String _hashString(String input) {
+    int hash = 5381;
+    for (int i = 0; i < input.length; i++) {
+      hash = ((hash << 5) + hash) + input.codeUnitAt(i);
+      hash = hash & 0x7FFFFFFF;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
   static String _getExtension(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return '.jpg';
@@ -513,7 +601,8 @@ class ZipBackupService {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  /// Runs auto-backup if enabled and interval has passed (e.g. daily)
+  /// Runs auto-backup if enabled and interval has passed (e.g. daily).
+  /// Updates the single stable backup ZIP atomically.
   static Future<bool> checkAndPerformAutoBackup({bool force = false}) async {
     try {
       final isEnabled = await LocalStorageService.isAutoBackupEnabled();
@@ -527,32 +616,17 @@ class ZipBackupService {
       }
 
       final zipBytes = await createZipBackup();
-      final dateStr = DateTime.now().toIso8601String().split('T').first;
-      final fileName = 'HaroonTailor_AutoBackup_$dateStr.zip';
-
-      await FileHelper.downloadBackupZip(
-        zipBytes: zipBytes,
-        fileName: fileName,
-      );
-
+      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
+      if (savedPath != null && savedPath.isNotEmpty) {
+        await LocalStorageService.recordBackupSuccess(
+          path: savedPath,
+          sizeBytes: zipBytes.length,
+        );
+      }
       await LocalStorageService.recordAutoBackupTime();
       return true;
     } catch (_) {
       return false;
     }
   }
-}
-
-class _ImageEntry {
-  final String url;
-  final String zipPath;
-  final dynamic orderId;
-  final int itemIndex;
-
-  _ImageEntry({
-    required this.url,
-    required this.zipPath,
-    required this.orderId,
-    required this.itemIndex,
-  });
 }

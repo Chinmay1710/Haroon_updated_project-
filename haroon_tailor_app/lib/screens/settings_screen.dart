@@ -33,6 +33,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   int _cachedCustomersCount = 0;
   bool _isBackingUp = false;
   bool _isOfflineMode = false;
+  String? _lastBackupTimeStr;
+  int? _lastBackupSizeBytes;
+  String? _lastBackupPath;
 
 
   // 4. Language & Theme
@@ -101,7 +104,16 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       final shop = await ApiService.getShopSettings();
       final isOffline = await LocalStorageService.isOfflineMode();
       final notesSugg = await LocalStorageService.getNotesSuggestions();
-
+      final bInfo = await FileHelper.getLastBackupInfo();
+      final bRecord = await LocalStorageService.getLastBackupRecord();
+      String? bTime = bRecord['timestamp']?.toString();
+      int? bSize = bRecord['sizeBytes'] as int?;
+      String? bPath = bRecord['path']?.toString();
+      if (bInfo['exists'] == true) {
+        bTime ??= (bInfo['lastModified'] as DateTime?)?.toIso8601String();
+        bSize ??= bInfo['sizeBytes'] as int?;
+        bPath ??= bInfo['path']?.toString();
+      }
 
       if (!mounted) return;
       setState(() {
@@ -118,7 +130,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _cachedCustomersCount = cachedCust?.length ?? 0;
         _isOfflineMode = isOffline;
         _notesSuggestions = notesSugg;
-
+        _lastBackupTimeStr = bTime;
+        _lastBackupSizeBytes = bSize;
+        _lastBackupPath = bPath;
 
         _shopNameCtrl.text = shop['shop_name']?.toString() ?? 'Haroon Tailor';
         _ownerNameCtrl.text = shop['owner_name']?.toString() ?? '';
@@ -351,16 +365,21 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       // Close progress dialog
       if (mounted) Navigator.of(context).pop();
 
-      // Save the ZIP file
-      final savedPath = await FileHelper.downloadBackupZip(zipBytes: zipBytes);
+      // Save/update the single stable backup ZIP file (HaroonTailor_Backup.zip)
+      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
+      final finalPath = savedPath ?? 'HaroonTailor_Backup.zip';
+
+      await LocalStorageService.recordBackupSuccess(
+        path: finalPath,
+        sizeBytes: zipBytes.length,
+      );
+
+      await _loadAllSettings();
 
       if (mounted) {
-        final pathMsg = savedPath != null && savedPath.isNotEmpty
-            ? '\nSaved to: $savedPath'
-            : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ZIP Backup download ho gayi! (${_formatFileSize(zipBytes.length)})$pathMsg'),
+            content: Text('✅ Single Backup updated! (${_formatFileSize(zipBytes.length)})\nSaved: $finalPath'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -376,6 +395,21 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       }
     } finally {
       if (mounted) setState(() => _isBackingUp = false);
+    }
+  }
+
+  String _formatBackupDate(String? isoStr) {
+    if (isoStr == null || isoStr.isEmpty) return 'Never';
+    try {
+      final dt = DateTime.parse(isoStr).toLocal();
+      final day = dt.day.toString().padLeft(2, '0');
+      final month = dt.month.toString().padLeft(2, '0');
+      final year = dt.year;
+      final hour = dt.hour.toString().padLeft(2, '0');
+      final min = dt.minute.toString().padLeft(2, '0');
+      return '$day-$month-$year $hour:$min';
+    } catch (_) {
+      return isoStr;
     }
   }
 
@@ -1270,7 +1304,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 16),
 
-          // ★ PRIMARY: ZIP BACKUP WITH PHOTOS (NO CLOUDINARY NEEDED)
+          // ★ PRIMARY: SMART SINGLE-FILE BACKUP (DATA + PHOTOS + SETTINGS)
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
@@ -1300,13 +1334,64 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('📦 ZIP Backup (Data + Photos)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
+                            Text(
+                              '📦 Smart Single Backup (Data + Photos + Settings)',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                            ),
                             SizedBox(height: 2),
-                            Text('Ek ZIP file me sab kuch — Orders, Customers, Naap, AUR Photos! Cloudinary ki zarurat nahi.', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                            Text(
+                              'Hamesha ek hi file update hoti hai ("HaroonTailor_Backup.zip"). Duplicate files nahi banti aur backup super fast hota hai.',
+                              style: TextStyle(fontSize: 12, color: Colors.white70),
+                            ),
                           ],
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Last Backup Status Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Icon(
+                            _lastBackupTimeStr != null ? Icons.check_circle : Icons.info_outline,
+                            size: 16,
+                            color: _lastBackupTimeStr != null ? const Color(0xFF86EFAC) : Colors.white70,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _lastBackupTimeStr != null
+                                    ? 'Last Backup: ${_formatBackupDate(_lastBackupTimeStr)}  •  ${_lastBackupSizeBytes != null ? _formatFileSize(_lastBackupSizeBytes!) : ""}'
+                                    : 'Status: Abhi tak koi backup nahi liya gaya.',
+                                style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                              ),
+                              if (_lastBackupPath != null && _lastBackupPath!.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Path: $_lastBackupPath',
+                                  style: const TextStyle(fontSize: 11, color: Colors.white70),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -1315,8 +1400,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         child: ElevatedButton.icon(
                           icon: _isBackingUp
                               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7C3AED)))
-                              : const Icon(Icons.file_download, size: 20),
-                          label: const Text('Download ZIP', style: TextStyle(fontWeight: FontWeight.bold)),
+                              : const Icon(Icons.sync, size: 20),
+                          label: const Text('Backup Now', style: TextStyle(fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: const Color(0xFF7C3AED),

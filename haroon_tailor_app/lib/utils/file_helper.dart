@@ -24,6 +24,29 @@ class FileHelper {
     return await saveZipFileToDevice(zipBytes: zipBytes, fileName: name);
   }
 
+  /// Atomically save or replace the single stable backup ZIP archive ('HaroonTailor_Backup.zip').
+  /// Never creates duplicate files and safely preserves the previous backup if errors occur.
+  static Future<String?> saveStableBackupZip({
+    required Uint8List zipBytes,
+    String fileName = 'HaroonTailor_Backup.zip',
+  }) async {
+    return await saveStableBackupZipPlatform(zipBytes: zipBytes, fileName: fileName);
+  }
+
+  /// Retrieve raw bytes of the current stable backup ZIP to reuse unchanged photos incrementally
+  static Future<Uint8List?> getExistingBackupZip({
+    String fileName = 'HaroonTailor_Backup.zip',
+  }) async {
+    return await getExistingBackupZipPlatform(fileName: fileName);
+  }
+
+  /// Check information (exists, last modified, file size) of the stable backup ZIP
+  static Future<Map<String, dynamic>> getLastBackupInfo({
+    String fileName = 'HaroonTailor_Backup.zip',
+  }) async {
+    return await getLastBackupInfoPlatform(fileName: fileName);
+  }
+
   /// Open native file picker dialog to let user select their backup JSON file
   static Future<String?> pickBackupJsonFile() async {
     return await pickJsonFileFromDevice();
