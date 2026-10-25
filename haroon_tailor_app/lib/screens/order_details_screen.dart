@@ -710,12 +710,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     return LocalStorageService.sanitizePhotoList(raw);
   }
 
-  List<String> _extractOrderPhotos(Map<String, dynamic> o) {
-    final List<String> raw = [];
-    if (o['cloth_photos'] != null) raw.addAll(LocalStorageService.sanitizePhotoList(o['cloth_photos']));
-    if (o['image_path'] != null) raw.addAll(LocalStorageService.sanitizePhotoList(o['image_path']));
-    return LocalStorageService.sanitizePhotoList(raw);
-  }
+
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -1178,80 +1173,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 );
               }),
 
-            // Extra Order-level Photos (if not in items)
-            Builder(
-              builder: (ctx) {
-                final allItemPhotos = <String>{};
-                for (var it in items) {
-                  allItemPhotos.addAll(_extractItemPhotos(it));
-                }
-                final orderOnlyPhotos = _extractOrderPhotos(o)
-                    .where((p) => !allItemPhotos.contains(p))
-                    .toList();
 
-                if (orderOnlyPhotos.isEmpty) return const SizedBox.shrink();
-
-                return Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.collections, size: 16, color: Color(0xFF0F172A)),
-                            const SizedBox(width: 6),
-                            Text('Order Photos (${orderOnlyPhotos.length})',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          height: 80,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: orderOnlyPhotos.length,
-                            itemBuilder: (ctx, pIdx) {
-                              final clean = orderOnlyPhotos[pIdx];
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: InkWell(
-                                  onTap: () => _viewFullImage(clean),
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: Colors.grey.shade300),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: buildSmartImage(
-                                        clean,
-                                        fit: BoxFit.cover,
-                                        width: 80,
-                                        height: 80,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
 
             // 5. PAYMENT BREAKDOWN
             Card(

@@ -110,22 +110,23 @@ class ZipBackupService {
           }
 
           // 3.2 Top-level order image_path deduplication
-          final topImgStr = (orderData['image_path_original'] ?? orderData['image_path'] ?? o['image_path'] ?? '').toString().trim();
-          if (topImgStr.isNotEmpty) {
-            final parts = topImgStr.split(',');
+          final topPhotos = LocalStorageService.sanitizePhotoList(
+            orderData['image_path_original'] ?? orderData['image_path'] ?? o['image_path']
+          );
+          if (topPhotos.isNotEmpty) {
             final List<String> updatedTopPaths = [];
-            for (var part in parts) {
-              final p = part.trim();
-              if (p.isEmpty) continue;
+            for (var p in topPhotos) {
+              final clean = p.trim();
+              if (clean.isEmpty) continue;
               totalRawPhotoRefs++;
-              final zipPath = getCanonicalZipPath(p);
+              final zipPath = getCanonicalZipPath(clean);
               if (zipPath.isNotEmpty) {
-                photoPathMap[p] = zipPath;
+                photoPathMap[clean] = zipPath;
                 updatedTopPaths.add(zipPath);
               }
             }
             if (updatedTopPaths.isNotEmpty) {
-              orderData['image_path_original'] = topImgStr;
+              orderData['image_path_original'] = (orderData['image_path_original'] ?? orderData['image_path'] ?? o['image_path'] ?? '').toString();
               orderData['image_path'] = updatedTopPaths.join(',');
             }
           }
@@ -466,32 +467,41 @@ class ZipBackupService {
 
             for (var item in items) {
               if (item is Map) {
-                final zipPath = item['image_path']?.toString() ?? '';
-                if (zipPath.startsWith('photos/')) {
-                  if (localPhotosDir.isNotEmpty && localPhotosDir != '/web_photos') {
-                    item['image_path'] = '$localPhotosDir/$zipPath';
-                  } else {
-                    item['image_path'] = zipPath;
+                final itemPhotos = LocalStorageService.sanitizePhotoList(
+                  item['image_path'] ?? item['image_base64']
+                );
+                final List<String> restoredItemPaths = [];
+                for (var ip in itemPhotos) {
+                  final clean = ip.trim();
+                  if (clean.startsWith('photos/')) {
+                    if (localPhotosDir.isNotEmpty && localPhotosDir != '/web_photos') {
+                      restoredItemPaths.add('$localPhotosDir/$clean');
+                    } else {
+                      restoredItemPaths.add(clean);
+                    }
+                  } else if (clean.isNotEmpty && !clean.startsWith('data:')) {
+                    restoredItemPaths.add(clean);
                   }
                 }
+                item['image_path'] = restoredItemPaths.isNotEmpty ? restoredItemPaths.first : '';
+                item['image_base64'] = <String>[];
               }
             }
 
             // Top-level image_path
-            final topZipPath = o['image_path']?.toString() ?? '';
-            if (topZipPath.isNotEmpty) {
-              final parts = topZipPath.split(',');
+            final topPhotos = LocalStorageService.sanitizePhotoList(o['image_path']);
+            if (topPhotos.isNotEmpty) {
               final List<String> restoredTopPaths = [];
-              for (var zp in parts) {
-                zp = zp.trim();
-                if (zp.startsWith('photos/')) {
+              for (var zp in topPhotos) {
+                final clean = zp.trim();
+                if (clean.startsWith('photos/')) {
                   if (localPhotosDir.isNotEmpty && localPhotosDir != '/web_photos') {
-                    restoredTopPaths.add('$localPhotosDir/$zp');
+                    restoredTopPaths.add('$localPhotosDir/$clean');
                   } else {
-                    restoredTopPaths.add(zp);
+                    restoredTopPaths.add(clean);
                   }
-                } else if (zp.isNotEmpty) {
-                  restoredTopPaths.add(zp);
+                } else if (clean.isNotEmpty && !clean.startsWith('data:')) {
+                  restoredTopPaths.add(clean);
                 }
               }
               if (restoredTopPaths.isNotEmpty) {
