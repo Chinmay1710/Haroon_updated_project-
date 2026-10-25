@@ -299,10 +299,25 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     final items = _extractItemsFrom(_order);
     final nowStr = DateFormat('d MMM yyyy - HH:mm:ss').format(DateTime.now());
 
-    final pageFormat = PdfPageFormat.roll57;
-
     // Single or multiple garment slips - Each garment gets its own page so printer cuts between them!
-    final itemsToPrint = items.isNotEmpty ? items : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
+    final itemsToPrint = items.isNotEmpty
+        ? items
+        : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
+
+    // Determine uniform page height for all slips so multi-page roll printing
+    // has consistent geometry (preventing CUPS driver crashes and gibberish output)
+    double slipHeightMm = 175.0;
+    for (final it in itemsToPrint) {
+      final n = (it['notes'] ?? '').toString().trim();
+      if (n.length > 50) slipHeightMm = 195.0;
+      if (n.length > 120) slipHeightMm = 225.0;
+    }
+
+    final pageFormat = PdfPageFormat(
+      58 * PdfPageFormat.mm,
+      slipHeightMm * PdfPageFormat.mm,
+      marginAll: 4 * PdfPageFormat.mm,
+    );
 
     for (final it in itemsToPrint) {
       final cType = it['clothing_type'] ?? 'Custom Item';
@@ -313,7 +328,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       doc.addPage(
         pw.Page(
           pageFormat: pageFormat,
-          margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           build: (pw.Context context) {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.stretch,
@@ -361,7 +376,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                 pw.Text('$cType (x$qty)', style: const pw.TextStyle(fontSize: 8.5)),
                 if (notes.isNotEmpty) ...[
                   pw.SizedBox(height: 2),
-                  pw.Text('Item Note: $notes', style: const pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic)),
+                  pw.Text('Item Note: $notes', style: const pw.TextStyle(fontSize: 8)),
                 ],
                 pw.SizedBox(height: 3),
                 pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
@@ -380,15 +395,21 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                   style: pw.TextStyle(
                     fontWeight: pw.FontWeight.bold,
                     fontSize: 8.5,
-                    decoration: pw.TextDecoration.underline,
                   ),
                 ),
                 pw.SizedBox(height: 3),
 
                 // 5. Exact Website 4 columns x 6 rows Measurements Grid
-                // (sideways_row = 3 - c, sideways_col = r => Box 1 is at 4th column!)
+                // FlexColumnWidth(1) ensures all 4 columns are visible and equal in width (25% each)
                 pw.Table(
                   border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
+                  defaultColumnWidth: const pw.FlexColumnWidth(1),
+                  columnWidths: const {
+                    0: pw.FlexColumnWidth(1),
+                    1: pw.FlexColumnWidth(1),
+                    2: pw.FlexColumnWidth(1),
+                    3: pw.FlexColumnWidth(1),
+                  },
                   children: List.generate(6, (r) {
                     return pw.TableRow(
                       children: List.generate(4, (c) {
@@ -401,7 +422,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                           alignment: pw.Alignment.center,
                           child: val.isNotEmpty
                               ? pw.Transform.rotateBox(
-                                  angle: 1.5707963267948966, // +90 deg clockwise (matches website vertical-rl)
+                                  angle: 1.5707963267948966, // +90 deg clockwise (matches vertical-rl)
                                   child: pw.Text(
                                     val,
                                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
@@ -435,6 +456,9 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                     textAlign: pw.TextAlign.center,
                   ),
                 ),
+
+                // 8. Feed Space: Feeds paper past thermal printer cutter blade before cutting
+                pw.SizedBox(height: 35),
               ],
             );
           },
