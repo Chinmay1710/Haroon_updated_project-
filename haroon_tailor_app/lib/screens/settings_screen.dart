@@ -51,7 +51,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   int _defaultDeliveryDays = 7;
   Map<String, double> _defaultRates = {};
 
-  List<String> _notesSuggestions = [];
+  Map<String, List<String>> _clothingNotesMap = {};
+  String _selectedClothingTypeForNotes = 'Shirt';
   final TextEditingController _newNoteCtrl = TextEditingController();
 
   final List<String> _suggestionChips = [
@@ -103,7 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       final cachedCust = await LocalStorageService.getCachedCustomers();
       final shop = await ApiService.getShopSettings();
       final isOffline = await LocalStorageService.isOfflineMode();
-      final notesSugg = await LocalStorageService.getNotesSuggestions();
+      final clothingNotes = await LocalStorageService.getClothingNotesMap();
       final bInfo = await FileHelper.getLastBackupInfo();
       final bRecord = await LocalStorageService.getLastBackupRecord();
       String? bTime = bRecord['timestamp']?.toString();
@@ -129,7 +130,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _cachedOrdersCount = cachedOrders?.length ?? 0;
         _cachedCustomersCount = cachedCust?.length ?? 0;
         _isOfflineMode = isOffline;
-        _notesSuggestions = notesSugg;
+        _clothingNotesMap = clothingNotes;
+        if (types.isNotEmpty && !_clothingNotesMap.containsKey(_selectedClothingTypeForNotes)) {
+          _selectedClothingTypeForNotes = types.first;
+        }
         _lastBackupTimeStr = bTime;
         _lastBackupSizeBytes = bSize;
         _lastBackupPath = bPath;
@@ -201,6 +205,75 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('"$type" list se hata diya gaya.'), backgroundColor: Colors.blueGrey),
         );
+      }
+    }
+  }
+
+  Future<void> _editClothingType(String oldName) async {
+    final editCtrl = TextEditingController(text: oldName);
+    final formKey = GlobalKey<FormState>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit Garment ($oldName)'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: editCtrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Naya Naam',
+              hintText: 'Jaise: Full Shirt, Cotton Pant, etc.',
+              border: OutlineInputBorder(),
+            ),
+            validator: (v) {
+              final val = v?.trim() ?? '';
+              if (val.isEmpty) return 'Naam khali nahi ho sakta';
+              if (val.toLowerCase() != oldName.toLowerCase() &&
+                  _clothingTypes.any((t) => t.toLowerCase() == val.toLowerCase())) {
+                return 'Yeh garment pehle se list me hai';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB)),
+            onPressed: () {
+              if (formKey.currentState?.validate() == true) {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: const Text('Save Karein', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final newName = editCtrl.text.trim();
+      final success = await LocalStorageService.editGarmentType(oldName: oldName, newName: newName);
+      if (success) {
+        final updatedTypes = await LocalStorageService.getGarmentTypes();
+        final updatedRates = await LocalStorageService.getDefaultRates();
+        final updatedNotes = await LocalStorageService.getClothingNotesMap();
+        setState(() {
+          _clothingTypes = updatedTypes;
+          _defaultRates = updatedRates;
+          _clothingNotesMap = updatedNotes;
+          if (_selectedClothingTypeForNotes == oldName) {
+            _selectedClothingTypeForNotes = newName;
+          }
+        });
+        ApiService.updateShopSettings({'clothing_types': updatedTypes.join(',')}).ignore();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('"$oldName" badal kar "$newName" kar diya gaya!'), backgroundColor: Colors.green),
+          );
+        }
       }
     }
   }
@@ -720,44 +793,89 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   Future<void> _addNewNoteSuggestion(String text) async {
     final clean = text.trim();
     if (clean.isEmpty) return;
-    if (_notesSuggestions.any((s) => s.toLowerCase() == clean.toLowerCase())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ye suggestion pehle se maujood hai!'), backgroundColor: Colors.orange),
-      );
+    final currentList = _clothingNotesMap[_selectedClothingTypeForNotes] ?? [];
+    if (currentList.any((s) => s.toLowerCase() == clean.toLowerCase())) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Yeh suggestion "$_selectedClothingTypeForNotes" me pehle se maujood hai!'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
       return;
     }
-    final updated = List<String>.from(_notesSuggestions)..add(clean);
-    await LocalStorageService.saveNotesSuggestions(updated);
+    await LocalStorageService.addClothingNoteSuggestion(
+      clothingType: _selectedClothingTypeForNotes,
+      note: clean,
+    );
+    final updatedMap = await LocalStorageService.getClothingNotesMap();
+    if (!mounted) return;
     setState(() {
-      _notesSuggestions = updated;
+      _clothingNotesMap = updatedMap;
       _newNoteCtrl.clear();
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Suggestion "$clean" jud gaya!'), backgroundColor: Colors.green),
+      SnackBar(
+        content: Text('Suggestion "$clean" ($_selectedClothingTypeForNotes) me jud gaya!'),
+        backgroundColor: Colors.green,
+      ),
     );
   }
 
   Future<void> _removeNoteSuggestion(String item) async {
-    final updated = List<String>.from(_notesSuggestions)..removeWhere((s) => s == item);
-    await LocalStorageService.saveNotesSuggestions(updated);
-    setState(() => _notesSuggestions = updated);
+    await LocalStorageService.removeClothingNoteSuggestion(
+      clothingType: _selectedClothingTypeForNotes,
+      note: item,
+    );
+    final updatedMap = await LocalStorageService.getClothingNotesMap();
+    if (!mounted) return;
+    setState(() {
+      _clothingNotesMap = updatedMap;
+    });
   }
 
   Future<void> _resetNoteSuggestions() async {
-    await LocalStorageService.saveNotesSuggestions(List.from(LocalStorageService.defaultNotesSuggestions));
-    final updated = await LocalStorageService.getNotesSuggestions();
-    setState(() => _notesSuggestions = updated);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Default suggestions restore ho gaye!'), backgroundColor: Colors.blue),
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Reset "$_selectedClothingTypeForNotes" Suggestions?'),
+        content: Text('Kya aap "$_selectedClothingTypeForNotes" ke note suggestions ko defaults par reset karna chahte hain?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
     );
+
+    if (confirmed == true) {
+      await LocalStorageService.resetClothingNotesSuggestions(clothingType: _selectedClothingTypeForNotes);
+      final updatedMap = await LocalStorageService.getClothingNotesMap();
+      if (!mounted) return;
+      setState(() {
+        _clothingNotesMap = updatedMap;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$_selectedClothingTypeForNotes ke default suggestions restore ho gaye!'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
   }
 
   Widget _buildNotesSuggestionsTab() {
+    final currentList = _clothingNotesMap[_selectedClothingTypeForNotes] ?? [];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 1. Clothing Type Selector
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
@@ -767,11 +885,69 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Nayi Tippani Jodein (Add Note Suggestion)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const Text('Clothing Type Chuniye (Select Garment)',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 4),
                   const Text(
-                    'Kapda darj karte waqt "Vishesh Tippani (Notes)" me ye suggestions turant chips ke roop me dikhenge.',
+                    'Har kapde (jaise Shirt, Pant, Kurta) ki apni alag note suggestions hoti hain.',
                     style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _clothingTypes.map((type) {
+                        final isSelected = type.toLowerCase() == _selectedClothingTypeForNotes.toLowerCase();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            avatar: Icon(
+                              Icons.check,
+                              size: 16,
+                              color: isSelected ? Colors.white : Colors.transparent,
+                            ),
+                            label: Text(
+                              type,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            selected: isSelected,
+                            selectedColor: const Color(0xFF2563EB),
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            onSelected: (sel) {
+                              if (sel) {
+                                setState(() => _selectedClothingTypeForNotes = type);
+                              }
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Add New Suggestion for selected clothing type
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Nayi Tippani Jodein ($_selectedClothingTypeForNotes)',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Order lete waqt jab aap "$_selectedClothingTypeForNotes" select karenge to yeh notes suggestions turant dikhenge.',
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -780,7 +956,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         child: TextField(
                           controller: _newNoteCtrl,
                           decoration: InputDecoration(
-                            hintText: 'Jaise: Collar Chinese, 2 Pocket, Fitting Slim...',
+                            hintText: 'Jaise: Single Pocket, Chinese Collar, Slim Fitting...',
                             prefixIcon: const Icon(Icons.edit_note, size: 22),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -806,6 +982,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             ),
           ),
           const SizedBox(height: 16),
+
+          // 3. Saved Note Suggestions List for selected clothing type
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             elevation: 0,
@@ -818,9 +996,11 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Saved Note Suggestions (${_notesSuggestions.length})',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      Expanded(
+                        child: Text(
+                          '$_selectedClothingTypeForNotes Suggestions (${currentList.length})',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
                       ),
                       TextButton.icon(
                         icon: const Icon(Icons.restore, size: 16),
@@ -830,18 +1010,19 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (_notesSuggestions.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
+                  if (currentList.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
                       child: Center(
-                        child: Text('Koi suggestion nahi hai. Upar se naya jodein.', style: TextStyle(color: Colors.grey)),
+                        child: Text('Koi suggestion nahi hai $_selectedClothingTypeForNotes ke liye. Upar se naya jodein.',
+                            style: const TextStyle(color: Colors.grey)),
                       ),
                     )
                   else
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _notesSuggestions.map((sugg) {
+                      children: currentList.map((sugg) {
                         return Chip(
                           label: Text(sugg, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                           backgroundColor: const Color(0xFFF1F5F9),
@@ -972,6 +1153,11 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         icon: const Icon(Icons.currency_rupee, color: Color(0xFF2563EB), size: 18),
                         tooltip: 'Set default rate',
                         onPressed: () => _editDefaultRate(type, rate),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey, size: 18),
+                        tooltip: 'Edit / Rename Garment',
+                        onPressed: () => _editClothingType(type),
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),

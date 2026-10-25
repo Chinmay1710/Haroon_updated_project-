@@ -39,6 +39,7 @@ class ZipBackupService {
     final measurementUnit = await LocalStorageService.getMeasurementUnit();
     final defaultDeliveryDays = await LocalStorageService.getDefaultDeliveryDays();
     final notesSuggestions = await LocalStorageService.getNotesSuggestions();
+    final clothingNotesSuggestions = await LocalStorageService.getClothingNotesMap();
     final isAutoBackup = await LocalStorageService.isAutoBackupEnabled();
     final autoBackupFreq = await LocalStorageService.getAutoBackupFrequency();
 
@@ -306,6 +307,7 @@ class ZipBackupService {
       'measurement_unit': measurementUnit,
       'default_delivery_days': defaultDeliveryDays,
       'notes_suggestions': notesSuggestions,
+      'clothing_notes_suggestions': clothingNotesSuggestions,
       'auto_backup_enabled': isAutoBackup,
       'auto_backup_frequency': autoBackupFreq,
       // Database entities
@@ -441,6 +443,17 @@ class ZipBackupService {
         }
         if (data['notes_suggestions'] is List) {
           await LocalStorageService.saveNotesSuggestions(List<String>.from(data['notes_suggestions']));
+        }
+        if (data['clothing_notes_suggestions'] is Map) {
+          final map = <String, List<String>>{};
+          (data['clothing_notes_suggestions'] as Map).forEach((k, v) {
+            if (v is List) {
+              map[k.toString()] = v.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+            }
+          });
+          if (map.isNotEmpty) {
+            await LocalStorageService.saveClothingNotesSuggestions(map);
+          }
         }
         if (data['auto_backup_enabled'] is bool) {
           await LocalStorageService.setAutoBackupEnabled(data['auto_backup_enabled'] as bool);

@@ -1209,6 +1209,46 @@ class LocalStorageService {
     return false;
   }
 
+  static Future<bool> editGarmentType({
+    required String oldName,
+    required String newName,
+  }) async {
+    final cleanOld = oldName.trim();
+    final cleanNew = newName.trim();
+    if (cleanOld.isEmpty || cleanNew.isEmpty) return false;
+    if (cleanOld.toLowerCase() == cleanNew.toLowerCase()) return true;
+
+    final current = await getGarmentTypes();
+    final index = current.indexWhere((t) => t.toLowerCase() == cleanOld.toLowerCase());
+    if (index == -1) return false;
+
+    // 1. Rename in list
+    current[index] = cleanNew;
+    await saveGarmentTypes(current);
+
+    // 2. Transfer default rate
+    try {
+      final rates = await getDefaultRates();
+      if (rates.containsKey(cleanOld)) {
+        final rate = rates.remove(cleanOld)!;
+        rates[cleanNew] = rate;
+        await saveDefaultRates(rates);
+      }
+    } catch (_) {}
+
+    // 3. Transfer clothing notes suggestions
+    try {
+      final notesMap = await getClothingNotesMap();
+      if (notesMap.containsKey(cleanOld)) {
+        final notes = notesMap.remove(cleanOld)!;
+        notesMap[cleanNew] = notes;
+        await saveClothingNotesSuggestions(notesMap);
+      }
+    } catch (_) {}
+
+    return true;
+  }
+
   // -------------------------------------------------------------
   // MESSAGE TEMPLATES (WHATSAPP & SMS)
   // -------------------------------------------------------------
@@ -1272,57 +1312,236 @@ class LocalStorageService {
   }
 
   // -------------------------------------------------------------
-  // NOTES SUGGESTIONS
+  // CLOTHING-TYPE SPECIFIC NOTES SUGGESTIONS
   // -------------------------------------------------------------
   static const String _keyNotesSuggestions = 'ht_notes_suggestions';
+  static const String _keyClothingNotes = 'ht_clothing_notes_suggestions';
 
-  static List<String> get defaultNotesSuggestions => [
-    'Collar Chinese',
-    'Collar Regular',
-    'Collar Button Down',
-    'Single Pocket',
-    'Double Pocket',
-    'Without Pocket',
-    'Cuff Square',
-    'Cuff Cut',
-    'Fitting Loose',
-    'Fitting Normal',
-    'Fitting Slim',
-    'Side Slit',
-    'Belt Loop Extra',
-    'Back Pocket Single',
-    'Back Pocket Double',
-    'Watch Pocket',
-    'Plate Single',
-    'Plate Double',
-    'Cross Pocket',
-    'Straight Pocket',
-  ];
+  static Map<String, List<String>> get defaultClothingNotesMap => {
+    'Shirt': [
+      'Collar Normal',
+      'Collar Chinese',
+      'Collar Mandar',
+      'Collar Button Down',
+      'Cuff Single Button',
+      'Cuff Double Button',
+      'Pocket Single Left',
+      'Pocket Double',
+      'Without Pocket',
+      'Fitting Slim',
+      'Fitting Regular',
+      'Fitting Loose',
+      'Bottom Round (Apple Cut)',
+      'Bottom Flat',
+      'Front Patti Concealed',
+      'Front Patti Normal',
+    ],
+    'Pant': [
+      'Cross Pocket',
+      'Straight Pocket',
+      'Back Pocket Single',
+      'Back Pocket Double',
+      'Watch Pocket',
+      'Plate Single',
+      'Plate Double',
+      'Without Plate (Flat Front)',
+      'Belt Loop Extra',
+      'Belt Loop Normal',
+      'Grip Belt',
+      'Fitting Slim',
+      'Fitting Regular',
+      'Narrow Bottom',
+      'Straight Bottom',
+    ],
+    'Kurta': [
+      'Collar Chinese',
+      'Collar Normal',
+      'Kurta Patti Designer',
+      'Side Pocket Left',
+      'Side Pocket Right',
+      'Both Side Pockets',
+      'Side Slit High',
+      'Fitting Regular',
+      'Sleeve Fold Open',
+      'Cuff Sleeve',
+    ],
+    'Pajama': [
+      'Churidar',
+      'Straight Cut',
+      'Elastic Waist',
+      'Nada Waist',
+      'Side Pocket Single',
+      'Side Pocket Double',
+      'Fitting Loose',
+    ],
+    'Safari Suit': [
+      'Safari Collar',
+      'Four Pockets Front',
+      'Shoulder Flap (Epaulet)',
+      'Belt Back',
+      'Safari Half Sleeve',
+      'Safari Full Sleeve',
+      'Side Vent Single',
+    ],
+    'Blazer / Coat': [
+      'Single Breasted',
+      'Double Breasted',
+      'Two Buttons',
+      'One Button',
+      'Peak Lapel',
+      'Notch Lapel',
+      'Double Vent (Cut)',
+      'Single Vent (Cut)',
+      'Inside Pocket Both Sides',
+    ],
+    'Sadri / Waistcoat': [
+      'Mandarin Collar',
+      'V-Neck',
+      '5 Buttons',
+      '6 Buttons',
+      'Two Pockets Front',
+      'Chest Pocket',
+      'Fitting Slim',
+    ],
+  };
 
-  static Future<List<String>> getNotesSuggestions() async {
+  static List<String> get defaultNotesSuggestions {
+    final Set<String> all = {};
+    for (var list in defaultClothingNotesMap.values) {
+      all.addAll(list);
+    }
+    return all.toList();
+  }
+
+  static Future<Map<String, List<String>>> getClothingNotesMap() async {
     try {
-      final fromDisk = await readJsonFromFile('haroon_notes_suggestions.json');
+      final fromDisk = await readJsonFromFile('haroon_clothing_notes.json');
       if (fromDisk != null && fromDisk.isNotEmpty) {
         final decoded = jsonDecode(fromDisk);
-        if (decoded is List) {
-          final list = decoded.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
-          if (list.isNotEmpty) return list;
+        if (decoded is Map) {
+          final res = <String, List<String>>{};
+          decoded.forEach((k, v) {
+            if (v is List) {
+              res[k.toString()] = v.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+            }
+          });
+          if (res.isNotEmpty) return res;
         }
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_keyNotesSuggestions);
+      final raw = prefs.getString(_keyClothingNotes);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          final list = decoded.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
-          if (list.isNotEmpty) {
-            await saveJsonToFile('haroon_notes_suggestions.json', raw);
-            return list;
+        if (decoded is Map) {
+          final res = <String, List<String>>{};
+          decoded.forEach((k, v) {
+            if (v is List) {
+              res[k.toString()] = v.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+            }
+          });
+          if (res.isNotEmpty) {
+            await saveJsonToFile('haroon_clothing_notes.json', raw);
+            return res;
           }
         }
       }
     } catch (_) {}
+
+    return Map<String, List<String>>.from(
+      defaultClothingNotesMap.map((k, v) => MapEntry(k, List<String>.from(v))),
+    );
+  }
+
+  static Future<void> saveClothingNotesSuggestions(Map<String, List<String>> map) async {
+    try {
+      final jsonStr = jsonEncode(map);
+      await saveJsonToFile('haroon_clothing_notes.json', jsonStr);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyClothingNotes, jsonStr);
+    } catch (_) {}
+  }
+
+  static Future<List<String>> getNotesSuggestionsForType(String clothingType) async {
+    final cleanType = clothingType.trim();
+    final map = await getClothingNotesMap();
+
+    // 1. Direct match
+    if (map.containsKey(cleanType) && map[cleanType]!.isNotEmpty) {
+      return List<String>.from(map[cleanType]!);
+    }
+
+    // 2. Case-insensitive match
+    for (var entry in map.entries) {
+      if (entry.key.toLowerCase() == cleanType.toLowerCase() && entry.value.isNotEmpty) {
+        return List<String>.from(entry.value);
+      }
+    }
+
+    // 3. Partial match (e.g. "Full Shirt" -> "Shirt")
+    for (var entry in map.entries) {
+      if ((cleanType.toLowerCase().contains(entry.key.toLowerCase()) ||
+              entry.key.toLowerCase().contains(cleanType.toLowerCase())) &&
+          entry.value.isNotEmpty) {
+        return List<String>.from(entry.value);
+      }
+    }
+
+    return defaultNotesSuggestions;
+  }
+
+  static Future<void> addClothingNoteSuggestion({
+    required String clothingType,
+    required String note,
+  }) async {
+    final cleanType = clothingType.trim();
+    final cleanNote = note.trim();
+    if (cleanType.isEmpty || cleanNote.isEmpty) return;
+
+    final map = await getClothingNotesMap();
+    final list = map.putIfAbsent(cleanType, () => []);
+    if (!list.any((s) => s.toLowerCase() == cleanNote.toLowerCase())) {
+      list.add(cleanNote);
+      await saveClothingNotesSuggestions(map);
+    }
+  }
+
+  static Future<void> removeClothingNoteSuggestion({
+    required String clothingType,
+    required String note,
+  }) async {
+    final cleanType = clothingType.trim();
+    final cleanNote = note.trim();
+    if (cleanType.isEmpty || cleanNote.isEmpty) return;
+
+    final map = await getClothingNotesMap();
+    if (map.containsKey(cleanType)) {
+      map[cleanType]!.removeWhere((s) => s.toLowerCase() == cleanNote.toLowerCase());
+      await saveClothingNotesSuggestions(map);
+    }
+  }
+
+  static Future<void> resetClothingNotesSuggestions({String? clothingType}) async {
+    final defaultMap = defaultClothingNotesMap;
+    if (clothingType != null && clothingType.trim().isNotEmpty) {
+      final clean = clothingType.trim();
+      final currentMap = await getClothingNotesMap();
+      currentMap[clean] = List<String>.from(defaultMap[clean] ?? defaultNotesSuggestions);
+      await saveClothingNotesSuggestions(currentMap);
+    } else {
+      await saveClothingNotesSuggestions(Map<String, List<String>>.from(
+        defaultMap.map((k, v) => MapEntry(k, List<String>.from(v))),
+      ));
+    }
+  }
+
+  static Future<List<String>> getNotesSuggestions() async {
+    final map = await getClothingNotesMap();
+    final Set<String> all = {};
+    for (var l in map.values) {
+      all.addAll(l);
+    }
+    if (all.isNotEmpty) return all.toList();
     return List<String>.from(defaultNotesSuggestions);
   }
 

@@ -439,7 +439,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       }
     }
     int? activeBoxNum;
-    final noteSuggestions = await LocalStorageService.getNotesSuggestions();
+    Map<String, List<String>> allClothingNotes = await LocalStorageService.getClothingNotesMap();
     final ScrollController modalScrollCtrl = ScrollController();
 
     if (!mounted) return;
@@ -820,37 +820,100 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Is Kapde Ki Vishesh Tippani (Notes)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                  if (noteSuggestions.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    const Text('Tippani Suggestions (Tap karein jodne ke liye):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 6,
-                                      runSpacing: 6,
-                                      children: noteSuggestions.map((sugg) {
-                                        return ActionChip(
-                                          label: Text(sugg, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
-                                          backgroundColor: const Color(0xFFEEF2F6),
-                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(8),
-                                            side: BorderSide(color: Colors.grey.shade300),
+                                  Builder(
+                                    builder: (ctx) {
+                                      final activeSuggestions = allClothingNotes[tempType] ??
+                                          allClothingNotes.entries.firstWhere(
+                                            (e) => e.key.toLowerCase() == tempType.toLowerCase(),
+                                            orElse: () => MapEntry(tempType, LocalStorageService.defaultClothingNotesMap[tempType] ?? LocalStorageService.defaultNotesSuggestions),
+                                          ).value;
+                                      return Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Is Kapde Ki Vishesh Tippani ($tempType Notes)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text('$tempType Suggestions:',
+                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                              InkWell(
+                                                onTap: () async {
+                                                  final quickAddCtrl = TextEditingController();
+                                                  final added = await showDialog<String>(
+                                                    context: context,
+                                                    builder: (dCtx) => AlertDialog(
+                                                      title: Text('Nayi $tempType Note Jodein'),
+                                                      content: TextField(
+                                                        controller: quickAddCtrl,
+                                                        autofocus: true,
+                                                        decoration: InputDecoration(
+                                                          hintText: 'Jaise: Single Pocket, Slim Fit...',
+                                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                                        ),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(onPressed: () => Navigator.pop(dCtx), child: const Text('Cancel')),
+                                                        ElevatedButton(
+                                                          onPressed: () => Navigator.pop(dCtx, quickAddCtrl.text.trim()),
+                                                          child: const Text('Add'),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (added != null && added.isNotEmpty) {
+                                                    await LocalStorageService.addClothingNoteSuggestion(clothingType: tempType, note: added);
+                                                    final refreshed = await LocalStorageService.getClothingNotesMap();
+                                                    setEditorState(() {
+                                                      allClothingNotes = refreshed;
+                                                      final cur = notesCtrl.text.trim();
+                                                      if (cur.isEmpty) {
+                                                        notesCtrl.text = added;
+                                                      } else if (!cur.contains(added)) {
+                                                        notesCtrl.text = '$cur, $added';
+                                                      }
+                                                    });
+                                                  }
+                                                },
+                                                child: const Padding(
+                                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                                  child: Text('+ Add Note', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          onPressed: () {
-                                            setEditorState(() {
-                                              final cur = notesCtrl.text.trim();
-                                              if (cur.isEmpty) {
-                                                notesCtrl.text = sugg;
-                                              } else if (!cur.contains(sugg)) {
-                                                notesCtrl.text = '$cur, $sugg';
-                                              }
-                                            });
-                                          },
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ],
+                                          if (activeSuggestions.isNotEmpty) ...[
+                                            const SizedBox(height: 6),
+                                            Wrap(
+                                              spacing: 6,
+                                              runSpacing: 6,
+                                              children: activeSuggestions.map((sugg) {
+                                                return ActionChip(
+                                                  label: Text(sugg, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                                                  backgroundColor: const Color(0xFFEEF2F6),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    side: BorderSide(color: Colors.grey.shade300),
+                                                  ),
+                                                  onPressed: () {
+                                                    setEditorState(() {
+                                                      final cur = notesCtrl.text.trim();
+                                                      if (cur.isEmpty) {
+                                                        notesCtrl.text = sugg;
+                                                      } else if (!cur.contains(sugg)) {
+                                                        notesCtrl.text = '$cur, $sugg';
+                                                      }
+                                                    });
+                                                  },
+                                                );
+                                              }).toList(),
+                                            ),
+                                          ],
+                                        ],
+                                      );
+                                    },
+                                  ),
                                   const SizedBox(height: 10),
                                   TextFormField(
                                     controller: notesCtrl,
