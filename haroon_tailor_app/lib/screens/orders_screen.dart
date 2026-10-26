@@ -307,6 +307,10 @@ class OrdersScreenState extends State<OrdersScreen> {
         );
 
         if (mounted) {
+          setState(() {
+            o['status'] = 'STITCHING_COMPLETE';
+            _applyFilter();
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Order marked as Stitching Complete'), backgroundColor: Colors.green),
           );
@@ -512,6 +516,13 @@ class OrdersScreenState extends State<OrdersScreen> {
                         readyItemIds: readyIds,
                       );
                       if (mounted) {
+                        setState(() {
+                          final idx = _allOrders.indexWhere((ord) => _safeId(ord['id']) == orderId);
+                          if (idx >= 0) {
+                            _allOrders[idx]['status'] = newStatus;
+                            _applyFilter();
+                          }
+                        });
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -525,7 +536,7 @@ class OrdersScreenState extends State<OrdersScreen> {
                           ),
                         );
                       }
-                      _loadOrders();
+                      _loadOrders(showLoading: false);
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -548,11 +559,18 @@ class OrdersScreenState extends State<OrdersScreen> {
     try {
       await ApiService.updateOrderStatus(orderId: orderId, status: newStatus);
       if (mounted) {
+        setState(() {
+          final idx = _allOrders.indexWhere((ord) => _safeId(ord['id']) == orderId);
+          if (idx >= 0) {
+            _allOrders[idx]['status'] = newStatus;
+            _applyFilter();
+          }
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Status updated to $newStatus'), backgroundColor: Colors.green),
         );
       }
-      _loadOrders();
+      _loadOrders(showLoading: false);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

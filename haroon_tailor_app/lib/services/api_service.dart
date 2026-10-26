@@ -261,10 +261,6 @@ class ApiService {
   // Customer Details & Order History
   static Future<Map<String, dynamic>> getCustomerDetails(int customerId) async {
     if (await LocalStorageService.isOfflineMode()) {
-      final cached = await LocalStorageService.getCachedCustomerDetails(customerId);
-      if (cached != null && cached.isNotEmpty) {
-        return cached;
-      }
       return await LocalStorageService.computeCustomerDetailsOffline(customerId);
     }
     try {
@@ -273,10 +269,6 @@ class ApiService {
       await LocalStorageService.saveCustomerDetails(customerId, map);
       return map;
     } catch (_) {
-      final cached = await LocalStorageService.getCachedCustomerDetails(customerId);
-      if (cached != null && cached.isNotEmpty) {
-        return cached;
-      }
       return await LocalStorageService.computeCustomerDetailsOffline(customerId);
     }
   }
@@ -456,6 +448,7 @@ class ApiService {
       try {
         final payload = <String, dynamic>{
           'order_id': orderId,
+          'id': orderId,
           'status': status,
           'send_whatsapp': sendWhatsapp,
         };

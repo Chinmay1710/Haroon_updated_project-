@@ -39,8 +39,18 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Future<void> _loadOrder({bool showLoading = true}) async {
-    // 1. Instant local cache load (0 milliseconds delay!)
-    final cached = await LocalStorageService.getCachedOrderDetails(widget.orderId);
+    // 1. Instant local cache load
+    Map<String, dynamic>? cached = await LocalStorageService.getCachedOrderDetails(widget.orderId);
+    if (cached == null || cached.isEmpty) {
+      final orders = (await LocalStorageService.getCachedOrders()) ?? [];
+      for (var o in orders) {
+        if (o is Map && LocalStorageService.orderMatchesId(o, widget.orderId)) {
+          cached = Map<String, dynamic>.from(o);
+          break;
+        }
+      }
+    }
+
     if (cached != null && cached.isNotEmpty && mounted) {
       setState(() {
         _order = cached;
@@ -50,22 +60,24 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       setState(() => _isLoading = true);
     }
 
-    // 2. Fetch fresh updates from server in background
-    try {
-      final data = await ApiService.getOrderDetails(widget.orderId);
-      if (mounted) {
-        setState(() {
-          _order = data;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (_order == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Order load nahi hua: $e'), backgroundColor: Colors.red),
-          );
+    // 2. Fetch fresh updates from server in background if online
+    if (!await LocalStorageService.isOfflineMode()) {
+      try {
+        final data = await ApiService.getOrderDetails(widget.orderId);
+        if (mounted && data.isNotEmpty) {
+          setState(() {
+            _order = data;
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          if (_order == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Order load nahi hua: $e'), backgroundColor: Colors.red),
+            );
+          }
         }
       }
     }
@@ -126,6 +138,11 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         );
 
         if (mounted) {
+          setState(() {
+            if (_order != null) {
+              _order!['status'] = 'STITCHING_COMPLETE';
+            }
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Order marked as Stitching Complete'), backgroundColor: Colors.green),
           );
@@ -309,12 +326,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         readyItemIds: readyIds,
                       );
                       if (mounted) {
+                        setState(() {
+                          if (_order != null) {
+                            _order!['status'] = allChecked ? 'STITCHING_COMPLETE' : 'PARTIALLY_COMPLETE';
+                          }
+                        });
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Items updated successfully!'), backgroundColor: Colors.green),
                         );
                       }
                       widget.onOrderUpdated?.call();
-                      _loadOrder();
+                      _loadOrder(showLoading: false);
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -340,12 +362,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         status: newStatus,
       );
       if (mounted) {
+        setState(() {
+          if (_order != null) {
+            _order!['status'] = newStatus;
+          }
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Status updated to $newStatus'), backgroundColor: Colors.green),
         );
       }
       widget.onOrderUpdated?.call();
-      _loadOrder();
+      _loadOrder(showLoading: false);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

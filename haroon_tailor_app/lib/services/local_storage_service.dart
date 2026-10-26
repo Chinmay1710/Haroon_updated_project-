@@ -497,12 +497,38 @@ class LocalStorageService {
     await computeDashboardStatsFromOrders();
     await computePendingOrdersFromOrders();
 
+    final customerId = (orderMap['customer_id'] as num?)?.toInt() ??
+        (orderMap['customerId'] as num?)?.toInt() ??
+        int.tryParse(orderMap['customer_id']?.toString() ?? '') ??
+        0;
+    if (customerId > 0) {
+      await computeCustomerDetailsOffline(customerId);
+    }
+
     return {
       'status': 'success',
       'id': finalId,
       'order_number': billNo,
       'order': orderMap,
     };
+  }
+
+  static bool orderMatchesId(dynamic o, int targetId) {
+    if (o is! Map) return false;
+    final idVal = o['id'];
+    if (idVal == targetId) return true;
+    final idNum = int.tryParse(idVal?.toString() ?? '');
+    if (idNum != null && idNum > 0 && idNum == targetId) return true;
+    if (idVal?.toString() == targetId.toString()) return true;
+
+    final onumStr = (o['order_number'] ?? '').toString();
+    if (onumStr == targetId.toString()) return true;
+    final match = RegExp(r'\d+').allMatches(onumStr);
+    if (match.isNotEmpty) {
+      final billDigits = int.tryParse(match.last.group(0) ?? '');
+      if (billDigits != null && billDigits == targetId) return true;
+    }
+    return false;
   }
 
   static Future<Map<String, dynamic>> updateOrderStatusOffline({
@@ -513,13 +539,10 @@ class LocalStorageService {
   }) async {
     final cached = (await getCachedOrders()) ?? [];
     final List<dynamic> orders = List<dynamic>.from(cached);
-    final index = orders.indexWhere((o) {
-      if (o is! Map) return false;
-      final idNum = int.tryParse((o['id'] ?? '').toString()) ?? 0;
-      return idNum == orderId;
-    });
+    final index = orders.indexWhere((o) => orderMatchesId(o, orderId));
 
     Map<String, dynamic>? targetOrder;
+    int? matchedCustomerId;
     if (index >= 0 && orders[index] is Map) {
       targetOrder = Map<String, dynamic>.from(orders[index] as Map);
       targetOrder['status'] = status;
@@ -527,6 +550,8 @@ class LocalStorageService {
         targetOrder['ready_item_ids'] = readyItemIds;
       }
       targetOrder['updated_at'] = DateTime.now().toIso8601String();
+
+      matchedCustomerId = int.tryParse((targetOrder['customer_id'] ?? targetOrder['customerId'] ?? '').toString());
 
       // If raw_items exist, update is_ready for checkboxes
       if (targetOrder['raw_items'] is List) {
@@ -580,6 +605,11 @@ class LocalStorageService {
       final updatedDetails = Map<String, dynamic>.from(details);
       updatedDetails['status'] = status;
       updatedDetails['updated_at'] = DateTime.now().toIso8601String();
+      if (readyItemIds != null) {
+        updatedDetails['ready_item_ids'] = readyItemIds;
+      }
+
+      matchedCustomerId ??= int.tryParse((updatedDetails['customer_id'] ?? updatedDetails['customerId'] ?? '').toString());
 
       if (updatedDetails['items'] is List) {
         final itemsList = List<dynamic>.from(updatedDetails['items'] as List);
@@ -618,6 +648,11 @@ class LocalStorageService {
     await computeDashboardStatsFromOrders();
     await computePendingOrdersFromOrders();
 
+    // Synchronize customer profile so updated status immediately reflects there
+    if (matchedCustomerId != null && matchedCustomerId > 0) {
+      await computeCustomerDetailsOffline(matchedCustomerId);
+    }
+
     return {
       'status': 'success',
       'order_id': orderId,
@@ -628,8 +663,7 @@ class LocalStorageService {
   static Future<void> deleteOrderOffline(int orderId) async {
     final cached = (await getCachedOrders()) ?? [];
     final List<dynamic> orders = List<dynamic>.from(cached);
-    final targetIdStr = orderId.toString();
-    orders.removeWhere((o) => o is Map && o['id']?.toString() == targetIdStr);
+    orders.removeWhere((o) => orderMatchesId(o, orderId));
     await saveOrders(orders);
     await computeDashboardStatsFromOrders();
     await computePendingOrdersFromOrders();
@@ -642,16 +676,9 @@ class LocalStorageService {
   }) async {
     final cached = (await getCachedOrders()) ?? [];
     final List<dynamic> orders = List<dynamic>.from(cached);
-    final targetIdStr = orderId.toString();
-    final index = orders.indexWhere((o) {
-      if (o is! Map) return false;
-      final idNum = int.tryParse((o['id'] ?? '').toString()) ?? 0;
-      if (idNum > 0 && idNum == orderId) return true;
-      if (o['id']?.toString() == targetIdStr) return true;
-      if (o['order_number'] != null && o['order_number'].toString() == targetIdStr) return true;
-      return false;
-    });
+    final index = orders.indexWhere((o) => orderMatchesId(o, orderId));
 
+    int? matchedCustomerId;
     if (index >= 0 && orders[index] is Map) {
       final order = Map<String, dynamic>.from(orders[index] as Map);
       final currentAdvance = (order['advance_amount'] as num?)?.toDouble() ?? double.tryParse((order['advance_amount'] ?? 0).toString()) ?? 0.0;
@@ -662,12 +689,47 @@ class LocalStorageService {
 
       order['advance_amount'] = newAdvance;
       order['remaining_amount'] = newRemaining;
+
+      // Add payment entry to payments list if present
+      final List<dynamic> paymentsList = order['payments'] is List ? List<dynamic>.from(order['payments'] as List) : [];
+      paymentsList.add({
+        'amount': amount,
+        'payment_method': paymentMethod,
+        'payment_date': DateTime.now().toIso8601String(),
+      });
+      order['payments'] = paymentsList;
+
       orders[index] = order;
+      matchedCustomerId = int.tryParse((order['customer_id'] ?? order['customerId'] ?? '').toString());
 
       await saveOrders(orders);
-      await saveOrderDetails(orderId, order);
+
+      // Also update order details cache preserving items, photos etc.
+      final details = await getCachedOrderDetails(orderId);
+      if (details != null && details.isNotEmpty) {
+        final updatedDetails = Map<String, dynamic>.from(details);
+        updatedDetails['advance_amount'] = newAdvance;
+        updatedDetails['remaining_amount'] = newRemaining;
+        final List<dynamic> dPayments = updatedDetails['payments'] is List ? List<dynamic>.from(updatedDetails['payments'] as List) : [];
+        dPayments.add({
+          'amount': amount,
+          'payment_method': paymentMethod,
+          'payment_date': DateTime.now().toIso8601String(),
+        });
+        updatedDetails['payments'] = dPayments;
+        matchedCustomerId ??= int.tryParse((updatedDetails['customer_id'] ?? updatedDetails['customerId'] ?? '').toString());
+        await saveOrderDetails(orderId, updatedDetails);
+      } else {
+        await saveOrderDetails(orderId, order);
+      }
+
       await computeDashboardStatsFromOrders();
       await computePendingOrdersFromOrders();
+
+      // Synchronize customer profile so updated payment and Rs. 0 balance immediately reflect there
+      if (matchedCustomerId != null && matchedCustomerId > 0) {
+        await computeCustomerDetailsOffline(matchedCustomerId);
+      }
     }
 
     return {'status': 'success', 'order_id': orderId, 'amount': amount};
@@ -847,6 +909,15 @@ class LocalStorageService {
       }
     }
 
+    if (customer == null) {
+      final existingCache = await getCachedCustomerDetails(customerId);
+      if (existingCache != null && existingCache['customer'] is Map) {
+        customer = Map<String, dynamic>.from(existingCache['customer']);
+      }
+    }
+
+    final String custMobile = (customer?['mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+
     final orders = (await getCachedOrders()) ?? [];
     final customerOrders = orders.where((o) {
       if (o is! Map) return false;
@@ -854,7 +925,15 @@ class LocalStorageService {
           (o['customerId'] as num?)?.toInt() ??
           int.tryParse(o['customer_id']?.toString() ?? '') ??
           int.tryParse(o['customerId']?.toString() ?? '');
-      return cid == customerId;
+      if (cid != null && cid > 0 && cid == customerId) return true;
+
+      if (custMobile.isNotEmpty) {
+        final oMobile = (o['customer_mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+        if (oMobile.isNotEmpty && (oMobile == custMobile || oMobile.endsWith(custMobile) || custMobile.endsWith(oMobile))) {
+          return true;
+        }
+      }
+      return false;
     }).toList();
 
     if (customer == null) {
@@ -877,7 +956,13 @@ class LocalStorageService {
       };
     }
 
-    final profiles = await getCustomerMeasurementsOffline(customerId);
+    List<dynamic> profiles = await getCustomerMeasurementsOffline(customerId);
+    if (profiles.isEmpty) {
+      final existingCache = await getCachedCustomerDetails(customerId);
+      if (existingCache != null && existingCache['profiles'] is List && (existingCache['profiles'] as List).isNotEmpty) {
+        profiles = List<dynamic>.from(existingCache['profiles']);
+      }
+    }
 
     final result = {
       'customer': customer,

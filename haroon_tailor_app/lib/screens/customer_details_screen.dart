@@ -29,12 +29,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   Future<void> _loadCustomerDetails({bool showLoading = true}) async {
-    // 1. Instant local cache load (0 milliseconds delay!)
-    final cached = await LocalStorageService.getCachedCustomerDetails(widget.customerId) ??
-        await LocalStorageService.computeCustomerDetailsOffline(widget.customerId);
-    if (cached.isNotEmpty && mounted) {
+    // 1. Instant local offline calculation (guarantees latest order status, payments, and remaining due from cached orders)
+    final localData = await LocalStorageService.computeCustomerDetailsOffline(widget.customerId);
+    if (localData.isNotEmpty && mounted) {
       setState(() {
-        _customerData = cached;
+        _customerData = localData;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -45,24 +44,31 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       });
     }
 
-    // 2. Fetch fresh updates from server in background
-    try {
-      final data = await ApiService.getCustomerDetails(widget.customerId);
-      if (mounted) {
-        setState(() {
-          _customerData = data;
-          _isLoading = false;
-          _errorMessage = null;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          if (_customerData == null) {
-            _errorMessage = e.toString();
+    // 2. Fetch fresh updates from server in background if online
+    if (!await LocalStorageService.isOfflineMode()) {
+      try {
+        final data = await ApiService.getCustomerDetails(widget.customerId);
+        if (mounted && data.isNotEmpty) {
+          final localOrders = (await LocalStorageService.computeCustomerDetailsOffline(widget.customerId))['orders'] ?? [];
+          final mergedData = Map<String, dynamic>.from(data);
+          if (localOrders is List && localOrders.isNotEmpty) {
+            mergedData['orders'] = localOrders;
           }
-        });
+          setState(() {
+            _customerData = mergedData;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            if (_customerData == null) {
+              _errorMessage = e.toString();
+            }
+          });
+        }
       }
     }
   }
@@ -629,16 +635,20 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     ),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        final orderIdNum = int.tryParse((o['id'] ?? '').toString()) ??
+                            int.tryParse(RegExp(r'\d+').allMatches((o['order_number'] ?? '').toString()).lastOrNull?.group(0) ?? '') ??
+                            0;
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => OrderDetailsScreen(
-                              orderId: o['id'],
+                              orderId: orderIdNum > 0 ? orderIdNum : (o['id'] is int ? o['id'] : 0),
                               onOrderUpdated: _loadCustomerDetails,
                             ),
                           ),
                         );
+                        _loadCustomerDetails();
                       },
                       child: Padding(
                         padding: const EdgeInsets.all(14),
