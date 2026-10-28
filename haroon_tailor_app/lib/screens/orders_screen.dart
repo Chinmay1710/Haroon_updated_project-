@@ -64,6 +64,13 @@ class OrdersScreenState extends State<OrdersScreen> {
     return _safeId(o['id']);
   }
 
+  int _resolveOrderId(dynamic o) {
+    if (o is! Map) return 0;
+    final id = _safeId(o['id']);
+    if (id > 0) return id;
+    return _extractBillNumber(o);
+  }
+
   void switchToAllOrders() {
     if (mounted) {
       setState(() {
@@ -254,7 +261,7 @@ class OrdersScreenState extends State<OrdersScreen> {
 
   // 1. COMPLETE BUTTON WITH WHATSAPP CONFIRMATION (Point 2 - Website Flow)
   void _handleComplete(Map<String, dynamic> o) async {
-    final orderId = _safeId(o['id']);
+    final orderId = _resolveOrderId(o);
     final billNo = o['order_number'] ?? '#$orderId';
     bool sendWhatsapp = true;
 
@@ -364,7 +371,7 @@ class OrdersScreenState extends State<OrdersScreen> {
 
   // 2. PARTIAL BUTTON WITH CHECKBOXES MODAL (Point 1 - Website Flow)
   Future<void> _handlePartial(Map<String, dynamic> o) async {
-    final orderId = _safeId(o['id']);
+    final orderId = _resolveOrderId(o);
     final dynamic rawItemsVal = o['raw_items'];
     final dynamic itemsVal = o['items'];
 
@@ -581,7 +588,7 @@ class OrdersScreenState extends State<OrdersScreen> {
   }
 
   void _deleteOrder(Map<String, dynamic> order) async {
-    final orderId = _safeId(order['id']);
+    final orderId = _resolveOrderId(order);
     final billNo = order['order_number'] ?? '';
 
     final confirm = await showDialog<bool>(
@@ -745,7 +752,7 @@ class OrdersScreenState extends State<OrdersScreen> {
                           itemCount: _filteredOrders.length,
                           itemBuilder: (context, idx) {
                             final o = _filteredOrders[idx];
-                            final orderId = _safeId(o['id']);
+                            final orderId = _resolveOrderId(o);
                             final billNo = o['order_number'] ?? 'Bill-#$orderId';
                             final custName = o['customer_name'] ?? 'Walk-in';
                             final phone = (o['customer_mobile'] ?? '').toString();
@@ -767,8 +774,8 @@ class OrdersScreenState extends State<OrdersScreen> {
                               color: alert != null ? alert.bgColor.withValues(alpha: 0.25) : Colors.white,
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
-                                onTap: () {
-                                  Navigator.push(
+                                onTap: () async {
+                                  await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => OrderDetailsScreen(
@@ -777,6 +784,7 @@ class OrdersScreenState extends State<OrdersScreen> {
                                       ),
                                     ),
                                   );
+                                  _loadOrders(showLoading: false);
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.all(14),

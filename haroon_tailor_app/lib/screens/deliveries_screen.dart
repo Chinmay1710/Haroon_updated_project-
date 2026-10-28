@@ -385,7 +385,11 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
                           separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, index) {
                             final d = Map<String, dynamic>.from(_filteredDeliveries[index]);
-                            final orderId = int.tryParse((d['id'] ?? '').toString()) ?? 0;
+                            int orderId = int.tryParse((d['id'] ?? '').toString()) ?? 0;
+                            if (orderId <= 0) {
+                              final bDigits = RegExp(r'\d+').allMatches((d['order_number'] ?? '').toString()).lastOrNull?.group(0);
+                              if (bDigits != null) orderId = int.tryParse(bDigits) ?? 0;
+                            }
                             final remaining = double.tryParse((d['remaining_amount'] ?? 0).toString()) ?? 0.0;
                             final isDelivered = d['status'] == 'DELIVERED';
                             final billNo = d['order_number'] ?? '';
@@ -401,9 +405,9 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
                               ),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
-                                onTap: () {
+                                onTap: () async {
                                   // Open complete order details (Point 8)
-                                  Navigator.push(
+                                  await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => OrderDetailsScreen(
@@ -412,6 +416,7 @@ class DeliveriesScreenState extends State<DeliveriesScreen> {
                                       ),
                                     ),
                                   );
+                                  _loadDeliveries();
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.all(16),

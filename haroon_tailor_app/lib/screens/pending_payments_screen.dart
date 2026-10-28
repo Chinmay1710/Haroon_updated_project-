@@ -372,16 +372,22 @@ class _PendingPaymentsScreenState extends State<PendingPaymentsScreen> {
       color: isDelivered ? const Color(0xFFFAF5FF) : Colors.white,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          int ordId = int.tryParse((o['id'] ?? '').toString()) ?? 0;
+          if (ordId <= 0) {
+            final bDigits = RegExp(r'\d+').allMatches((o['order_number'] ?? '').toString()).lastOrNull?.group(0);
+            if (bDigits != null) ordId = int.tryParse(bDigits) ?? 0;
+          }
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => OrderDetailsScreen(
-                orderId: o['id'],
+                orderId: ordId > 0 ? ordId : (o['id'] is int ? o['id'] : 0),
                 onOrderUpdated: _loadPendingOrders,
               ),
             ),
           );
+          _loadPendingOrders();
         },
         child: Padding(
           padding: const EdgeInsets.all(14),

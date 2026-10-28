@@ -49,10 +49,16 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       try {
         final data = await ApiService.getCustomerDetails(widget.customerId);
         if (mounted && data.isNotEmpty) {
-          final localOrders = (await LocalStorageService.computeCustomerDetailsOffline(widget.customerId))['orders'] ?? [];
+          final localComputed = await LocalStorageService.computeCustomerDetailsOffline(widget.customerId);
+          final localOrders = localComputed['orders'] ?? [];
           final mergedData = Map<String, dynamic>.from(data);
           if (localOrders is List && localOrders.isNotEmpty) {
             mergedData['orders'] = localOrders;
+          }
+          if (localComputed['customer'] is Map) {
+            final custMap = Map<String, dynamic>.from(mergedData['customer'] ?? {});
+            custMap['pending_amount'] = localComputed['customer']['pending_amount'];
+            mergedData['customer'] = custMap;
           }
           setState(() {
             _customerData = mergedData;

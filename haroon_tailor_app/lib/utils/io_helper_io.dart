@@ -5,9 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/api_service.dart';
 
+String? _cachedPhotosDirPath;
+Directory? _cachedAppDocDir;
+
+void resetCachedPathsForTesting() {
+  _cachedPhotosDirPath = null;
+  _cachedAppDocDir = null;
+}
+
 /// IO implementation for mobile/desktop platforms
 Future<void> savePhotoToLocal({required String filePath, required Uint8List bytes}) async {
-  final file = File(filePath);
+  String targetPath = filePath;
+  // If filePath is relative (e.g. photos/xyz.jpg), make it absolute under localPhotosDir
+  if (!filePath.startsWith('/') && !filePath.contains(':\\') && !filePath.startsWith('\\')) {
+    final photosDir = await getLocalPhotosDirectory();
+    targetPath = '$photosDir/$filePath';
+  }
+  final file = File(targetPath);
   final parentDir = file.parent;
   if (!await parentDir.exists()) {
     await parentDir.create(recursive: true);
@@ -22,13 +36,29 @@ Future<void> createLocalDirectory({required String dirPath}) async {
   }
 }
 
+Future<Directory> _getAppDocDir() async {
+  if (_cachedAppDocDir != null && await _cachedAppDocDir!.exists()) {
+    return _cachedAppDocDir!;
+  }
+  final dir = await getApplicationDocumentsDirectory();
+  if (!await dir.exists()) {
+    await dir.create(recursive: true);
+  }
+  _cachedAppDocDir = dir;
+  return dir;
+}
+
 Future<String> getLocalPhotosDirectory() async {
-  final appDir = await getApplicationDocumentsDirectory();
+  if (_cachedPhotosDirPath != null && await Directory(_cachedPhotosDirPath!).exists()) {
+    return _cachedPhotosDirPath!;
+  }
+  final appDir = await _getAppDocDir();
   final photosDir = Directory('${appDir.path}/haroon_tailor_photos');
   if (!await photosDir.exists()) {
     await photosDir.create(recursive: true);
   }
-  return photosDir.path;
+  _cachedPhotosDirPath = photosDir.path;
+  return _cachedPhotosDirPath!;
 }
 
 Future<Uint8List?> readLocalPhotoFile(String filePath) async {
@@ -37,6 +67,13 @@ Future<Uint8List?> readLocalPhotoFile(String filePath) async {
     if (await file.exists()) {
       return await file.readAsBytes();
     }
+    // Also check if relative to local photos directory
+    final photosDir = await getLocalPhotosDirectory();
+    final cleanRel = filePath.replaceFirst(RegExp(r'^/+'), '');
+    final relFile = File('$photosDir/$cleanRel');
+    if (await relFile.exists()) {
+      return await relFile.readAsBytes();
+    }
   } catch (_) {}
   return null;
 }
@@ -44,7 +81,7 @@ Future<Uint8List?> readLocalPhotoFile(String filePath) async {
 /// Permanent file-based JSON storage on device filesystem
 Future<void> saveJsonToFile(String fileName, String content) async {
   try {
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await _getAppDocDir();
     final file = File('${appDir.path}/$fileName');
     await file.writeAsString(content, flush: true);
   } catch (e) {
@@ -54,7 +91,7 @@ Future<void> saveJsonToFile(String fileName, String content) async {
 
 Future<String?> readJsonFromFile(String fileName) async {
   try {
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await _getAppDocDir();
     final file = File('${appDir.path}/$fileName');
     if (await file.exists()) {
       return await file.readAsString();
@@ -67,7 +104,7 @@ Future<String?> readJsonFromFile(String fileName) async {
 
 Future<void> clearAllDiskFiles() async {
   try {
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await _getAppDocDir();
     if (await appDir.exists()) {
       final entities = appDir.listSync();
       for (var entity in entities) {
@@ -137,7 +174,18 @@ Widget buildSmartImage(
         );
       }
       if (clean.startsWith('photos/')) {
-        // Asynchronously or cached relative check
+        if (_cachedPhotosDirPath != null) {
+          final relFile = File('$_cachedPhotosDirPath/$clean');
+          if (relFile.existsSync()) {
+            return Image.file(
+              relFile,
+              width: width,
+              height: height,
+              fit: fit,
+              errorBuilder: (context, error, stackTrace) => errorWidget ?? _defaultErrorWidget(width, height),
+            );
+          }
+        }
         return FutureBuilder<String>(
           future: getLocalPhotosDirectory(),
           builder: (context, snapshot) {

@@ -91,9 +91,21 @@ Future<String?> pickJsonFileFromDevice() async {
   return completer.future;
 }
 
+Future<String?> pickFolderLocationPlatform() async {
+  return null;
+}
+
+Future<String?> saveBackupViaSystemPickerPlatform({
+  required Uint8List zipBytes,
+  String fileName = 'HaroonTailor_Backup.zip',
+}) async {
+  return await saveStableBackupZipPlatform(zipBytes: zipBytes, fileName: fileName);
+}
+
 Future<String?> saveStableBackupZipPlatform({
   required Uint8List zipBytes,
   String fileName = 'HaroonTailor_Backup.zip',
+  String? targetDirectoryPath,
 }) async {
   // 1. Validate archive integrity
   final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);

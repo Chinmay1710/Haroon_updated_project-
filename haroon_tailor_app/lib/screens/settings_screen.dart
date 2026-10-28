@@ -1,7 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/zip_backup_service.dart';
+import '../services/google_drive_service.dart';
 import '../utils/phone_utils.dart';
 import '../utils/file_helper.dart';
 import '../main.dart';
@@ -36,6 +38,14 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   String? _lastBackupTimeStr;
   int? _lastBackupSizeBytes;
   String? _lastBackupPath;
+
+  // Google Drive state
+  bool _gDriveConnected = false;
+  String? _gDriveEmail;
+  String? _gDriveLastSyncTime;
+  String _gDriveSyncStatus = 'Idle';
+  bool _gDriveAutoSync = true;
+  bool _isGDriveSyncing = false;
 
 
   // 4. Language & Theme
@@ -116,6 +126,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         bPath ??= bInfo['path']?.toString();
       }
 
+      final gDriveConnected = await GoogleDriveService.isConnected();
+      final gDriveEmail = await GoogleDriveService.getUserEmail();
+      final gDriveLastSync = await GoogleDriveService.getLastCloudSyncTime();
+      final gDriveSyncStatus = await GoogleDriveService.getCloudSyncStatus();
+      final gDriveAutoSync = await GoogleDriveService.isAutoSyncEnabled();
+
       if (!mounted) return;
       setState(() {
         _clothingTypes = types;
@@ -137,6 +153,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _lastBackupTimeStr = bTime;
         _lastBackupSizeBytes = bSize;
         _lastBackupPath = bPath;
+
+        _gDriveConnected = gDriveConnected;
+        _gDriveEmail = gDriveEmail;
+        _gDriveLastSyncTime = gDriveLastSync;
+        _gDriveSyncStatus = gDriveSyncStatus;
+        _gDriveAutoSync = gDriveAutoSync;
 
         _shopNameCtrl.text = shop['shop_name']?.toString() ?? 'Haroon Tailor';
         _ownerNameCtrl.text = shop['owner_name']?.toString() ?? '';
@@ -490,10 +512,198 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
   Future<void> _restoreFromZipFile() async {
     try {
-      final zipBytes = await FileHelper.pickBackupZipFile();
-      if (zipBytes == null) return; // User cancelled
-      if (!mounted) return;
+      // 1. Choose restore source (Local File or Google Drive)
+      final source = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Select Restore Source',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Choose where to restore your backup data from:',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.folder_zip, color: Color(0xFF7C3AED)),
+                  ),
+                  title: const Text('Restore from Local Device ZIP', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Choose a ZIP backup file stored on this device'),
+                  onTap: () => Navigator.pop(ctx, 'local'),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.cloud_download, color: Color(0xFF2563EB)),
+                  ),
+                  title: const Text('Restore from Google Drive', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    _gDriveConnected
+                        ? 'Download HaroonTailor_Backup.zip from ${_gDriveEmail ?? "Google Drive"}'
+                        : 'Google Drive is not connected yet (connect in settings)',
+                    style: TextStyle(
+                      color: _gDriveConnected ? const Color(0xFF64748B) : Colors.orange.shade800,
+                      fontSize: 12,
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'drive'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 
+      if (source == null) return;
+
+      Uint8List? zipBytes;
+
+      if (source == 'local') {
+        zipBytes = await FileHelper.pickBackupZipFile();
+        if (zipBytes == null) return; // User cancelled
+      } else if (source == 'drive') {
+        if (!_gDriveConnected) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please connect your Google Drive account first in settings.')),
+            );
+          }
+          return;
+        }
+
+        // Download from Google Drive with progress
+        final downloadProgressNotifier = ValueNotifier<String>('Connecting to Google Drive...');
+        final downloadValueNotifier = ValueNotifier<double>(0.0);
+
+        if (!mounted) return;
+
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => PopScope(
+            canPop: false,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.cloud_download, color: Color(0xFF2563EB)),
+                  SizedBox(width: 10),
+                  Text('Downloading Cloud Backup'),
+                ],
+              ),
+              content: AnimatedBuilder(
+                animation: Listenable.merge([downloadProgressNotifier, downloadValueNotifier]),
+                builder: (ctx, _) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      LinearProgressIndicator(
+                        value: downloadValueNotifier.value > 0 ? downloadValueNotifier.value : null,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: const AlwaysStoppedAnimation(Color(0xFF2563EB)),
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        downloadProgressNotifier.value,
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+
+        try {
+          zipBytes = await GoogleDriveService.downloadBackupZip(
+            onProgress: (status, progress) {
+              downloadProgressNotifier.value = status;
+              downloadValueNotifier.value = progress;
+            },
+          );
+        } catch (e) {
+          if (mounted) {
+            Navigator.of(context).pop(); // Close download dialog
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Download failed: $e'), backgroundColor: Colors.red),
+            );
+          }
+          return;
+        }
+
+        if (mounted) Navigator.of(context).pop(); // Close download dialog
+        if (zipBytes == null) return;
+      }
+
+      // 2. Validate & Conflict Check
+      final meta = await ZipBackupService.peekBackupMetadata(zipBytes!);
+      if (meta != null && meta['timestamp'] != null) {
+        final backupTs = meta['timestamp'].toString();
+        final isLocalNewer = await LocalStorageService.isLocalDataNewerThan(backupTs);
+        if (isLocalNewer && mounted) {
+          final proceed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                  SizedBox(width: 8),
+                  Text('Newer Local Data Found'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Aapke phone me backup se naya data maujood hai.'),
+                  const SizedBox(height: 8),
+                  Text('Backup Time: ${_formatBackupDate(backupTs)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  const Text('Agar aap restore karenge to naye orders ya changes backup wale data se replace ho jayenge. Kya aap aage badhna chahte hain?'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel (Data Safe Rakhein)'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Overwrite & Restore'),
+                ),
+              ],
+            ),
+          );
+
+          if (proceed != true) return;
+        }
+      }
+
+      if (!mounted) return;
       setState(() => _isBackingUp = true);
 
       final progressStatusNotifier = ValueNotifier<String>('Opening ZIP file...');
@@ -511,7 +721,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
               children: [
                 Icon(Icons.unarchive, color: Color(0xFF16A34A)),
                 SizedBox(width: 10),
-                Text('Restoring ZIP Backup'),
+                Text('Restoring Backup'),
               ],
             ),
             content: AnimatedBuilder(
@@ -573,14 +783,14 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
               children: [
                 Icon(Icons.check_circle, color: Colors.green, size: 28),
                 SizedBox(width: 8),
-                Text('ZIP Backup Restored!'),
+                Text('Backup Restored!'),
               ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Aapki ZIP backup se poora data + photos restore ho gaye:'),
+                const Text('Aapki backup se poora data, photos aur order statuses restore ho gaye:'),
                 const SizedBox(height: 14),
                 _buildRestoreStatRow(Icons.receipt_long, '${res['orders_count']} Orders restored'),
                 _buildRestoreStatRow(Icons.people, '${res['customers_count']} Customers restored'),
@@ -600,7 +810,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Photos + Data sab 100% offline! Cloudinary ki zarurat nahi!',
+                          'Photos + Data sab 100% offline & fast! Safe copy verified.',
                           style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 13),
                         ),
                       ),
@@ -627,7 +837,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ZIP Restore error: ${res['error'] ?? "Invalid ZIP file"}'),
+            content: Text('Restore error: ${res['error'] ?? "Invalid backup file"}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -637,9 +847,292 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         try { Navigator.of(context).pop(); } catch (_) {}
         setState(() => _isBackingUp = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ZIP File error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Restore error: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // GOOGLE DRIVE CONNECTION & SYNC HELPERS
+  // ──────────────────────────────────────────────────────────────────────────
+
+  Future<void> _connectGoogleDriveDialog() async {
+    final existingClientId = await GoogleDriveService.getClientId() ?? '';
+    final clientIdCtrl = TextEditingController(text: existingClientId);
+    final secretCtrl = TextEditingController(text: await GoogleDriveService.getClientSecret() ?? '');
+    final codeCtrl = TextEditingController();
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.cloud_sync, color: Color(0xFF2563EB)),
+              SizedBox(width: 10),
+              Text('Connect Google Drive', style: TextStyle(fontSize: 18)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Apne Google Drive account ko connect karein taaki aapka data hamesha surakshit rahe.',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: clientIdCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Google OAuth Client ID',
+                    hintText: 'xxxxxx.apps.googleusercontent.com',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: secretCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Client Secret (Optional)',
+                    hintText: 'Leave empty for Desktop/Mobile Client',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.open_in_browser, size: 18),
+                  label: const Text('1. Sign In With Google'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(40),
+                  ),
+                  onPressed: () async {
+                    final cid = clientIdCtrl.text.trim();
+                    if (cid.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a Google Client ID first.')),
+                      );
+                      return;
+                    }
+                    await GoogleDriveService.setClientId(cid);
+                    await GoogleDriveService.setClientSecret(secretCtrl.text.trim());
+                    await GoogleDriveService.launchAuthInBrowser(clientId: cid);
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: codeCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '2. Paste Authorization Code / Token',
+                    hintText: 'Paste code received after Google Sign-in',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final code = codeCtrl.text.trim();
+                final cid = clientIdCtrl.text.trim();
+                if (code.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter authorization code.')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                setState(() => _isGDriveSyncing = true);
+
+                // If code is an OAuth authorization code or bearer token:
+                Map<String, dynamic> res;
+                if (code.startsWith('ya29.')) {
+                  // Direct token
+                  await GoogleDriveService.saveManualTokens(accessToken: code, email: 'Connected Google Account');
+                  res = {'success': true, 'email': 'Connected Google Account'};
+                } else {
+                  res = await GoogleDriveService.exchangeAuthCode(
+                    authCode: code,
+                    clientId: cid.isNotEmpty ? cid : null,
+                    clientSecret: secretCtrl.text.trim().isNotEmpty ? secretCtrl.text.trim() : null,
+                  );
+                }
+
+                await _loadAllSettings();
+                setState(() => _isGDriveSyncing = false);
+
+                if (mounted) {
+                  if (res['success'] == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('✅ Connected to Google Drive! (${res['email'] ?? ""})'), backgroundColor: Colors.green),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Connection failed: ${res['error']}'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('Verify & Connect'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _disconnectGoogleDrive() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Disconnect Google Drive?'),
+        content: const Text('Are you sure you want to disconnect Google Drive? Automatic cloud backup will be stopped.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await GoogleDriveService.disconnect();
+      await _loadAllSettings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google Drive disconnected.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _syncToGoogleDriveNow() async {
+    if (_isGDriveSyncing || _isBackingUp) return;
+
+    setState(() => _isGDriveSyncing = true);
+    final progressStatusNotifier = ValueNotifier<String>('Starting Drive sync...');
+    final progressValueNotifier = ValueNotifier<double>(0.0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.cloud_upload, color: Color(0xFF2563EB)),
+              SizedBox(width: 10),
+              Text('Syncing to Google Drive'),
+            ],
+          ),
+          content: AnimatedBuilder(
+            animation: Listenable.merge([progressStatusNotifier, progressValueNotifier]),
+            builder: (ctx, _) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(
+                    value: progressValueNotifier.value > 0 ? progressValueNotifier.value : null,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: const AlwaysStoppedAnimation(Color(0xFF2563EB)),
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    progressStatusNotifier.value,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // 1. Generate local backup ZIP
+      progressStatusNotifier.value = 'Preparing local backup archive...';
+      progressValueNotifier.value = 0.2;
+      final zipBytes = await ZipBackupService.createZipBackup(
+        onProgress: (status, p) {
+          progressStatusNotifier.value = status;
+          progressValueNotifier.value = 0.2 + (p * 0.4);
+        },
+      );
+
+      // 2. Save locally first
+      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
+      await LocalStorageService.recordBackupSuccess(
+        path: savedPath ?? 'HaroonTailor_Backup.zip',
+        sizeBytes: zipBytes.length,
+      );
+
+      // 3. Upload to Google Drive
+      final uploadRes = await GoogleDriveService.uploadBackupZip(
+        zipBytes: zipBytes,
+        onProgress: (status, p) {
+          progressStatusNotifier.value = status;
+          progressValueNotifier.value = 0.6 + (p * 0.4);
+        },
+      );
+
+      if (mounted) Navigator.of(context).pop(); // Close dialog
+
+      await _loadAllSettings();
+
+      if (mounted) {
+        if (uploadRes['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Synced to Google Drive successfully! (${_formatFileSize(zipBytes.length)})'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Drive sync failed: ${uploadRes['error']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sync failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGDriveSyncing = false);
     }
   }
 
@@ -1377,6 +1870,17 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         ? '${_lastSyncTime!.day}/${_lastSyncTime!.month}/${_lastSyncTime!.year} ${_lastSyncTime!.hour}:${_lastSyncTime!.minute.toString().padLeft(2, '0')}'
         : 'Kabhi nahi (Never)';
 
+    final String backupAvailability;
+    if (_lastBackupTimeStr != null && _gDriveLastSyncTime != null) {
+      backupAvailability = 'Available on Local Device & Google Drive';
+    } else if (_lastBackupTimeStr != null) {
+      backupAvailability = 'Available on Local Device Only';
+    } else if (_gDriveLastSyncTime != null) {
+      backupAvailability = 'Available on Google Drive Only';
+    } else {
+      backupAvailability = 'No backup created yet';
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1522,12 +2026,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '📦 Smart Single Backup (Data + Photos + Settings)',
+                              '📦 Smart Backup (Local & Google Drive)',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Hamesha ek hi file update hoti hai ("HaroonTailor_Backup.zip"). Duplicate files nahi banti aur backup super fast hota hai.',
+                              'File: "HaroonTailor_Backup.zip" — Complete orders, naap measurements, photos & settings.',
                               style: TextStyle(fontSize: 12, color: Colors.white70),
                             ),
                           ],
@@ -1536,46 +2040,64 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Last Backup Status Badge
+                  // Storage Location & Details Badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.white24),
                     ),
-                    child: Row(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Icon(
-                            _lastBackupTimeStr != null ? Icons.check_circle : Icons.info_outline,
-                            size: 16,
-                            color: _lastBackupTimeStr != null ? const Color(0xFF86EFAC) : Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _lastBackupTimeStr != null
-                                    ? 'Last Backup: ${_formatBackupDate(_lastBackupTimeStr)}  •  ${_lastBackupSizeBytes != null ? _formatFileSize(_lastBackupSizeBytes!) : ""}'
-                                    : 'Status: Abhi tak koi backup nahi liya gaya.',
-                                style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                        Row(
+                          children: [
+                            Icon(
+                              _lastBackupTimeStr != null || _gDriveLastSyncTime != null
+                                  ? Icons.check_circle
+                                  : Icons.info_outline,
+                              size: 16,
+                              color: _lastBackupTimeStr != null ? const Color(0xFF86EFAC) : Colors.white70,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                backupAvailability,
+                                style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
                               ),
-                              if (_lastBackupPath != null && _lastBackupPath!.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Path: $_lastBackupPath',
-                                  style: const TextStyle(fontSize: 11, color: Colors.white70),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ],
-                          ),
+                            ),
+                            if (_lastBackupSizeBytes != null)
+                              Text(
+                                _formatFileSize(_lastBackupSizeBytes!),
+                                style: const TextStyle(fontSize: 11, color: Colors.white70),
+                              ),
+                          ],
+                        ),
+                        const Divider(color: Colors.white24, height: 16),
+                        _buildLocationRow(Icons.folder, 'Local File', _lastBackupPath ?? 'haroon_tailor_app/storage/HaroonTailor_Backup.zip'),
+                        const SizedBox(height: 4),
+                        _buildLocationRow(
+                          Icons.cloud,
+                          'Drive File',
+                          _gDriveConnected ? 'Google Drive: My Drive / HaroonTailor_Backup.zip' : 'Google Drive: Not Connected',
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Local: ${_formatBackupDate(_lastBackupTimeStr)}',
+                                style: const TextStyle(fontSize: 11, color: Colors.white70),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                'Cloud: ${_formatBackupDate(_gDriveLastSyncTime)}',
+                                style: const TextStyle(fontSize: 11, color: Colors.white70),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1602,7 +2124,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.unarchive, size: 20),
-                          label: const Text('Restore ZIP', style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: const Text('Restore Data', style: TextStyle(fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white.withValues(alpha: 0.15),
                             foregroundColor: Colors.white,
@@ -1623,7 +2145,108 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 16),
 
-
+          // ★ GOOGLE DRIVE AUTO-BACKUP & SYNC CARD
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.cloud_sync, color: Color(0xFF2563EB), size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Google Drive Auto Backup & Sync',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
+                            ),
+                            Text(
+                              _gDriveConnected
+                                  ? 'Connected as: ${_gDriveEmail ?? "Google Account"}'
+                                  : 'Not connected. Connect to auto-sync your data.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _gDriveConnected ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                                fontWeight: _gDriveConnected ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _gDriveConnected ? Colors.red : const Color(0xFF2563EB),
+                          side: BorderSide(color: _gDriveConnected ? Colors.red.shade200 : const Color(0xFF2563EB)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: _gDriveConnected ? _disconnectGoogleDrive : _connectGoogleDriveDialog,
+                        child: Text(_gDriveConnected ? 'Disconnect' : 'Connect'),
+                      ),
+                    ],
+                  ),
+                  if (_gDriveConnected) ...[
+                    const Divider(height: 24),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Auto-Backup to Google Drive', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: const Text(
+                        'Automatically backs up orders and data changes in background (debounced).',
+                        style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      ),
+                      value: _gDriveAutoSync,
+                      activeThumbColor: const Color(0xFF2563EB),
+                      onChanged: (val) async {
+                        await GoogleDriveService.setAutoSyncEnabled(val);
+                        setState(() => _gDriveAutoSync = val);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Status: $_gDriveSyncStatus',
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          icon: _isGDriveSyncing
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.cloud_upload, size: 16),
+                          label: const Text('Sync to Drive Now', style: TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _isGDriveSyncing ? null : _syncToGoogleDriveNow,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // Testing & Reset
           Card(
@@ -1647,6 +2270,24 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLocationRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 13, color: Colors.white70),
+        const SizedBox(width: 6),
+        Text('$label: ', style: const TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold)),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 11, color: Colors.white),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 

@@ -29,8 +29,29 @@ class FileHelper {
   static Future<String?> saveStableBackupZip({
     required Uint8List zipBytes,
     String fileName = 'HaroonTailor_Backup.zip',
+    String? targetDirectoryPath,
   }) async {
-    return await saveStableBackupZipPlatform(zipBytes: zipBytes, fileName: fileName);
+    return await saveStableBackupZipPlatform(
+      zipBytes: zipBytes,
+      fileName: fileName,
+      targetDirectoryPath: targetDirectoryPath,
+    );
+  }
+
+  /// Let user choose a folder/location to save backups
+  static Future<String?> pickFolderLocation() async {
+    return await pickFolderLocationPlatform();
+  }
+
+  /// Let user choose location via native system file picker
+  static Future<String?> saveBackupViaSystemPicker({
+    required Uint8List zipBytes,
+    String fileName = 'HaroonTailor_Backup.zip',
+  }) async {
+    return await saveBackupViaSystemPickerPlatform(
+      zipBytes: zipBytes,
+      fileName: fileName,
+    );
   }
 
   /// Retrieve raw bytes of the current stable backup ZIP to reuse unchanged photos incrementally

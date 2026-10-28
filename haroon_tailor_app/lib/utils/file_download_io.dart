@@ -108,7 +108,7 @@ Future<String?> pickJsonFileFromDevice() async {
 
 /// Resolves preferred directory for storing the single backup ZIP.
 /// Uses getApplicationDocumentsDirectory() which is 100% guaranteed writable
-/// on all Android versions without Scoped Storage restrictions.
+/// on all Android/iOS/Desktop versions.
 Future<Directory> getBackupDirectory() async {
   Directory? targetDir;
   try {
@@ -125,11 +125,13 @@ Future<Directory> getBackupDirectory() async {
 
 /// Atomically saves or updates the stable backup ZIP archive.
 /// 1. Validates archive integrity in-memory before writing.
-/// 2. Saves to primary app documents directory (100% reliable on all Android versions).
-/// 3. Also copies to public Android Download folder for easy sharing to other devices.
+/// 2. Uses a safe temporary file (.tmp) and atomic replace to never leave a corrupted file.
+/// 3. Saves to primary app documents directory.
+/// 4. Saves to custom directory if provided.
 Future<String?> saveStableBackupZipPlatform({
   required Uint8List zipBytes,
   String fileName = 'HaroonTailor_Backup.zip',
+  String? targetDirectoryPath,
 }) async {
   // 1. Validate archive integrity and ensure backup.json exists
   final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);
@@ -138,25 +140,70 @@ Future<String?> saveStableBackupZipPlatform({
     throw Exception('Backup validation failed: backup.json is missing in archive');
   }
 
-  // 2. Primary safe save: App Documents Directory (never fails)
+  // 2. Primary safe save: App Documents Directory (Atomic replacement)
   final dir = await getBackupDirectory();
   final primaryFile = File('${dir.path}/$fileName');
-  await primaryFile.writeAsBytes(zipBytes, flush: true);
+  final tmpFile = File('${dir.path}/$fileName.tmp');
 
-  // 3. Secondary public save: Android Download folder (so user can copy/share to other devices)
-  try {
-    if (Platform.isAndroid) {
-      final downloadDir = Directory('/storage/emulated/0/Download');
-      if (await downloadDir.exists()) {
-        final publicFile = File('${downloadDir.path}/$fileName');
-        await publicFile.writeAsBytes(zipBytes, flush: true);
+  await tmpFile.writeAsBytes(zipBytes, flush: true);
+
+  if (await primaryFile.exists()) {
+    try {
+      await primaryFile.delete();
+    } catch (_) {}
+  }
+  await tmpFile.rename(primaryFile.path);
+
+  // 3. Custom folder if selected by user (Atomic replacement)
+  if (targetDirectoryPath != null && targetDirectoryPath.trim().isNotEmpty) {
+    try {
+      final customDir = Directory(targetDirectoryPath.trim());
+      if (!await customDir.exists()) {
+        await customDir.create(recursive: true);
       }
-    }
-  } catch (_) {
-    // Non-fatal if scoped storage blocks direct public write; primaryFile is safely saved!
+      final customFile = File('${customDir.path}/$fileName');
+      final customTmp = File('${customDir.path}/$fileName.tmp');
+      await customTmp.writeAsBytes(zipBytes, flush: true);
+      if (await customFile.exists()) {
+        try {
+          await customFile.delete();
+        } catch (_) {}
+      }
+      await customTmp.rename(customFile.path);
+      return customFile.path;
+    } catch (_) {}
+  } else {
+    // 4. Fallback public save to Android Download folder if accessible
+    try {
+      if (Platform.isAndroid) {
+        final downloadDir = Directory('/storage/emulated/0/Download');
+        if (await downloadDir.exists()) {
+          final publicFile = File('${downloadDir.path}/$fileName');
+          final publicTmp = File('${downloadDir.path}/$fileName.tmp');
+          await publicTmp.writeAsBytes(zipBytes, flush: true);
+          if (await publicFile.exists()) {
+            try {
+              await publicFile.delete();
+            } catch (_) {}
+          }
+          await publicTmp.rename(publicFile.path);
+        }
+      }
+    } catch (_) {}
   }
 
   return primaryFile.path;
+}
+
+Future<String?> pickFolderLocationPlatform() async {
+  return null;
+}
+
+Future<String?> saveBackupViaSystemPickerPlatform({
+  required Uint8List zipBytes,
+  String fileName = 'HaroonTailor_Backup.zip',
+}) async {
+  return await saveStableBackupZipPlatform(zipBytes: zipBytes, fileName: fileName);
 }
 
 /// Retrieves the raw bytes of the existing single backup ZIP (if present)

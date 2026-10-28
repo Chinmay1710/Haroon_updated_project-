@@ -8,10 +8,13 @@ import 'screens/new_order_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/pending_payments_screen.dart';
 import 'services/local_storage_service.dart';
+import 'services/zip_backup_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await LocalStorageService.initStorage();
+  ZipBackupService.registerAutoSyncHook();
+  ZipBackupService.checkAndPerformAutoBackup().ignore();
   runApp(const HaroonTailorApp());
 }
 

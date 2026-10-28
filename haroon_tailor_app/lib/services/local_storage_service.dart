@@ -17,6 +17,21 @@ class LocalStorageService {
 
   static bool _initialized = false;
 
+  // In-memory performance cache layer (eliminates redundant disk reads & JSON decodes)
+  static List<dynamic>? _memoryOrdersCache;
+  static List<dynamic>? _memoryCustomersCache;
+  static final Map<int, Map<String, dynamic>> _memoryOrderDetailsCache = {};
+  static final Map<int, List<Map<String, dynamic>>> _memoryMeasurementsCache = {};
+
+  // Safety snapshot for rollback on restore failures
+  static Map<String, dynamic>? _safetySnapshot;
+
+  // Data change notification hook for Google Drive auto-sync
+  static void Function()? onDataChanged;
+  static void notifyDataChanged() {
+    onDataChanged?.call();
+  }
+
   /// Initializes local storage, verifies disk files, and auto-seeds initial master data on first launch
   static const String _keyCleanFreshState = 'ht_is_clean_fresh_state';
 
@@ -57,6 +72,7 @@ class LocalStorageService {
   // -------------------------------------------------------------
   static Future<void> saveOrders(List<dynamic> orders) async {
     try {
+      _memoryOrdersCache = List<dynamic>.from(orders);
       final jsonStr = jsonEncode(orders);
       // 1. Permanent file write directly to disk (never lost!)
       await saveJsonToFile('haroon_orders_data.json', jsonStr);
@@ -64,16 +80,21 @@ class LocalStorageService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyOrders, jsonStr);
       await _recordSyncTime();
+      notifyDataChanged();
     } catch (_) {}
   }
 
   static Future<List<dynamic>?> getCachedOrders() async {
+    if (_memoryOrdersCache != null) return _memoryOrdersCache;
     try {
       // 1. Try reading from permanent disk file
       final fromDisk = await readJsonFromFile('haroon_orders_data.json');
       if (fromDisk != null && fromDisk.isNotEmpty) {
         final decoded = jsonDecode(fromDisk);
-        if (decoded is List) return decoded;
+        if (decoded is List) {
+          _memoryOrdersCache = decoded;
+          return decoded;
+        }
       }
       // 2. Fallback to SharedPreferences
       final prefs = await SharedPreferences.getInstance();
@@ -82,6 +103,7 @@ class LocalStorageService {
         final decoded = jsonDecode(raw);
         if (decoded is List) {
           // Sync back to disk for durability
+          _memoryOrdersCache = decoded;
           await saveJsonToFile('haroon_orders_data.json', raw);
           return decoded;
         }
@@ -99,14 +121,17 @@ class LocalStorageService {
       if (cleanOrder['cloth_photos'] != null) {
         cleanOrder['cloth_photos'] = sanitizePhotoList(cleanOrder['cloth_photos']);
       }
+      _memoryOrderDetailsCache[orderId] = cleanOrder;
       final jsonStr = jsonEncode(cleanOrder);
       await saveJsonToFile('haroon_order_$orderId.json', jsonStr);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ht_cache_order_$orderId', jsonStr);
+      notifyDataChanged();
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>?> getCachedOrderDetails(int orderId) async {
+    if (_memoryOrderDetailsCache.containsKey(orderId)) {
+      return _memoryOrderDetailsCache[orderId];
+    }
     try {
       final fromDisk = await readJsonFromFile('haroon_order_$orderId.json');
       if (fromDisk != null && fromDisk.isNotEmpty) {
@@ -115,6 +140,7 @@ class LocalStorageService {
           if (decoded['cloth_photos'] != null) {
             decoded['cloth_photos'] = sanitizePhotoList(decoded['cloth_photos']);
           }
+          _memoryOrderDetailsCache[orderId] = decoded;
           return decoded;
         }
       }
@@ -126,6 +152,7 @@ class LocalStorageService {
           if (decoded['cloth_photos'] != null) {
             decoded['cloth_photos'] = sanitizePhotoList(decoded['cloth_photos']);
           }
+          _memoryOrderDetailsCache[orderId] = decoded;
           await saveJsonToFile('haroon_order_$orderId.json', raw);
           return decoded;
         }
@@ -235,26 +262,33 @@ class LocalStorageService {
   // -------------------------------------------------------------
   static Future<void> saveCustomers(List<dynamic> customers) async {
     try {
+      _memoryCustomersCache = List<dynamic>.from(customers);
       final jsonStr = jsonEncode(customers);
       await saveJsonToFile('haroon_customers_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_keyCustomers, jsonStr);
       await _recordSyncTime();
+      notifyDataChanged();
     } catch (_) {}
   }
 
   static Future<List<dynamic>?> getCachedCustomers() async {
+    if (_memoryCustomersCache != null) return _memoryCustomersCache;
     try {
       final fromDisk = await readJsonFromFile('haroon_customers_data.json');
       if (fromDisk != null && fromDisk.isNotEmpty) {
         final decoded = jsonDecode(fromDisk);
-        if (decoded is List) return decoded;
+        if (decoded is List) {
+          _memoryCustomersCache = decoded;
+          return decoded;
+        }
       }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_keyCustomers);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
         if (decoded is List) {
+          _memoryCustomersCache = decoded;
           await saveJsonToFile('haroon_customers_data.json', raw);
           return decoded;
         }
@@ -485,7 +519,9 @@ class LocalStorageService {
       'updated_at': DateTime.now().toIso8601String(),
     };
 
-    final index = orders.indexWhere((o) => o is Map && o['id']?.toString() == finalId.toString());
+    final index = orders.indexWhere((o) =>
+        (finalId > 0 && orderMatchesId(o, finalId)) ||
+        (billNo.isNotEmpty && o is Map && (o['order_number'] ?? '').toString() == billNo));
     if (index >= 0) {
       orders[index] = orderMap;
     } else {
@@ -497,10 +533,23 @@ class LocalStorageService {
     await computeDashboardStatsFromOrders();
     await computePendingOrdersFromOrders();
 
-    final customerId = (orderMap['customer_id'] as num?)?.toInt() ??
+    int customerId = (orderMap['customer_id'] as num?)?.toInt() ??
         (orderMap['customerId'] as num?)?.toInt() ??
         int.tryParse(orderMap['customer_id']?.toString() ?? '') ??
         0;
+    if (customerId <= 0) {
+      final cMobile = (orderMap['customer_mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+      final allCusts = (await getCachedCustomers()) ?? [];
+      for (var c in allCusts) {
+        if (c is Map) {
+          final m = (c['mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+          if (cMobile.isNotEmpty && m.isNotEmpty && (m == cMobile || m.endsWith(cMobile) || cMobile.endsWith(m))) {
+            customerId = int.tryParse(c['id']?.toString() ?? '') ?? 0;
+            break;
+          }
+        }
+      }
+    }
     if (customerId > 0) {
       await computeCustomerDetailsOffline(customerId);
     }
@@ -515,6 +564,7 @@ class LocalStorageService {
 
   static bool orderMatchesId(dynamic o, int targetId) {
     if (o is! Map) return false;
+    if (targetId <= 0) return false;
     final idVal = o['id'];
     if (idVal == targetId) return true;
     final idNum = int.tryParse(idVal?.toString() ?? '');
@@ -539,19 +589,29 @@ class LocalStorageService {
   }) async {
     final cached = (await getCachedOrders()) ?? [];
     final List<dynamic> orders = List<dynamic>.from(cached);
-    final index = orders.indexWhere((o) => orderMatchesId(o, orderId));
+    int index = orders.indexWhere((o) => orderMatchesId(o, orderId));
 
     Map<String, dynamic>? targetOrder;
-    int? matchedCustomerId;
     if (index >= 0 && orders[index] is Map) {
       targetOrder = Map<String, dynamic>.from(orders[index] as Map);
+    } else {
+      // Fallback: Check cached individual order details
+      final details = await getCachedOrderDetails(orderId);
+      if (details != null && details.isNotEmpty) {
+        targetOrder = Map<String, dynamic>.from(details);
+        final bNo = (targetOrder['order_number'] ?? '').toString();
+        if (bNo.isNotEmpty) {
+          index = orders.indexWhere((o) => o is Map && (o['order_number'] ?? '').toString() == bNo);
+        }
+      }
+    }
+
+    if (targetOrder != null) {
       targetOrder['status'] = status;
       if (readyItemIds != null) {
         targetOrder['ready_item_ids'] = readyItemIds;
       }
       targetOrder['updated_at'] = DateTime.now().toIso8601String();
-
-      matchedCustomerId = int.tryParse((targetOrder['customer_id'] ?? targetOrder['customerId'] ?? '').toString());
 
       // If raw_items exist, update is_ready for checkboxes
       if (targetOrder['raw_items'] is List) {
@@ -595,24 +655,9 @@ class LocalStorageService {
         targetOrder['items_detail'] = itemsList;
       }
 
-      orders[index] = targetOrder;
-      await saveOrders(orders);
-    }
-
-    // Also update order details cache
-    final details = await getCachedOrderDetails(orderId);
-    if (details != null && details.isNotEmpty) {
-      final updatedDetails = Map<String, dynamic>.from(details);
-      updatedDetails['status'] = status;
-      updatedDetails['updated_at'] = DateTime.now().toIso8601String();
-      if (readyItemIds != null) {
-        updatedDetails['ready_item_ids'] = readyItemIds;
-      }
-
-      matchedCustomerId ??= int.tryParse((updatedDetails['customer_id'] ?? updatedDetails['customerId'] ?? '').toString());
-
-      if (updatedDetails['items'] is List) {
-        final itemsList = List<dynamic>.from(updatedDetails['items'] as List);
+      // If items exist, update it too
+      if (targetOrder['items'] is List) {
+        final itemsList = List<dynamic>.from(targetOrder['items'] as List);
         for (int i = 0; i < itemsList.length; i++) {
           if (itemsList[i] is Map) {
             final itemMap = Map<String, dynamic>.from(itemsList[i] as Map);
@@ -637,20 +682,59 @@ class LocalStorageService {
             itemsList[i] = itemMap;
           }
         }
-        updatedDetails['items'] = itemsList;
+        targetOrder['items'] = itemsList;
       }
-      await saveOrderDetails(orderId, updatedDetails);
-    } else if (targetOrder != null) {
+
+      bool updatedAny = false;
+      final billNumStr = (targetOrder['order_number'] ?? '').toString().trim();
+      for (int i = 0; i < orders.length; i++) {
+        if (orders[i] is Map) {
+          final oMap = orders[i] as Map;
+          final oBNo = (oMap['order_number'] ?? '').toString().trim();
+          if (orderMatchesId(oMap, orderId) || (billNumStr.isNotEmpty && oBNo.isNotEmpty && oBNo == billNumStr)) {
+            orders[i] = targetOrder;
+            updatedAny = true;
+          }
+        }
+      }
+      if (!updatedAny) {
+        orders.insert(0, targetOrder);
+      }
+      await saveOrders(orders);
+
+      // Save order details cache under orderId, altId, and bill number digits
       await saveOrderDetails(orderId, targetOrder);
-    }
+      final altId = int.tryParse((targetOrder['id'] ?? '').toString());
+      if (altId != null && altId > 0 && altId != orderId) {
+        await saveOrderDetails(altId, targetOrder);
+      }
+      final bNoDigits = int.tryParse(RegExp(r'\d+').allMatches(billNumStr).lastOrNull?.group(0) ?? '');
+      if (bNoDigits != null && bNoDigits > 0 && bNoDigits != orderId && bNoDigits != altId) {
+        await saveOrderDetails(bNoDigits, targetOrder);
+      }
 
-    // Recompute dashboard stats and refresh deliveries and pending orders cache
-    await computeDashboardStatsFromOrders();
-    await computePendingOrdersFromOrders();
+      // Recompute dashboard stats and refresh deliveries and pending orders cache
+      await computeDashboardStatsFromOrders();
+      await computePendingOrdersFromOrders();
 
-    // Synchronize customer profile so updated status immediately reflects there
-    if (matchedCustomerId != null && matchedCustomerId > 0) {
-      await computeCustomerDetailsOffline(matchedCustomerId);
+      // Synchronize customer profile so updated status immediately reflects there
+      int? matchedCustomerId = int.tryParse((targetOrder['customer_id'] ?? targetOrder['customerId'] ?? '').toString());
+      if (matchedCustomerId == null || matchedCustomerId <= 0) {
+        final cMobile = (targetOrder['customer_mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+        final allCusts = (await getCachedCustomers()) ?? [];
+        for (var c in allCusts) {
+          if (c is Map) {
+            final m = (c['mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+            if (cMobile.isNotEmpty && m.isNotEmpty && (m == cMobile || m.endsWith(cMobile) || cMobile.endsWith(m))) {
+              matchedCustomerId = int.tryParse(c['id']?.toString() ?? '');
+              break;
+            }
+          }
+        }
+      }
+      if (matchedCustomerId != null && matchedCustomerId > 0) {
+        await computeCustomerDetailsOffline(matchedCustomerId);
+      }
     }
 
     return {
@@ -676,57 +760,94 @@ class LocalStorageService {
   }) async {
     final cached = (await getCachedOrders()) ?? [];
     final List<dynamic> orders = List<dynamic>.from(cached);
-    final index = orders.indexWhere((o) => orderMatchesId(o, orderId));
+    int index = orders.indexWhere((o) => orderMatchesId(o, orderId));
 
-    int? matchedCustomerId;
+    Map<String, dynamic>? targetOrder;
     if (index >= 0 && orders[index] is Map) {
-      final order = Map<String, dynamic>.from(orders[index] as Map);
-      final currentAdvance = (order['advance_amount'] as num?)?.toDouble() ?? double.tryParse((order['advance_amount'] ?? 0).toString()) ?? 0.0;
-      final currentRemaining = (order['remaining_amount'] as num?)?.toDouble() ?? double.tryParse((order['remaining_amount'] ?? 0).toString()) ?? 0.0;
+      targetOrder = Map<String, dynamic>.from(orders[index] as Map);
+    } else {
+      // Fallback: check order details cache
+      final details = await getCachedOrderDetails(orderId);
+      if (details != null && details.isNotEmpty) {
+        targetOrder = Map<String, dynamic>.from(details);
+        final bNo = (targetOrder['order_number'] ?? '').toString();
+        if (bNo.isNotEmpty) {
+          index = orders.indexWhere((o) => o is Map && (o['order_number'] ?? '').toString() == bNo);
+        }
+      }
+    }
+
+    if (targetOrder != null) {
+      final currentAdvance = (targetOrder['advance_amount'] as num?)?.toDouble() ??
+          double.tryParse((targetOrder['advance_amount'] ?? 0).toString()) ??
+          0.0;
+      final currentRemaining = (targetOrder['remaining_amount'] as num?)?.toDouble() ??
+          double.tryParse((targetOrder['remaining_amount'] ?? 0).toString()) ??
+          0.0;
 
       final newAdvance = currentAdvance + amount;
       final newRemaining = (currentRemaining - amount) < 0 ? 0.0 : (currentRemaining - amount);
 
-      order['advance_amount'] = newAdvance;
-      order['remaining_amount'] = newRemaining;
+      targetOrder['advance_amount'] = newAdvance;
+      targetOrder['remaining_amount'] = newRemaining;
 
-      // Add payment entry to payments list if present
-      final List<dynamic> paymentsList = order['payments'] is List ? List<dynamic>.from(order['payments'] as List) : [];
+      // Add payment entry to payments list
+      final List<dynamic> paymentsList = targetOrder['payments'] is List
+          ? List<dynamic>.from(targetOrder['payments'] as List)
+          : [];
       paymentsList.add({
         'amount': amount,
         'payment_method': paymentMethod,
         'payment_date': DateTime.now().toIso8601String(),
       });
-      order['payments'] = paymentsList;
+      targetOrder['payments'] = paymentsList;
 
-      orders[index] = order;
-      matchedCustomerId = int.tryParse((order['customer_id'] ?? order['customerId'] ?? '').toString());
-
+      bool updatedAny = false;
+      final billNumStr = (targetOrder['order_number'] ?? '').toString().trim();
+      for (int i = 0; i < orders.length; i++) {
+        if (orders[i] is Map) {
+          final oMap = orders[i] as Map;
+          final oBNo = (oMap['order_number'] ?? '').toString().trim();
+          if (orderMatchesId(oMap, orderId) || (billNumStr.isNotEmpty && oBNo.isNotEmpty && oBNo == billNumStr)) {
+            orders[i] = targetOrder;
+            updatedAny = true;
+          }
+        }
+      }
+      if (!updatedAny) {
+        orders.insert(0, targetOrder);
+      }
       await saveOrders(orders);
 
-      // Also update order details cache preserving items, photos etc.
-      final details = await getCachedOrderDetails(orderId);
-      if (details != null && details.isNotEmpty) {
-        final updatedDetails = Map<String, dynamic>.from(details);
-        updatedDetails['advance_amount'] = newAdvance;
-        updatedDetails['remaining_amount'] = newRemaining;
-        final List<dynamic> dPayments = updatedDetails['payments'] is List ? List<dynamic>.from(updatedDetails['payments'] as List) : [];
-        dPayments.add({
-          'amount': amount,
-          'payment_method': paymentMethod,
-          'payment_date': DateTime.now().toIso8601String(),
-        });
-        updatedDetails['payments'] = dPayments;
-        matchedCustomerId ??= int.tryParse((updatedDetails['customer_id'] ?? updatedDetails['customerId'] ?? '').toString());
-        await saveOrderDetails(orderId, updatedDetails);
-      } else {
-        await saveOrderDetails(orderId, order);
+      // Save order details cache under orderId, altId, and bill number digits
+      await saveOrderDetails(orderId, targetOrder);
+      final altId = int.tryParse((targetOrder['id'] ?? '').toString());
+      if (altId != null && altId > 0 && altId != orderId) {
+        await saveOrderDetails(altId, targetOrder);
+      }
+      final bNoDigits = int.tryParse(RegExp(r'\d+').allMatches(billNumStr).lastOrNull?.group(0) ?? '');
+      if (bNoDigits != null && bNoDigits > 0 && bNoDigits != orderId && bNoDigits != altId) {
+        await saveOrderDetails(bNoDigits, targetOrder);
       }
 
       await computeDashboardStatsFromOrders();
       await computePendingOrdersFromOrders();
 
-      // Synchronize customer profile so updated payment and Rs. 0 balance immediately reflect there
+      // Synchronize customer profile so updated payment and balance immediately reflect
+      int? matchedCustomerId = int.tryParse((targetOrder['customer_id'] ?? targetOrder['customerId'] ?? '').toString());
+      if (matchedCustomerId == null || matchedCustomerId <= 0) {
+        final cMobile = (targetOrder['customer_mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+        final allCusts = (await getCachedCustomers()) ?? [];
+        for (var c in allCusts) {
+          if (c is Map) {
+            final m = (c['mobile'] ?? '').toString().replaceAll('+91', '').replaceAll(' ', '').trim();
+            if (cMobile.isNotEmpty && m.isNotEmpty && (m == cMobile || m.endsWith(cMobile) || cMobile.endsWith(m))) {
+              matchedCustomerId = int.tryParse(c['id']?.toString() ?? '');
+              break;
+            }
+          }
+        }
+      }
       if (matchedCustomerId != null && matchedCustomerId > 0) {
         await computeCustomerDetailsOffline(matchedCustomerId);
       }
@@ -820,7 +941,10 @@ class LocalStorageService {
     } catch (_) {}
   }
 
-  static Future<List<Map<String, dynamic>>> getCustomerMeasurementsOffline(int customerId) async {
+  static Future<List<Map<String, dynamic>>> getCustomerMeasurementsOffline(
+    int customerId, [
+    List<dynamic>? preloadedOrders,
+  ]) async {
     final List<Map<String, dynamic>> results = [];
     final seenKeys = <String>{};
 
@@ -843,7 +967,7 @@ class LocalStorageService {
     }
 
     // 2. Scan all previous orders of this customer for past garment measurements
-    final orders = (await getCachedOrders()) ?? [];
+    final orders = preloadedOrders ?? (await getCachedOrders()) ?? [];
     for (var o in orders) {
       if (o is! Map) continue;
       final cid = (o['customer_id'] as num?)?.toInt() ??
@@ -936,13 +1060,51 @@ class LocalStorageService {
       return false;
     }).toList();
 
+    // Deduplicate customer orders and enrich from single order details cache
+    final seenKeys = <String>{};
+    final uniqueCustomerOrders = <Map<String, dynamic>>[];
+    for (var o in customerOrders) {
+      if (o is! Map) continue;
+      final oMap = Map<String, dynamic>.from(o);
+      final bNo = (oMap['order_number'] ?? '').toString().trim();
+      final oId = (oMap['id'] ?? '').toString().trim();
+      final key = bNo.isNotEmpty ? bNo : (oId.isNotEmpty ? 'id_$oId' : '');
+      if (key.isNotEmpty && seenKeys.contains(key)) {
+        continue;
+      }
+      if (key.isNotEmpty) seenKeys.add(key);
+
+      // Check if there is a more up-to-date single order cache for this order
+      final oIdNum = int.tryParse(oId) ?? 0;
+      if (oIdNum > 0) {
+        final cachedDetail = await getCachedOrderDetails(oIdNum);
+        if (cachedDetail != null && cachedDetail.isNotEmpty) {
+          if (cachedDetail['status'] != null) oMap['status'] = cachedDetail['status'];
+          if (cachedDetail['remaining_amount'] != null) oMap['remaining_amount'] = cachedDetail['remaining_amount'];
+          if (cachedDetail['advance_amount'] != null) oMap['advance_amount'] = cachedDetail['advance_amount'];
+          if (cachedDetail['total_amount'] != null) oMap['total_amount'] = cachedDetail['total_amount'];
+          if (cachedDetail['payments'] != null) oMap['payments'] = cachedDetail['payments'];
+        }
+      }
+      uniqueCustomerOrders.add(oMap);
+    }
+
+    // Calculate customer total pending amount from the latest orders
+    double calculatedPending = 0.0;
+    for (var o in uniqueCustomerOrders) {
+      final rem = (o['remaining_amount'] as num?)?.toDouble() ??
+          double.tryParse((o['remaining_amount'] ?? 0).toString()) ??
+          0.0;
+      calculatedPending += rem;
+    }
+
     if (customer == null) {
       String name = 'Customer';
       String phone = '';
       String address = '';
       String notes = '';
-      if (customerOrders.isNotEmpty) {
-        final first = customerOrders.first as Map;
+      if (uniqueCustomerOrders.isNotEmpty) {
+        final first = uniqueCustomerOrders.first;
         name = (first['customer_name'] ?? 'Customer').toString();
         phone = (first['customer_mobile'] ?? '').toString();
         address = (first['customer_address'] ?? '').toString();
@@ -953,7 +1115,30 @@ class LocalStorageService {
         'mobile': phone,
         'address': address,
         'notes': notes,
+        'pending_amount': calculatedPending,
+        'orders_count': uniqueCustomerOrders.length,
       };
+    } else {
+      customer['pending_amount'] = calculatedPending;
+      customer['orders_count'] = uniqueCustomerOrders.length;
+
+      // Also update customer in the cached customers list so customers_screen has the updated due
+      try {
+        final allCusts = (await getCachedCustomers()) ?? [];
+        final List<dynamic> updatedCusts = List<dynamic>.from(allCusts);
+        final cIdx = updatedCusts.indexWhere((c) {
+          if (c is! Map) return false;
+          final cid = (c['id'] as num?)?.toInt() ?? int.tryParse(c['id']?.toString() ?? '');
+          return cid == customerId;
+        });
+        if (cIdx >= 0 && updatedCusts[cIdx] is Map) {
+          final cMap = Map<String, dynamic>.from(updatedCusts[cIdx] as Map);
+          cMap['pending_amount'] = calculatedPending;
+          cMap['orders_count'] = uniqueCustomerOrders.length;
+          updatedCusts[cIdx] = cMap;
+          await saveCustomers(updatedCusts);
+        }
+      } catch (_) {}
     }
 
     List<dynamic> profiles = await getCustomerMeasurementsOffline(customerId);
@@ -966,7 +1151,7 @@ class LocalStorageService {
 
     final result = {
       'customer': customer,
-      'orders': customerOrders,
+      'orders': uniqueCustomerOrders,
       'profiles': profiles,
     };
 
@@ -1853,9 +2038,87 @@ class LocalStorageService {
   }
 
   // -------------------------------------------------------------
-  // MASTER BACKUP RESTORE (Full 360 Orders, Photos, Measurements, Customers)
+  // MASTER BACKUP RESTORE (Full Orders, Photos, Measurements, Customers)
   // -------------------------------------------------------------
+  static Future<void> createSafetySnapshot() async {
+    try {
+      _safetySnapshot = {
+        'orders': await getCachedOrders(),
+        'customers': await getCachedCustomers(),
+        'dashboard': await getCachedDashboardStats(),
+        'settings': await getCachedShopSettings(),
+        'pending_orders': await getCachedPendingOrders(),
+        'deliveries': await getCachedDeliveries(),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    } catch (_) {}
+  }
+
+  static Future<bool> restoreSafetySnapshot() async {
+    if (_safetySnapshot == null) return false;
+    try {
+      if (_safetySnapshot!['orders'] != null) {
+        await saveOrders(List<dynamic>.from(_safetySnapshot!['orders']));
+      }
+      if (_safetySnapshot!['customers'] != null) {
+        await saveCustomers(List<dynamic>.from(_safetySnapshot!['customers']));
+      }
+      if (_safetySnapshot!['settings'] != null) {
+        await saveShopSettings(Map<String, dynamic>.from(_safetySnapshot!['settings']));
+      }
+      if (_safetySnapshot!['dashboard'] != null) {
+        await saveDashboardStats(Map<String, dynamic>.from(_safetySnapshot!['dashboard']));
+      }
+      if (_safetySnapshot!['pending_orders'] != null) {
+        await savePendingOrders(List<dynamic>.from(_safetySnapshot!['pending_orders']));
+      }
+      if (_safetySnapshot!['deliveries'] != null) {
+        await saveDeliveries(Map<String, dynamic>.from(_safetySnapshot!['deliveries']));
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Conflict detection: Checks if current local data has records modified more recently than the backup's export timestamp
+  static Future<bool> isLocalDataNewerThan(String? backupTimestamp) async {
+    if (backupTimestamp == null || backupTimestamp.isEmpty) return false;
+    try {
+      final backupDt = DateTime.parse(backupTimestamp);
+      final orders = await getCachedOrders();
+      if (orders == null || orders.isEmpty) return false;
+      for (var o in orders) {
+        if (o is Map) {
+          final updatedStr = (o['updated_at'] ?? o['order_date'] ?? '').toString();
+          if (updatedStr.isNotEmpty) {
+            final orderDt = DateTime.tryParse(updatedStr);
+            if (orderDt != null && orderDt.isAfter(backupDt.add(const Duration(minutes: 5)))) {
+              return true;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  static int _safeInt(dynamic v, [int fallback = 0]) {
+    if (v == null) return fallback;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fallback;
+  }
+
+  static double _safeDouble(dynamic v, [double fallback = 0.0]) {
+    if (v == null) return fallback;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fallback;
+  }
+
   static Future<Map<String, dynamic>> importMasterBackupMap(Map<String, dynamic> data) async {
+    // 0. Create safety snapshot of current data before modifying anything
+    await createSafetySnapshot();
+
     int importedCustomers = 0;
     int importedOrders = 0;
     int totalPhotos = 0;
@@ -1897,7 +2160,7 @@ class LocalStorageService {
 
         if (data['default_rates'] is Map) {
           final rates = (data['default_rates'] as Map).map(
-            (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+            (k, v) => MapEntry(k.toString(), _safeDouble(v)),
           );
           await saveDefaultRates(rates);
         }
@@ -1914,14 +2177,24 @@ class LocalStorageService {
           await saveMeasurementUnit(data['measurement_unit'] as String);
         }
 
-        if (data['default_delivery_days'] is int) {
-          await saveDefaultDeliveryDays(data['default_delivery_days'] as int);
-        } else if (data['default_delivery_days'] is num) {
-          await saveDefaultDeliveryDays((data['default_delivery_days'] as num).toInt());
+        if (data['default_delivery_days'] != null) {
+          await saveDefaultDeliveryDays(_safeInt(data['default_delivery_days'], 3));
         }
 
         if (data['notes_suggestions'] is List) {
           await saveNotesSuggestions(List<String>.from(data['notes_suggestions']));
+        }
+
+        if (data['clothing_notes_suggestions'] is Map) {
+          final map = <String, List<String>>{};
+          (data['clothing_notes_suggestions'] as Map).forEach((k, v) {
+            if (v is List) {
+              map[k.toString()] = v.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+            }
+          });
+          if (map.isNotEmpty) {
+            await saveClothingNotesSuggestions(map);
+          }
         }
 
         if (data['auto_backup_enabled'] is bool) {
@@ -1942,14 +2215,15 @@ class LocalStorageService {
         for (var c in customersRaw) {
           if (c is Map) {
             final custMap = Map<String, dynamic>.from(c);
-            customersList.add(custMap);
-            final custId = custMap['id'];
-            if (custId is int) {
+            final custId = _safeInt(custMap['id']);
+            if (custId > 0) {
+              custMap['id'] = custId;
               await saveCustomerDetails(custId, {
                 'customer': custMap,
                 'profiles': custMap['profiles'] ?? [],
               });
             }
+            customersList.add(custMap);
             importedCustomers++;
           }
         }
@@ -1980,15 +2254,15 @@ class LocalStorageService {
         for (var o in ordersRaw) {
           if (o is Map) {
             final orderMap = Map<String, dynamic>.from(o);
-            final orderId = orderMap['id'];
-            final remaining = (orderMap['remaining_amount'] as num?)?.toDouble() ?? 0.0;
-            final total = (orderMap['total_amount'] as num?)?.toDouble() ?? 0.0;
-            final status = orderMap['status']?.toString().toUpperCase() ?? 'NEW';
-
-            // Save deep order details (with items, 24 measurements, photos, payments)
-            if (orderId is int) {
-              await saveOrderDetails(orderId, orderMap);
-            }
+            final int parsedOrderId = _safeInt(orderMap['id']);
+            final remaining = _safeDouble(orderMap['remaining_amount']);
+            final total = _safeDouble(orderMap['total_amount']);
+            final advance = _safeDouble(orderMap['advance_amount']);
+            final discount = _safeDouble(orderMap['discount']);
+            
+            // Preserve exact status verbatim without forced uppercase mutation
+            final String rawStatus = (orderMap['status'] ?? orderMap['order_status'] ?? 'NEW').toString();
+            final String status = rawStatus.isNotEmpty ? rawStatus : 'NEW';
 
             // Summary format for list view
             String itemsSummary = orderMap['items_summary']?.toString() ?? '';
@@ -1998,10 +2272,20 @@ class LocalStorageService {
             String photoUrl = '';
             List<dynamic> items = [];
             if (orderMap['raw_items'] is List) {
-              items = orderMap['raw_items'] as List;
+              items = List<dynamic>.from(orderMap['raw_items'] as List);
             } else if (orderMap['items'] is List) {
-              items = orderMap['items'] as List;
+              items = List<dynamic>.from(orderMap['items'] as List);
             }
+
+            final List<dynamic> readyItemIds = [];
+            final List<dynamic> deliveredItemIds = [];
+            if (orderMap['ready_item_ids'] is List) {
+              readyItemIds.addAll(orderMap['ready_item_ids'] as List);
+            }
+            if (orderMap['delivered_item_ids'] is List) {
+              deliveredItemIds.addAll(orderMap['delivered_item_ids'] as List);
+            }
+
             for (var it in items) {
               if (it is Map) {
                 final p = it['image_path']?.toString() ?? '';
@@ -2011,6 +2295,16 @@ class LocalStorageService {
                 }
                 final meas = it['measurements'] as Map<String, dynamic>? ?? {};
                 totalMeasurements += meas.length;
+
+                final itId = it['id'];
+                if (itId != null) {
+                  if (it['is_ready'] == true && !readyItemIds.contains(itId)) {
+                    readyItemIds.add(itId);
+                  }
+                  if (it['is_delivered'] == true && !deliveredItemIds.contains(itId)) {
+                    deliveredItemIds.add(itId);
+                  }
+                }
               }
             }
 
@@ -2022,21 +2316,42 @@ class LocalStorageService {
               }
             }
 
+            // Save deep order details (with items, measurements, photos, payments)
+            if (parsedOrderId > 0) {
+              orderMap['id'] = parsedOrderId;
+              orderMap['total_amount'] = total;
+              orderMap['advance_amount'] = advance;
+              orderMap['remaining_amount'] = remaining;
+              orderMap['discount'] = discount;
+              orderMap['ready_item_ids'] = readyItemIds;
+              orderMap['delivered_item_ids'] = deliveredItemIds;
+              orderMap['status'] = status;
+              await saveOrderDetails(parsedOrderId, orderMap);
+            }
+
             final summaryItem = {
-              'id': orderId,
-              'order_number': orderMap['order_number'] ?? 'Bill-$orderId',
+              'id': parsedOrderId,
+              'order_number': orderMap['order_number'] ?? 'Bill-$parsedOrderId',
               'customer_name': orderMap['customer_name'] ?? 'Unknown',
-              'customer_id': orderMap['customer_id'],
+              'customer_id': _safeInt(orderMap['customer_id']),
               'customer_mobile': orderMap['customer_mobile'] ?? '',
+              'customer_address': orderMap['customer_address'] ?? '',
               'items': itemsSummary.isNotEmpty ? itemsSummary : 'Garments',
+              'items_summary': itemsSummary,
               'raw_items': items,
               'image_path': photoUrl,
               'order_date': orderMap['order_date'] ?? '',
               'delivery_date': orderMap['delivery_date'] ?? '',
               'status': status,
               'total_amount': total,
-              'discount': (orderMap['discount'] as num?)?.toDouble() ?? 0.0,
+              'advance_amount': advance,
+              'discount': discount,
               'remaining_amount': remaining,
+              'special_instructions': orderMap['special_instructions'] ?? '',
+              'payments': orderMap['payments'] ?? [],
+              'ready_item_ids': readyItemIds,
+              'delivered_item_ids': deliveredItemIds,
+              'cloth_photos': orderMap['cloth_photos'] ?? [],
               'updated_at': orderMap['updated_at'] ?? '',
             };
 
@@ -2047,9 +2362,10 @@ class LocalStorageService {
               pendingBalance += remaining;
             }
 
-            if (status == 'DELIVERED') {
+            final upperStatus = status.toUpperCase();
+            if (upperStatus == 'DELIVERED') {
               deliveredOrders++;
-            } else if (status != 'CANCELLED') {
+            } else if (upperStatus != 'CANCELLED') {
               activeOrders++;
             }
 
@@ -2074,7 +2390,7 @@ class LocalStorageService {
           }
 
           final dDate = (o['delivery_date'] ?? '').toString();
-          final s = (o['status'] ?? '').toString();
+          final s = (o['status'] ?? '').toString().toUpperCase();
           final isUndelivered = s != 'DELIVERED' && s != 'CANCELLED';
 
           if (isUndelivered) {
@@ -2124,7 +2440,10 @@ class LocalStorageService {
         'photos_count': totalPhotos,
         'measurements_count': totalMeasurements,
       };
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('IMPORT ERROR: $e\n$stack');
+      // Restore safety snapshot so failure never destroys existing user data!
+      await restoreSafetySnapshot();
       return {
         'success': false,
         'error': e.toString(),
@@ -2227,10 +2546,10 @@ class LocalStorageService {
   static const String _keyLastBackupSize = 'ht_last_backup_size';
   static const String _keyLastBackupPath = 'ht_last_backup_path';
 
-  static Future<void> recordBackupSuccess({required String path, required int sizeBytes}) async {
+  static Future<void> recordBackupSuccess({required String path, required int sizeBytes, String? timestamp}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final nowStr = DateTime.now().toIso8601String();
+      final nowStr = timestamp ?? DateTime.now().toIso8601String();
       await prefs.setString(_keyLastBackupTime, nowStr);
       await prefs.setInt(_keyLastBackupSize, sizeBytes);
       await prefs.setString(_keyLastBackupPath, path);
@@ -2250,11 +2569,40 @@ class LocalStorageService {
     }
   }
 
+  static const String _keyCustomBackupFolder = 'ht_custom_backup_folder';
+
+  static Future<void> setCustomBackupFolder(String? folderPath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (folderPath == null || folderPath.isEmpty) {
+        await prefs.remove(_keyCustomBackupFolder);
+      } else {
+        await prefs.setString(_keyCustomBackupFolder, folderPath);
+      }
+    } catch (_) {}
+  }
+
+  static Future<String?> getCustomBackupFolder() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyCustomBackupFolder);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // -------------------------------------------------------------
   // CLEAR CACHE
   // -------------------------------------------------------------
   static Future<void> clearAll({bool enableOfflineMode = false}) async {
     try {
+      // 0. Invalidate in-memory caches
+      _memoryOrdersCache = null;
+      _memoryCustomersCache = null;
+      _memoryOrderDetailsCache.clear();
+      _memoryMeasurementsCache.clear();
+      _safetySnapshot = null;
+
       // 1. Delete all permanent disk JSON files & clear memory cache
       await clearAllDiskFiles();
 

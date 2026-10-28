@@ -199,9 +199,13 @@ class DashboardScreenState extends State<DashboardScreen> {
                         itemBuilder: (context, index) {
                           final o = _recentOrders[index];
                           final status = o['status']?.toString() ?? 'NEW';
-                          final orderId = (o['id'] is int)
+                          int orderId = (o['id'] is int)
                               ? o['id'] as int
                               : int.tryParse(o['id']?.toString() ?? '0') ?? 0;
+                          if (orderId <= 0) {
+                            final bDigits = RegExp(r'\d+').allMatches((o['order_number'] ?? '').toString()).lastOrNull?.group(0);
+                            if (bDigits != null) orderId = int.tryParse(bDigits) ?? 0;
+                          }
 
                           return Card(
                             elevation: 0,
@@ -210,8 +214,8 @@ class DashboardScreenState extends State<DashboardScreen> {
                               side: BorderSide(color: Colors.grey.shade200),
                             ),
                             child: ListTile(
-                              onTap: () {
-                                Navigator.push(
+                              onTap: () async {
+                                await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => OrderDetailsScreen(
@@ -220,6 +224,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                   ),
                                 );
+                                _loadDashboard();
                               },
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               leading: CircleAvatar(

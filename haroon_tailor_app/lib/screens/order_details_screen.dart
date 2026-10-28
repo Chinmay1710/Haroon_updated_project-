@@ -32,6 +32,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Map<String, dynamic>? _order;
   final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ', decimalDigits: 0);
 
+  int get _resolvedOrderId {
+    final ordId = int.tryParse((_order?['id'] ?? '').toString());
+    if (ordId != null && ordId > 0) return ordId;
+    return widget.orderId;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -40,11 +46,15 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   Future<void> _loadOrder({bool showLoading = true}) async {
     // 1. Instant local cache load
-    Map<String, dynamic>? cached = await LocalStorageService.getCachedOrderDetails(widget.orderId);
+    final targetId = _resolvedOrderId;
+    Map<String, dynamic>? cached = await LocalStorageService.getCachedOrderDetails(targetId);
+    if (cached == null || cached.isEmpty) {
+      cached = await LocalStorageService.getCachedOrderDetails(widget.orderId);
+    }
     if (cached == null || cached.isEmpty) {
       final orders = (await LocalStorageService.getCachedOrders()) ?? [];
       for (var o in orders) {
-        if (o is Map && LocalStorageService.orderMatchesId(o, widget.orderId)) {
+        if (o is Map && (LocalStorageService.orderMatchesId(o, targetId) || LocalStorageService.orderMatchesId(o, widget.orderId))) {
           cached = Map<String, dynamic>.from(o);
           break;
         }
@@ -63,8 +73,22 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     // 2. Fetch fresh updates from server in background if online
     if (!await LocalStorageService.isOfflineMode()) {
       try {
-        final data = await ApiService.getOrderDetails(widget.orderId);
+        final data = await ApiService.getOrderDetails(_resolvedOrderId);
         if (mounted && data.isNotEmpty) {
+          if (cached != null && cached.isNotEmpty) {
+            if (cached['status'] != null && cached['status'] != 'NEW') {
+              data['status'] = cached['status'];
+            }
+            if (cached['remaining_amount'] != null) {
+              data['remaining_amount'] = cached['remaining_amount'];
+            }
+            if (cached['advance_amount'] != null) {
+              data['advance_amount'] = cached['advance_amount'];
+            }
+            if (cached['payments'] != null && (cached['payments'] as List).isNotEmpty) {
+              data['payments'] = cached['payments'];
+            }
+          }
           setState(() {
             _order = data;
             _isLoading = false;
@@ -132,7 +156,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     if (confirm == true) {
       try {
         await ApiService.updateOrderStatus(
-          orderId: widget.orderId,
+          orderId: _resolvedOrderId,
           status: 'STITCHING_COMPLETE',
           sendWhatsapp: sendWhatsapp,
         );
@@ -321,7 +345,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
                     try {
                       await ApiService.updateOrderStatus(
-                        orderId: widget.orderId,
+                        orderId: _resolvedOrderId,
                         status: allChecked ? 'STITCHING_COMPLETE' : 'PARTIALLY_COMPLETE',
                         readyItemIds: readyIds,
                       );
@@ -358,7 +382,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   void _updateStatusSimple(String newStatus) async {
     try {
       await ApiService.updateOrderStatus(
-        orderId: widget.orderId,
+        orderId: _resolvedOrderId,
         status: newStatus,
       );
       if (mounted) {
@@ -501,7 +525,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                               Navigator.pop(ctx);
                               try {
                                 await ApiService.createPayment(
-                                  orderId: widget.orderId,
+                                  orderId: _resolvedOrderId,
                                   amount: amt,
                                   paymentMethod: payMethod,
                                   sendWhatsapp: true,
@@ -571,7 +595,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
     if (confirm == true) {
       try {
-        await ApiService.deleteOrder(widget.orderId);
+        await ApiService.deleteOrder(_resolvedOrderId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Order $billNo delete ho gaya aur bill number reuse ho sakta hai.'), backgroundColor: Colors.red),
@@ -647,7 +671,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ReceiptPrintScreen(
-          orderId: widget.orderId,
+          orderId: _resolvedOrderId,
           initialOrder: _order,
         ),
       ),
@@ -660,7 +684,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => StitchingSlipPrintScreen(
-          orderId: widget.orderId,
+          orderId: _resolvedOrderId,
           initialOrder: _order,
         ),
       ),

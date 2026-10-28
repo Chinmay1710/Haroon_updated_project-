@@ -3,10 +3,49 @@ import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:http/http.dart' as http;
 import 'local_storage_service.dart';
+import 'google_drive_service.dart';
 import '../utils/file_helper.dart';
 import '../utils/io_helper_stub.dart'
     if (dart.library.html) '../utils/io_helper_web.dart'
     if (dart.library.io) '../utils/io_helper_io.dart';
+
+/// Top-level payload for offloading ZIP compression to a background isolate
+class _ZipCompressionPayload {
+  final List<String> names;
+  final List<Uint8List> data;
+  _ZipCompressionPayload(this.names, this.data);
+}
+
+/// Runs ZIP encoding in an isolate so UI thread remains completely responsive
+Uint8List _compressZipWorker(_ZipCompressionPayload payload) {
+  final archive = Archive();
+  for (int i = 0; i < payload.names.length; i++) {
+    final bytes = payload.data[i];
+    archive.addFile(ArchiveFile(payload.names[i], bytes.length, bytes));
+  }
+  final encoded = ZipEncoder().encode(archive);
+  return Uint8List.fromList(encoded);
+}
+
+/// Runs ZIP decoding in an isolate to parse backup.json and photos without UI stutter
+Map<String, dynamic> _decompressZipWorker(Uint8List zipBytes) {
+  final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);
+  String? jsonContent;
+  final Map<String, Uint8List> photos = {};
+  for (var file in archive) {
+    if (file.isFile) {
+      if (file.name == 'backup.json') {
+        jsonContent = utf8.decode(file.content as List<int>);
+      } else if (file.name.startsWith('photos/')) {
+        photos[file.name] = Uint8List.fromList(file.content as List<int>);
+      }
+    }
+  }
+  return {
+    'json': jsonContent,
+    'photos': photos,
+  };
+}
 
 /// Smart Incremental Backup & Recovery Service.
 ///
@@ -14,11 +53,44 @@ import '../utils/io_helper_stub.dart'
 /// 1. Stable single-file backup (`HaroonTailor_Backup.zip`) with atomic replacement.
 /// 2. Canonical URL deduplication — avoids duplicate photo downloads and duplicate entries in ZIP.
 /// 3. Incremental photo reuse — reuses unchanged photos from previous backup ZIP and local cache.
-/// 4. Concurrent download pool — downloads missing photos in parallel batches.
-/// 5. Complete settings preservation — shop profile, clothing types, templates, rates, theme,
-///    measurement units, and delivery days are 100% backed up and restored.
-/// 6. Reliable recovery — verified before saving, full backward compatibility.
+/// 4. Background isolate compression — prevents UI freeze and lag.
+/// 5. Google Drive Cloud Auto-Backup and Sync integration.
+/// 6. Complete preservation of order status, payments, relationships, naap measurements, and shop settings.
+/// 7. Safety backup before restore and atomic recovery.
 class ZipBackupService {
+  static bool _autoSyncHookRegistered = false;
+
+  /// Register auto-sync hook on local data changes
+  static void registerAutoSyncHook() {
+    if (_autoSyncHookRegistered) return;
+    _autoSyncHookRegistered = true;
+    LocalStorageService.onDataChanged = () {
+      notifyDataChanged();
+    };
+  }
+
+  /// Called whenever orders, customers, or settings change
+  static void notifyDataChanged() {
+    GoogleDriveService.scheduleAutoSync(
+      delaySeconds: 15,
+      generateBackupZip: () => createZipBackup(),
+      saveLocalBackup: (bytes) async {
+        final customFolder = await LocalStorageService.getCustomBackupFolder();
+        final path = await FileHelper.saveStableBackupZip(
+          zipBytes: bytes,
+          targetDirectoryPath: customFolder,
+        );
+        if (path != null && path.isNotEmpty) {
+          await LocalStorageService.recordBackupSuccess(
+            path: path,
+            sizeBytes: bytes.length,
+          );
+        }
+        return path;
+      },
+    );
+  }
+
   /// Creates an optimized, incremental single-file ZIP backup containing:
   /// - `backup.json`: Orders, customers, naap measurements, and all shop settings.
   /// - `photos/`: Unique photo files (deduplicated, incrementally reused).
@@ -43,7 +115,7 @@ class ZipBackupService {
     final isAutoBackup = await LocalStorageService.isAutoBackupEnabled();
     final autoBackupFreq = await LocalStorageService.getAutoBackupFrequency();
 
-    // 2. Collect all customer measurements
+    // 2. Collect all customer measurements efficiently (passing preloaded orders)
     final Map<String, dynamic> customerMeasurementsMap = {};
     int totalMeasurements = 0;
     if (customers != null) {
@@ -51,7 +123,7 @@ class ZipBackupService {
         if (c is Map && c['id'] != null) {
           final cid = (c['id'] as num?)?.toInt() ?? int.tryParse(c['id'].toString()) ?? 0;
           if (cid > 0) {
-            final meas = await LocalStorageService.getCustomerMeasurementsOffline(cid);
+            final meas = await LocalStorageService.getCustomerMeasurementsOffline(cid, orders);
             if (meas.isNotEmpty) {
               customerMeasurementsMap['$cid'] = meas;
               totalMeasurements += meas.length;
@@ -70,7 +142,8 @@ class ZipBackupService {
     if (orders != null) {
       for (var o in orders) {
         if (o is Map && o['id'] != null) {
-          final det = await LocalStorageService.getCachedOrderDetails(o['id'] as int);
+          final int orderId = (o['id'] as num?)?.toInt() ?? int.tryParse(o['id'].toString()) ?? 0;
+          final det = orderId > 0 ? await LocalStorageService.getCachedOrderDetails(orderId) : null;
           final orderData = Map<String, dynamic>.from(det ?? o);
 
           List<dynamic> items = [];
@@ -207,9 +280,10 @@ class ZipBackupService {
         } catch (_) {}
       }
 
-      // 4.3 Check local disk storage
+      // 4.3 Check local disk storage (both original device path and canonical zip path)
       try {
-        final localBytes = await readLocalPhotoFile(zipPath);
+        Uint8List? localBytes = await readLocalPhotoFile(orig);
+        localBytes ??= await readLocalPhotoFile(zipPath);
         if (localBytes != null && localBytes.isNotEmpty) {
           bundledImages[zipPath] = localBytes;
           reusedFromLocal++;
@@ -289,6 +363,7 @@ class ZipBackupService {
       'version': '1.1.0',
       'backup_type': 'smart_incremental_zip',
       'export_timestamp': DateTime.now().toIso8601String(),
+      'backup_timestamp': DateTime.now().toIso8601String(),
       'total_customers': customers?.length ?? 0,
       'total_orders': detailedOrders.length,
       'total_unique_photos': totalUniquePhotos,
@@ -318,18 +393,32 @@ class ZipBackupService {
 
     onProgress?.call('Compressing single backup archive...', 0.90);
 
-    // 8. Create ZIP archive
-    final archive = Archive();
+    // 8. Create ZIP archive (offloaded to isolate on native platforms to keep UI fluid)
     final jsonString = const JsonEncoder.withIndent('  ').convert(backupData);
-    final jsonBytes = utf8.encode(jsonString);
-    archive.addFile(ArchiveFile('backup.json', jsonBytes.length, jsonBytes));
+    final jsonBytes = Uint8List.fromList(utf8.encode(jsonString));
+
+    final List<String> fileNames = ['backup.json'];
+    final List<Uint8List> fileData = [jsonBytes];
 
     for (var entry in bundledImages.entries) {
-      archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
+      fileNames.add(entry.key);
+      fileData.add(entry.value);
     }
 
-    final zipBytes = ZipEncoder().encode(archive);
-    final result = Uint8List.fromList(zipBytes);
+    Uint8List result;
+    if (kIsWeb) {
+      final archive = Archive();
+      archive.addFile(ArchiveFile('backup.json', jsonBytes.length, jsonBytes));
+      for (var entry in bundledImages.entries) {
+        archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
+      }
+      result = Uint8List.fromList(ZipEncoder().encode(archive));
+    } else {
+      result = await compute(
+        _compressZipWorker,
+        _ZipCompressionPayload(fileNames, fileData),
+      );
+    }
 
     // 9. Validate archive before returning
     final verifyArchive = ZipDecoder().decodeBytes(result, verify: true);
@@ -352,28 +441,56 @@ class ZipBackupService {
   /// 2. Extracts photos to local storage.
   /// 3. Restores shop settings, rates, templates, garment types, theme, units.
   /// 4. Imports orders, naap measurements, and customers into LocalStorageService.
+  /// 5. Preserves exact order status, relationships, payments, and creates safety backup.
+  /// Peeks at backup.json inside the ZIP without full restoration to inspect metadata (like timestamp).
+  static Future<Map<String, dynamic>?> peekBackupMetadata(Uint8List zipBytes) async {
+    try {
+      Map<String, dynamic> decompressed;
+      try {
+        if (kIsWeb) {
+          decompressed = _decompressZipWorker(zipBytes);
+        } else {
+          decompressed = await compute(_decompressZipWorker, zipBytes);
+        }
+      } catch (_) {
+        decompressed = _decompressZipWorker(zipBytes);
+      }
+      final jsonStr = decompressed['json'] as String?;
+      if (jsonStr != null) {
+        final data = jsonDecode(jsonStr);
+        if (data is Map) {
+          final ts = data['backup_timestamp']?.toString() ?? data['export_timestamp']?.toString();
+          return {
+            'timestamp': ts,
+            'orders_count': (data['orders'] as List?)?.length ?? 0,
+            'customers_count': (data['customers'] as List?)?.length ?? 0,
+            'version': data['version']?.toString(),
+          };
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   static Future<Map<String, dynamic>> restoreFromZip({
     required Uint8List zipBytes,
     Function(String status, double progress)? onProgress,
   }) async {
-    onProgress?.call('Opening & validating backup ZIP...', 0.0);
+    onProgress?.call('Creating safety snapshot of current data...', 0.0);
+    // Create safety snapshot before any destructive operation
+    await LocalStorageService.createSafetySnapshot();
 
     try {
-      final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);
-      onProgress?.call('Extracting files from backup...', 0.1);
-
-      String? jsonContent;
-      final Map<String, Uint8List> photos = {};
-
-      for (var file in archive) {
-        if (file.isFile) {
-          if (file.name == 'backup.json') {
-            jsonContent = utf8.decode(file.content as List<int>);
-          } else if (file.name.startsWith('photos/')) {
-            photos[file.name] = Uint8List.fromList(file.content as List<int>);
-          }
-        }
+      onProgress?.call('Opening & validating backup ZIP...', 0.05);
+      Map<String, dynamic> decompressed;
+      if (kIsWeb) {
+        decompressed = _decompressZipWorker(zipBytes);
+      } else {
+        decompressed = await compute(_decompressZipWorker, zipBytes);
       }
+
+      final String? jsonContent = decompressed['json'] as String?;
+      final Map<String, Uint8List> photos = (decompressed['photos'] as Map?)?.cast<String, Uint8List>() ?? {};
 
       if (jsonContent == null) {
         return {'success': false, 'error': 'backup.json not found in ZIP file'};
@@ -560,6 +677,10 @@ class ZipBackupService {
         'error': result['error'],
       };
     } catch (e) {
+      // Revert to safety snapshot to prevent partial/corrupted data state
+      try {
+        await LocalStorageService.restoreSafetySnapshot();
+      } catch (_) {}
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -629,7 +750,7 @@ class ZipBackupService {
   }
 
   /// Runs auto-backup if enabled and interval has passed (e.g. daily).
-  /// Updates the single stable backup ZIP atomically.
+  /// Updates the single stable backup ZIP atomically, and syncs to Google Drive if connected.
   static Future<bool> checkAndPerformAutoBackup({bool force = false}) async {
     try {
       final isEnabled = await LocalStorageService.isAutoBackupEnabled();
@@ -643,7 +764,11 @@ class ZipBackupService {
       }
 
       final zipBytes = await createZipBackup();
-      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
+      final customFolder = await LocalStorageService.getCustomBackupFolder();
+      final savedPath = await FileHelper.saveStableBackupZip(
+        zipBytes: zipBytes,
+        targetDirectoryPath: customFolder,
+      );
       if (savedPath != null && savedPath.isNotEmpty) {
         await LocalStorageService.recordBackupSuccess(
           path: savedPath,
@@ -651,6 +776,12 @@ class ZipBackupService {
         );
       }
       await LocalStorageService.recordAutoBackupTime();
+
+      // If Google Drive is connected, also sync to cloud
+      if (await GoogleDriveService.isConnected() && await GoogleDriveService.isAutoSyncEnabled()) {
+        GoogleDriveService.uploadBackupZip(zipBytes: zipBytes).ignore();
+      }
+
       return true;
     } catch (_) {
       return false;
