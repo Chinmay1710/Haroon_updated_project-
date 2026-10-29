@@ -146,13 +146,7 @@ Future<String?> saveStableBackupZipPlatform({
   final tmpFile = File('${dir.path}/$fileName.tmp');
 
   await tmpFile.writeAsBytes(zipBytes, flush: true);
-
-  if (await primaryFile.exists()) {
-    try {
-      await primaryFile.delete();
-    } catch (_) {}
-  }
-  await tmpFile.rename(primaryFile.path);
+  await _replaceBackupFile(tmpFile, primaryFile);
 
   // 3. Custom folder if selected by user (Atomic replacement)
   if (targetDirectoryPath != null && targetDirectoryPath.trim().isNotEmpty) {
@@ -164,12 +158,7 @@ Future<String?> saveStableBackupZipPlatform({
       final customFile = File('${customDir.path}/$fileName');
       final customTmp = File('${customDir.path}/$fileName.tmp');
       await customTmp.writeAsBytes(zipBytes, flush: true);
-      if (await customFile.exists()) {
-        try {
-          await customFile.delete();
-        } catch (_) {}
-      }
-      await customTmp.rename(customFile.path);
+      await _replaceBackupFile(customTmp, customFile);
       return customFile.path;
     } catch (_) {}
   } else {
@@ -181,18 +170,38 @@ Future<String?> saveStableBackupZipPlatform({
           final publicFile = File('${downloadDir.path}/$fileName');
           final publicTmp = File('${downloadDir.path}/$fileName.tmp');
           await publicTmp.writeAsBytes(zipBytes, flush: true);
-          if (await publicFile.exists()) {
-            try {
-              await publicFile.delete();
-            } catch (_) {}
-          }
-          await publicTmp.rename(publicFile.path);
+          await _replaceBackupFile(publicTmp, publicFile);
         }
       }
     } catch (_) {}
   }
 
   return primaryFile.path;
+}
+
+Future<void> _replaceBackupFile(File temporaryFile, File targetFile) async {
+  try {
+    await temporaryFile.rename(targetFile.path);
+    return;
+  } on FileSystemException {
+    if (!await targetFile.exists()) rethrow;
+  }
+
+  final previousFile = File('${targetFile.path}.previous');
+  if (await previousFile.exists()) {
+    await previousFile.delete();
+  }
+  await targetFile.rename(previousFile.path);
+  try {
+    await temporaryFile.rename(targetFile.path);
+    await previousFile.delete();
+  } catch (_) {
+    if (await targetFile.exists()) {
+      await targetFile.delete();
+    }
+    await previousFile.rename(targetFile.path);
+    rethrow;
+  }
 }
 
 Future<String?> pickFolderLocationPlatform() async {

@@ -204,6 +204,36 @@ void main() {
       expect(restoredMeasurements, isNotEmpty);
     });
 
+    test('Google Drive OAuth URL uses the configured redirect URI and parses redirect URLs', () async {
+      const redirectUri = 'http://localhost:8085/callback';
+      final authUri = Uri.parse(
+        GoogleDriveService.getAuthorizationUrl(
+          clientId: 'test-client-id',
+          redirectUri: redirectUri,
+        ),
+      );
+
+      expect(authUri.queryParameters['redirect_uri'], equals(redirectUri));
+      expect(authUri.queryParameters['response_type'], equals('code'));
+      expect(
+        GoogleDriveService.extractAuthorizationCode(
+          '$redirectUri?code=sample-auth-code&scope=drive.file',
+        ),
+        equals('sample-auth-code'),
+      );
+      expect(
+        GoogleDriveService.extractAuthorizationCode('sample-auth-code'),
+        equals('sample-auth-code'),
+      );
+      expect(
+        GoogleDriveService.extractAuthorizationCode('$redirectUri?error=access_denied'),
+        isNull,
+      );
+
+      await GoogleDriveService.setRedirectUri(redirectUri);
+      expect(await GoogleDriveService.getRedirectUri(), equals(redirectUri));
+    });
+
     // 6. Connect Google Drive and credential caching
     test('6. Google Drive connection securely stores tokens and email', () async {
       expect(await GoogleDriveService.isConnected(), isFalse);
@@ -309,6 +339,26 @@ void main() {
 
       // Existing backup remains unaltered
       expect(await File(savedPath).length(), equals(originalLength));
+    });
+
+    test('A later valid backup replaces the previous stable ZIP', () async {
+      Uint8List createZip(String shopName) {
+        final archive = Archive();
+        final jsonBytes = utf8.encode(jsonEncode({'settings': {'shop_name': shopName}}));
+        archive.addFile(ArchiveFile('backup.json', jsonBytes.length, jsonBytes));
+        return Uint8List.fromList(ZipEncoder().encode(archive));
+      }
+
+      final firstZip = createZip('First Shop');
+      final secondZip = createZip('Updated Shop');
+      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: firstZip);
+      expect(savedPath, isNotNull);
+
+      final replacedPath = await FileHelper.saveStableBackupZip(zipBytes: secondZip);
+      expect(replacedPath, equals(savedPath));
+      final savedFile = File(savedPath!);
+      expect(await savedFile.readAsBytes(), equals(secondZip));
+      expect(ZipDecoder().decodeBytes(await savedFile.readAsBytes(), verify: true).isNotEmpty, isTrue);
     });
 
     // 12. Conflict detection when local data is newer than backup snapshot

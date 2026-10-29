@@ -15,6 +15,7 @@ class GoogleDriveService {
   // Preference keys
   static const String _keyClientId = 'ht_gdrive_client_id';
   static const String _keyClientSecret = 'ht_gdrive_client_secret';
+  static const String _keyRedirectUri = 'ht_gdrive_redirect_uri';
   static const String _keyAccessToken = 'ht_gdrive_access_token';
   static const String _keyRefreshToken = 'ht_gdrive_refresh_token';
   static const String _keyTokenExpiry = 'ht_gdrive_token_expiry';
@@ -69,6 +70,26 @@ class GoogleDriveService {
         await prefs.remove(_keyClientSecret);
       } else {
         await prefs.setString(_keyClientSecret, secret.trim());
+      }
+    } catch (_) {}
+  }
+
+  static Future<String?> getRedirectUri() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyRedirectUri);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> setRedirectUri(String redirectUri) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (redirectUri.trim().isEmpty) {
+        await prefs.remove(_keyRedirectUri);
+      } else {
+        await prefs.setString(_keyRedirectUri, redirectUri.trim());
       }
     } catch (_) {}
   }
@@ -132,14 +153,25 @@ class GoogleDriveService {
   // OAUTH 2.0 FLOW & TOKEN MANAGEMENT
   // ──────────────────────────────────────────────────────────────────────────
 
+  static String getDefaultRedirectUri() {
+    if (kIsWeb) {
+      try {
+        final origin = Uri.base.origin;
+        if (origin.isNotEmpty && origin != 'null') return origin;
+      } catch (_) {}
+    }
+    return 'http://localhost:8085';
+  }
+
   /// Generates the Google OAuth 2.0 Authorization URL for user login.
   static String getAuthorizationUrl({
     required String clientId,
-    String redirectUri = 'urn:ietf:wg:oauth:2.0:oob',
+    String? redirectUri,
   }) {
+    final effectiveRedirect = redirectUri ?? getDefaultRedirectUri();
     final params = {
       'client_id': clientId,
-      'redirect_uri': redirectUri,
+      'redirect_uri': effectiveRedirect,
       'response_type': 'code',
       'scope': '$driveScope email profile',
       'access_type': 'offline',
@@ -152,14 +184,24 @@ class GoogleDriveService {
   /// Launch Google OAuth login in browser
   static Future<bool> launchAuthInBrowser({
     required String clientId,
-    String redirectUri = 'urn:ietf:wg:oauth:2.0:oob',
+    String? redirectUri,
   }) async {
     final url = getAuthorizationUrl(clientId: clientId, redirectUri: redirectUri);
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  /// Extracts an authorization code from either a pasted code or redirect URL.
+  static String? extractAuthorizationCode(String input) {
+    final value = input.trim();
+    if (value.isEmpty) return null;
+
+    final uri = Uri.tryParse(value);
+    if (uri != null && (uri.hasScheme || value.contains('code='))) {
+      final code = uri.queryParameters['code']?.trim();
+      return code == null || code.isEmpty ? null : code;
     }
-    return false;
+    return value;
   }
 
   /// Exchanges an authorization code for access and refresh tokens
@@ -167,20 +209,21 @@ class GoogleDriveService {
     required String authCode,
     String? clientId,
     String? clientSecret,
-    String redirectUri = 'urn:ietf:wg:oauth:2.0:oob',
+    String? redirectUri,
   }) async {
     final resolvedClientId = clientId ?? await getClientId();
     if (resolvedClientId == null || resolvedClientId.isEmpty) {
       return {'success': false, 'error': 'Google Client ID is missing. Please set it in Settings.'};
     }
     final resolvedSecret = clientSecret ?? await getClientSecret() ?? '';
+    final effectiveRedirect = redirectUri ?? getDefaultRedirectUri();
 
     try {
       final body = {
         'code': authCode.trim(),
         'client_id': resolvedClientId,
         'grant_type': 'authorization_code',
-        'redirect_uri': redirectUri,
+        'redirect_uri': effectiveRedirect,
       };
       if (resolvedSecret.isNotEmpty) {
         body['client_secret'] = resolvedSecret;
@@ -596,7 +639,10 @@ class GoogleDriveService {
         if (zipBytes.isEmpty) return false;
 
         // 2. Safely save locally first (ensures local data is never lost!)
-        await saveLocalBackup(zipBytes);
+        final localPath = await saveLocalBackup(zipBytes);
+        if (localPath == null || localPath.isEmpty) {
+          throw Exception('The backup archive could not be saved to this device.');
+        }
 
         // 3. Upload to Google Drive
         final res = await uploadBackupZip(zipBytes: zipBytes);

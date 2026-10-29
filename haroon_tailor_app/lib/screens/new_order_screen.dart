@@ -709,8 +709,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                         children: [
                                           IconButton.filledTonal(
                                             icon: const Icon(Icons.camera_alt, size: 18),
+                                            tooltip: 'Camera photo (Compressed)',
                                             onPressed: () async {
-                                              final picked = await _picker.pickImage(source: ImageSource.camera, maxWidth: 1920, maxHeight: 1920, imageQuality: 85);
+                                              final picked = await _picker.pickImage(
+                                                source: ImageSource.camera,
+                                                maxWidth: 1024,
+                                                maxHeight: 1024,
+                                                imageQuality: 70,
+                                              );
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
                                                 setEditorState(() {
@@ -722,8 +728,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                           const SizedBox(width: 8),
                                           IconButton.filledTonal(
                                             icon: const Icon(Icons.photo_library, size: 18),
+                                            tooltip: 'Gallery photo (Compressed)',
                                             onPressed: () async {
-                                              final picked = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1920, maxHeight: 1920, imageQuality: 85);
+                                              final picked = await _picker.pickImage(
+                                                source: ImageSource.gallery,
+                                                maxWidth: 1024,
+                                                maxHeight: 1024,
+                                                imageQuality: 70,
+                                              );
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
                                                 setEditorState(() {

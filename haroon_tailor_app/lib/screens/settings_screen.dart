@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/zip_backup_service.dart';
@@ -462,7 +463,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
       // Save/update the single stable backup ZIP file (HaroonTailor_Backup.zip)
       final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
-      final finalPath = savedPath ?? 'HaroonTailor_Backup.zip';
+      if (savedPath == null || savedPath.isEmpty) {
+        throw Exception('The backup archive could not be saved to this device.');
+      }
+      final finalPath = savedPath;
 
       await LocalStorageService.recordBackupSuccess(
         path: finalPath,
@@ -486,6 +490,114 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('ZIP Backup failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBackingUp = false);
+    }
+  }
+
+  Future<void> _shareZipBackup() async {
+    setState(() => _isBackingUp = true);
+
+    final progressStatusNotifier = ValueNotifier<String>('Compressing shop data & photos...');
+    final progressValueNotifier = ValueNotifier<double>(0.0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.share, color: Color(0xFF16A34A)),
+              SizedBox(width: 10),
+              Text('Creating Compressed Backup'),
+            ],
+          ),
+          content: AnimatedBuilder(
+            animation: Listenable.merge([progressStatusNotifier, progressValueNotifier]),
+            builder: (ctx, _) {
+              final val = progressValueNotifier.value;
+              final status = progressStatusNotifier.value;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(
+                    value: val > 0 ? val : null,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: const AlwaysStoppedAnimation(Color(0xFF16A34A)),
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    status,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${(val * 100).toStringAsFixed(0)}%',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF16A34A)),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final zipBytes = await ZipBackupService.createZipBackup(
+        onProgress: (status, progress) {
+          progressStatusNotifier.value = status;
+          progressValueNotifier.value = progress;
+        },
+      );
+
+      if (mounted) Navigator.of(context).pop();
+
+      // Ensure stable backup is also saved locally
+      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
+      final finalPath = savedPath ?? 'HaroonTailor_Backup.zip';
+
+      await LocalStorageService.recordBackupSuccess(
+        path: finalPath,
+        sizeBytes: zipBytes.length,
+      );
+
+      await _loadAllSettings();
+
+      final xFile = XFile.fromData(
+        zipBytes,
+        name: 'HaroonTailor_Backup.zip',
+        mimeType: 'application/zip',
+      );
+
+      await Share.shareXFiles(
+        [xFile],
+        text: 'Haroon Tailor Shop Backup (${_formatFileSize(zipBytes.length)}) - ${DateTime.now().toLocal().toString().split('.').first}',
+        subject: 'Haroon Tailor Backup',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Compressed Backup ready (${_formatFileSize(zipBytes.length)})! WhatsApp/Drive me share karein.'),
+            backgroundColor: const Color(0xFF16A34A),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Backup failed: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -540,8 +652,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(10)),
                     child: const Icon(Icons.folder_zip, color: Color(0xFF7C3AED)),
                   ),
-                  title: const Text('Restore from Local Device ZIP', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Choose a ZIP backup file stored on this device'),
+                  title: const Text('Restore from Device / WhatsApp / Files', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Choose HaroonTailor_Backup.zip from WhatsApp, Downloads, or Files'),
                   onTap: () => Navigator.pop(ctx, 'local'),
                 ),
                 const Divider(),
@@ -861,6 +973,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     final existingClientId = await GoogleDriveService.getClientId() ?? '';
     final clientIdCtrl = TextEditingController(text: existingClientId);
     final secretCtrl = TextEditingController(text: await GoogleDriveService.getClientSecret() ?? '');
+    final redirectUriCtrl = TextEditingController(
+      text: await GoogleDriveService.getRedirectUri() ?? GoogleDriveService.getDefaultRedirectUri(),
+    );
     final codeCtrl = TextEditingController();
 
     if (!mounted) return;
@@ -898,6 +1013,17 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                 ),
                 const SizedBox(height: 10),
                 TextField(
+                  controller: redirectUriCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'OAuth Redirect URI',
+                    hintText: 'http://localhost:8085',
+                    helperText: 'Must exactly match an authorized redirect URI in Google Cloud Console.',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
                   controller: secretCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Client Secret (Optional)',
@@ -917,23 +1043,48 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   ),
                   onPressed: () async {
                     final cid = clientIdCtrl.text.trim();
+                    final redirectUri = redirectUriCtrl.text.trim();
                     if (cid.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Please enter a Google Client ID first.')),
                       );
                       return;
                     }
-                    await GoogleDriveService.setClientId(cid);
-                    await GoogleDriveService.setClientSecret(secretCtrl.text.trim());
-                    await GoogleDriveService.launchAuthInBrowser(clientId: cid);
+                    if (redirectUri.isNotEmpty && Uri.tryParse(redirectUri)?.hasScheme != true) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a valid OAuth Redirect URI.')),
+                      );
+                      return;
+                    }
+                    try {
+                      await GoogleDriveService.setClientId(cid);
+                      await GoogleDriveService.setClientSecret(secretCtrl.text.trim());
+                      await GoogleDriveService.setRedirectUri(redirectUri);
+                      final launched = await GoogleDriveService.launchAuthInBrowser(
+                        clientId: cid,
+                        redirectUri: redirectUri.isEmpty ? null : redirectUri,
+                      );
+                      if (!launched && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Could not open the Google sign-in page.')),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not start Google sign-in: $e')),
+                        );
+                      }
+                    }
                   },
                 ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: codeCtrl,
                   decoration: const InputDecoration(
-                    labelText: '2. Paste Authorization Code / Token',
-                    hintText: 'Paste code received after Google Sign-in',
+                    labelText: '2. Paste Authorization Code or Redirect URL',
+                    hintText: 'Paste code or full redirected URL from browser',
+                    helperText: 'After Google sign-in, copy the redirected URL or code from the browser bar and paste it here.',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -952,33 +1103,53 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                 foregroundColor: Colors.white,
               ),
               onPressed: () async {
-                final code = codeCtrl.text.trim();
+                final code = GoogleDriveService.extractAuthorizationCode(codeCtrl.text);
                 final cid = clientIdCtrl.text.trim();
-                if (code.isEmpty) {
+                final secret = secretCtrl.text.trim();
+                final redirectUri = redirectUriCtrl.text.trim();
+                if (code == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter authorization code.')),
+                    const SnackBar(content: Text('Please enter authorization code or redirected URL.')),
                   );
                   return;
                 }
+                if (redirectUri.isNotEmpty && Uri.tryParse(redirectUri)?.hasScheme != true) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid OAuth Redirect URI.')),
+                  );
+                  return;
+                }
+                await GoogleDriveService.setClientId(cid);
+                await GoogleDriveService.setClientSecret(secret);
+                await GoogleDriveService.setRedirectUri(redirectUri);
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
+                if (!mounted) return;
                 setState(() => _isGDriveSyncing = true);
 
                 // If code is an OAuth authorization code or bearer token:
-                Map<String, dynamic> res;
-                if (code.startsWith('ya29.')) {
-                  // Direct token
-                  await GoogleDriveService.saveManualTokens(accessToken: code, email: 'Connected Google Account');
-                  res = {'success': true, 'email': 'Connected Google Account'};
-                } else {
-                  res = await GoogleDriveService.exchangeAuthCode(
-                    authCode: code,
-                    clientId: cid.isNotEmpty ? cid : null,
-                    clientSecret: secretCtrl.text.trim().isNotEmpty ? secretCtrl.text.trim() : null,
-                  );
+                Map<String, dynamic> res = {'success': false, 'error': 'Google sign-in failed.'};
+                try {
+                  if (code.startsWith('ya29.')) {
+                    await GoogleDriveService.saveManualTokens(
+                      accessToken: code,
+                      email: 'Connected Google Account',
+                    );
+                    res = {'success': true, 'email': 'Connected Google Account'};
+                  } else {
+                    res = await GoogleDriveService.exchangeAuthCode(
+                      authCode: code,
+                      clientId: cid.isNotEmpty ? cid : null,
+                      clientSecret: secret.isNotEmpty ? secret : null,
+                      redirectUri: redirectUri.isNotEmpty ? redirectUri : null,
+                    );
+                  }
+                } catch (e) {
+                  res = {'success': false, 'error': e.toString()};
                 }
 
-                await _loadAllSettings();
-                setState(() => _isGDriveSyncing = false);
+                if (mounted) await _loadAllSettings();
+                if (mounted) setState(() => _isGDriveSyncing = false);
 
                 if (mounted) {
                   if (res['success'] == true) {
@@ -1089,10 +1260,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
       // 2. Save locally first
       final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
-      await LocalStorageService.recordBackupSuccess(
-        path: savedPath ?? 'HaroonTailor_Backup.zip',
-        sizeBytes: zipBytes.length,
-      );
+      if (savedPath == null || savedPath.isEmpty) {
+        throw Exception('The backup archive could not be saved to this device.');
+      }
+      await LocalStorageService.recordBackupSuccess(path: savedPath, sizeBytes: zipBytes.length);
 
       // 3. Upload to Google Drive
       final uploadRes = await GoogleDriveService.uploadBackupZip(
@@ -2103,14 +2274,34 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     ),
                   ),
                   const SizedBox(height: 14),
+                  // ★ Option 2: 1-Click WhatsApp / Drive / Files Share
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.share, size: 20),
+                      label: const Text(
+                        'Share Backup (WhatsApp / Drive / Files)',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 2,
+                      ),
+                      onPressed: _isBackingUp ? null : _shareZipBackup,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
                           icon: _isBackingUp
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7C3AED)))
-                              : const Icon(Icons.sync, size: 20),
-                          label: const Text('Backup Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7C3AED)))
+                              : const Icon(Icons.download, size: 18),
+                          label: const Text('Save to Device', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: const Color(0xFF7C3AED),
@@ -2123,8 +2314,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton.icon(
-                          icon: const Icon(Icons.unarchive, size: 20),
-                          label: const Text('Restore Data', style: TextStyle(fontWeight: FontWeight.bold)),
+                          icon: const Icon(Icons.unarchive, size: 18),
+                          label: const Text('Restore Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white.withValues(alpha: 0.15),
                             foregroundColor: Colors.white,

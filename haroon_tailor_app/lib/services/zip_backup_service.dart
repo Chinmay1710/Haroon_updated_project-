@@ -23,7 +23,7 @@ Uint8List _compressZipWorker(_ZipCompressionPayload payload) {
     final bytes = payload.data[i];
     archive.addFile(ArchiveFile(payload.names[i], bytes.length, bytes));
   }
-  final encoded = ZipEncoder().encode(archive);
+  final encoded = ZipEncoder().encode(archive, level: DeflateLevel.bestCompression);
   return Uint8List.fromList(encoded);
 }
 
@@ -412,7 +412,7 @@ class ZipBackupService {
       for (var entry in bundledImages.entries) {
         archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
       }
-      result = Uint8List.fromList(ZipEncoder().encode(archive));
+      result = Uint8List.fromList(ZipEncoder().encode(archive, level: DeflateLevel.bestCompression));
     } else {
       result = await compute(
         _compressZipWorker,
@@ -769,21 +769,23 @@ class ZipBackupService {
         zipBytes: zipBytes,
         targetDirectoryPath: customFolder,
       );
-      if (savedPath != null && savedPath.isNotEmpty) {
-        await LocalStorageService.recordBackupSuccess(
-          path: savedPath,
-          sizeBytes: zipBytes.length,
-        );
+      if (savedPath == null || savedPath.isEmpty) {
+        throw Exception('The automatic backup could not be saved to this device.');
       }
+      await LocalStorageService.recordBackupSuccess(
+        path: savedPath,
+        sizeBytes: zipBytes.length,
+      );
       await LocalStorageService.recordAutoBackupTime();
 
       // If Google Drive is connected, also sync to cloud
       if (await GoogleDriveService.isConnected() && await GoogleDriveService.isAutoSyncEnabled()) {
-        GoogleDriveService.uploadBackupZip(zipBytes: zipBytes).ignore();
+        await GoogleDriveService.uploadBackupZip(zipBytes: zipBytes);
       }
 
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Automatic backup failed: $e');
       return false;
     }
   }
