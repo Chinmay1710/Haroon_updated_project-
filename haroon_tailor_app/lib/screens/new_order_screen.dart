@@ -709,13 +709,13 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                         children: [
                                           IconButton.filledTonal(
                                             icon: const Icon(Icons.camera_alt, size: 18),
-                                            tooltip: 'Camera photo (Compressed)',
+                                            tooltip: 'Camera photo',
                                             onPressed: () async {
                                               final picked = await _picker.pickImage(
                                                 source: ImageSource.camera,
-                                                maxWidth: 1024,
-                                                maxHeight: 1024,
-                                                imageQuality: 70,
+                                                maxWidth: 1600,
+                                                maxHeight: 1600,
+                                                imageQuality: 82,
                                               );
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
@@ -728,13 +728,13 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                           const SizedBox(width: 8),
                                           IconButton.filledTonal(
                                             icon: const Icon(Icons.photo_library, size: 18),
-                                            tooltip: 'Gallery photo (Compressed)',
+                                            tooltip: 'Gallery photo',
                                             onPressed: () async {
                                               final picked = await _picker.pickImage(
                                                 source: ImageSource.gallery,
-                                                maxWidth: 1024,
-                                                maxHeight: 1024,
-                                                imageQuality: 70,
+                                                maxWidth: 1600,
+                                                maxHeight: 1600,
+                                                imageQuality: 82,
                                               );
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
