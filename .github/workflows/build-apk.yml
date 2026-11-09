@@ -32,15 +32,6 @@ jobs:
         cd haroon_tailor_app
         flutter pub get
 
-    - name: Pre-download and verify Gradle
-      run: |
-        cd haroon_tailor_app/android
-        chmod +x gradlew
-        for i in 1 2 3 4 5; do
-          echo "Gradle check attempt $i..."
-          ./gradlew --version && break || { echo "Download interrupted or timed out, retrying in 10s..."; sleep 10; }
-        done
-
     - name: Build APK
       run: |
         cd haroon_tailor_app
