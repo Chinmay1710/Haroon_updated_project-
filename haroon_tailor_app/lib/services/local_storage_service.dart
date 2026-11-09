@@ -38,33 +38,7 @@ class LocalStorageService {
   static Future<void> initStorage() async {
     if (_initialized) return;
     _initialized = true;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final isCleanFresh = prefs.getBool(_keyCleanFreshState) ?? false;
-      if (isCleanFresh) {
-        // User explicitly started a fresh offline app; do not auto-seed
-        return;
-      }
-
-      // 1. Check if orders and customers exist on disk or in cache
-      final existingCust = await getCachedCustomers();
-      final existingOrders = await getCachedOrders();
-
-      if ((existingCust == null || existingCust.isEmpty) &&
-          (existingOrders == null || existingOrders.isEmpty)) {
-        // First-time app open on client's phone: load bundled master data
-        try {
-          final seedRaw = await rootBundle.loadString('assets/data/initial_data.json');
-          if (seedRaw.isNotEmpty) {
-            final seed = jsonDecode(seedRaw);
-            if (seed is Map<String, dynamic>) {
-              await importMasterBackupMap(seed);
-            }
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
+    // Keep app completely fresh on install (do not auto-inject bundled dummy/seed data)
   }
 
   // -------------------------------------------------------------

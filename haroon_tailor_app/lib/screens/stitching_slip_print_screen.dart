@@ -408,14 +408,21 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                         final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
                         final val = _getBoxValue(meas, boxNum);
                         return pw.Container(
-                          height: 28,
+                          constraints: const pw.BoxConstraints(minHeight: 28),
+                          padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 1),
                           alignment: pw.Alignment.center,
                           child: val.isNotEmpty
                               ? pw.Transform.rotateBox(
                                   angle: -1.5707963267948966, // -90 deg (Clockwise in PDF, matching screen RotatedBox)
-                                  child: pw.Text(
-                                    val,
-                                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                                  child: pw.FittedBox(
+                                    fit: pw.BoxFit.scaleDown,
+                                    child: pw.Text(
+                                      val,
+                                      style: pw.TextStyle(
+                                        fontWeight: pw.FontWeight.bold,
+                                        fontSize: val.length > 5 ? 8.5 : 9.5,
+                                      ),
+                                    ),
                                   ),
                                 )
                               : pw.SizedBox(),
@@ -447,7 +454,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                   ),
                 ),
 
-                pw.SizedBox(height: 8),
+                // Generous feed padding (~4cm) so the printer feeds past the print head to the auto-cutter blade
+                pw.SizedBox(height: 110),
               ],
             );
           },
@@ -621,18 +629,22 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                                           final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
                                           final val = _getBoxValue(meas, boxNum);
                                           return Container(
-                                            height: 48,
+                                            constraints: const BoxConstraints(minHeight: 48),
+                                            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
                                             alignment: Alignment.center,
                                             color: Colors.white,
                                             child: val.isNotEmpty
                                                 ? RotatedBox(
                                                     quarterTurns: 1, // +90 deg clockwise (matches vertical-rl / attached screenshot)
-                                                    child: Text(
-                                                      val,
-                                                      style: const TextStyle(
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 16,
-                                                        color: Colors.black,
+                                                    child: FittedBox(
+                                                      fit: BoxFit.scaleDown,
+                                                      child: Text(
+                                                        val,
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: val.length > 5 ? 13 : 15,
+                                                          color: Colors.black,
+                                                        ),
                                                       ),
                                                     ),
                                                   )
