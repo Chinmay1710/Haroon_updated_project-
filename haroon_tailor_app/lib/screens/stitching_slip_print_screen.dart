@@ -268,6 +268,22 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     }
   }
 
+  Future<void> _printSingleGarment(Map<String, dynamic> item) async {
+    final cType = item['clothing_type'] ?? 'Item';
+    try {
+      await Printing.layoutPdf(
+        name: 'Stitching_Slip_${_order['order_number'] ?? widget.orderId}_$cType.pdf',
+        onLayout: (PdfPageFormat format) async => _generatePdfSlip(format, singleItem: item),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Print error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   Future<void> _sharePdf() async {
     try {
       final pdfBytes = await _generatePdfSlip(PdfPageFormat.roll57);
@@ -284,7 +300,148 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     }
   }
 
-  Future<Uint8List> _generatePdfSlip(PdfPageFormat format) async {
+  List<pw.Widget> _buildGarmentSlipWidgets(
+    Map<String, dynamic> it,
+    String billNo,
+    String delivDate,
+    String nowStr,
+  ) {
+    final cType = it['clothing_type'] ?? 'Custom Item';
+    final qty = (it['quantity'] as num?)?.toInt() ?? 1;
+    final notes = (it['notes'] ?? '').toString().trim();
+    final meas = (it['measurements'] as Map<String, dynamic>?) ?? {};
+
+    return [
+      // 1. Header (STITCHING SLIP - Haroon Tailor)
+      pw.Center(
+        child: pw.Text(
+          'STITCHING SLIP',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
+          textAlign: pw.TextAlign.center,
+        ),
+      ),
+      pw.Center(
+        child: pw.Text(
+          _shopName,
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+          textAlign: pw.TextAlign.center,
+        ),
+      ),
+      pw.SizedBox(height: 3),
+      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+      pw.SizedBox(height: 2),
+
+      // 2. Order Details (NO CUSTOMER NAME as required)
+      pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+          pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+        ],
+      ),
+      pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text('Due:', style: const pw.TextStyle(fontSize: 8.5)),
+          pw.Text(delivDate, style: const pw.TextStyle(fontSize: 8.5)),
+        ],
+      ),
+      pw.SizedBox(height: 3),
+      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+      pw.SizedBox(height: 2),
+
+      // 3. Garments
+      pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+      pw.Text('$cType (x$qty)', style: const pw.TextStyle(fontSize: 8.5)),
+      if (notes.isNotEmpty) ...[
+        pw.SizedBox(height: 2),
+        pw.Text('Item Note: $notes', style: const pw.TextStyle(fontSize: 8)),
+      ],
+      pw.SizedBox(height: 3),
+      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+      pw.SizedBox(height: 2),
+
+      // 4. Measurements Header
+      pw.Center(
+        child: pw.Text(
+          'MEASUREMENTS',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+        ),
+      ),
+      pw.SizedBox(height: 1),
+      pw.Text(
+        '$cType - $billNo',
+        style: pw.TextStyle(
+          fontWeight: pw.FontWeight.bold,
+          fontSize: 8.5,
+          decoration: pw.TextDecoration.underline,
+        ),
+      ),
+      pw.SizedBox(height: 3),
+
+      // 5. Measurements Grid: 4 columns x 6 rows
+      pw.Table(
+        border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
+        defaultColumnWidth: const pw.FlexColumnWidth(1),
+        columnWidths: const {
+          0: pw.FlexColumnWidth(1),
+          1: pw.FlexColumnWidth(1),
+          2: pw.FlexColumnWidth(1),
+          3: pw.FlexColumnWidth(1),
+        },
+        children: List.generate(6, (r) {
+          return pw.TableRow(
+            children: List.generate(4, (c) {
+              final sidewaysRow = 3 - c;
+              final sidewaysCol = r;
+              final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
+              final val = _getBoxValue(meas, boxNum);
+              return pw.Container(
+                height: 28,
+                alignment: pw.Alignment.center,
+                child: val.isNotEmpty
+                    ? pw.Transform.rotateBox(
+                        angle: -1.5707963267948966, // -90 deg
+                        child: pw.Text(
+                          val,
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: val.length > 5 ? 7.5 : (val.length > 3 ? 8.5 : 9.5),
+                          ),
+                        ),
+                      )
+                    : pw.SizedBox(),
+              );
+            }),
+          );
+        }),
+      ),
+      pw.SizedBox(height: 4),
+      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+      pw.SizedBox(height: 3),
+
+      // 6. Sign-offs
+      pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text('Cut By: _____', style: const pw.TextStyle(fontSize: 8)),
+          pw.Text('Sewn By: _____', style: const pw.TextStyle(fontSize: 8)),
+        ],
+      ),
+      pw.SizedBox(height: 4),
+
+      // 7. Generated Timestamp
+      pw.Center(
+        child: pw.Text(
+          'Generated: $nowStr',
+          style: const pw.TextStyle(fontSize: 6.5),
+          textAlign: pw.TextAlign.center,
+        ),
+      ),
+    ];
+  }
+
+  Future<Uint8List> _generatePdfSlip(PdfPageFormat format, {Map<String, dynamic>? singleItem}) async {
     final doc = pw.Document();
     final billNo = _order['order_number'] ?? '#${widget.orderId}';
     String delivDate = '-';
@@ -296,168 +453,52 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
         delivDate = _order['delivery_date'].toString().split('T')[0];
       }
     }
-    final items = _extractItemsFrom(_order);
     final nowStr = DateFormat('d MMM yyyy - HH:mm:ss').format(DateTime.now());
 
-    // Single or multiple garment slips - Each garment gets its own page so printer cuts between them!
-    final itemsToPrint = items.isNotEmpty
-        ? items
-        : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
+    final List<Map<String, dynamic>> itemsToPrint;
+    if (singleItem != null) {
+      itemsToPrint = [singleItem];
+    } else {
+      final items = _extractItemsFrom(_order);
+      itemsToPrint = items.isNotEmpty
+          ? items
+          : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
+    }
 
-    // Standard continuous 58mm thermal roll format (same as receipt_print_screen.dart)
     final pageFormat = PdfPageFormat.roll57;
 
-    for (final it in itemsToPrint) {
-      final cType = it['clothing_type'] ?? 'Custom Item';
-      final qty = (it['quantity'] as num?)?.toInt() ?? 1;
-      final notes = (it['notes'] ?? '').toString().trim();
-      final meas = (it['measurements'] as Map<String, dynamic>?) ?? {};
-
-      doc.addPage(
-        pw.Page(
-          pageFormat: pageFormat,
-          margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-              children: [
-                // 1. Header (STITCHING SLIP - Haroon Tailor)
+    // Single continuous page on thermal roll eliminates driver multi-page buffer dropped issues!
+    doc.addPage(
+      pw.Page(
+        pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        build: (pw.Context context) {
+          final widgets = <pw.Widget>[];
+          for (int i = 0; i < itemsToPrint.length; i++) {
+            if (i > 0) {
+              widgets.addAll([
+                pw.SizedBox(height: 10),
+                pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
                 pw.Center(
-                  child: pw.Text(
-                    'STITCHING SLIP',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
-                    textAlign: pw.TextAlign.center,
-                  ),
+                  child: pw.Text('- - - - - - ✂️ CUT HERE ✂️ - - - - - -',
+                      style: const pw.TextStyle(fontSize: 7.5)),
                 ),
-                pw.Center(
-                  child: pw.Text(
-                    _shopName,
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                    textAlign: pw.TextAlign.center,
-                  ),
-                ),
-                pw.SizedBox(height: 3),
-                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-                pw.SizedBox(height: 2),
+                pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
+                pw.SizedBox(height: 10),
+              ]);
+            }
+            widgets.addAll(_buildGarmentSlipWidgets(itemsToPrint[i], billNo, delivDate, nowStr));
+          }
+          // Safe feed spacing for cutter blade (~1.5cm) without exceeding roll bounds
+          widgets.add(pw.SizedBox(height: 28));
 
-                // 2. Order Details (NO CUSTOMER NAME as required)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                    pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  ],
-                ),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Due:', style: const pw.TextStyle(fontSize: 8.5)),
-                    pw.Text(delivDate, style: const pw.TextStyle(fontSize: 8.5)),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-                pw.SizedBox(height: 2),
-
-                // 3. Garments
-                pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
-                pw.Text('$cType (x$qty)', style: const pw.TextStyle(fontSize: 8.5)),
-                if (notes.isNotEmpty) ...[
-                  pw.SizedBox(height: 2),
-                  pw.Text('Item Note: $notes', style: const pw.TextStyle(fontSize: 8)),
-                ],
-                pw.SizedBox(height: 3),
-                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-                pw.SizedBox(height: 2),
-
-                // 4. Measurements Header
-                pw.Center(
-                  child: pw.Text(
-                    'MEASUREMENTS',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
-                  ),
-                ),
-                pw.SizedBox(height: 1),
-                pw.Text(
-                  '$cType - $billNo',
-                  style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: 8.5,
-                    decoration: pw.TextDecoration.underline,
-                  ),
-                ),
-                pw.SizedBox(height: 3),
-
-                // 5. Measurements Grid: 4 columns x 6 rows
-                // (sideways_row = 3 - c, sideways_col = r => Box 1 is at 4th column)
-                // Fits 58mm roll paper width with 4 equal columns and horizontal text
-                pw.Table(
-                  border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
-                  defaultColumnWidth: const pw.FlexColumnWidth(1),
-                  columnWidths: const {
-                    0: pw.FlexColumnWidth(1),
-                    1: pw.FlexColumnWidth(1),
-                    2: pw.FlexColumnWidth(1),
-                    3: pw.FlexColumnWidth(1),
-                  },
-                  children: List.generate(6, (r) {
-                    return pw.TableRow(
-                      children: List.generate(4, (c) {
-                        final sidewaysRow = 3 - c;
-                        final sidewaysCol = r;
-                        final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
-                        final val = _getBoxValue(meas, boxNum);
-                        return pw.Container(
-                          height: 28,
-                          alignment: pw.Alignment.center,
-                          child: val.isNotEmpty
-                              ? pw.Transform.rotateBox(
-                                  angle: -1.5707963267948966, // -90 deg (Clockwise in PDF, matching screen RotatedBox)
-                                  child: pw.Text(
-                                    val,
-                                    style: pw.TextStyle(
-                                      fontWeight: pw.FontWeight.bold,
-                                      fontSize: val.length > 5 ? 7.5 : (val.length > 3 ? 8.5 : 9.5),
-                                    ),
-                                  ),
-                                )
-                              : pw.SizedBox(),
-                        );
-                      }),
-                    );
-                  }),
-                ),
-                pw.SizedBox(height: 4),
-                pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-                pw.SizedBox(height: 3),
-
-                // 6. Sign-offs
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Cut By: _____', style: const pw.TextStyle(fontSize: 8)),
-                    pw.Text('Sewn By: _____', style: const pw.TextStyle(fontSize: 8)),
-                  ],
-                ),
-                pw.SizedBox(height: 4),
-
-                // 7. Generated Timestamp
-                pw.Center(
-                  child: pw.Text(
-                    'Generated: $nowStr',
-                    style: const pw.TextStyle(fontSize: 6.5),
-                    textAlign: pw.TextAlign.center,
-                  ),
-                ),
-
-                // Safe feed spacing for cutter blade (~1.5cm) without exceeding roll bounds
-                pw.SizedBox(height: 30),
-              ],
-            );
-          },
-        ),
-      );
-    }
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: widgets,
+          );
+        },
+      ),
+    );
 
     return doc.save();
   }
@@ -516,21 +557,40 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                       child: Center(
                         child: Column(
                           children: [
-                            if (itemsToDisplay.length > 1)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0F172A),
-                                    borderRadius: BorderRadius.circular(12),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Wrap(
+                                alignment: WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  if (itemsToDisplay.length > 1)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F172A),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        'Slip ${idx + 1} of ${itemsToDisplay.length}: $cType',
+                                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ElevatedButton.icon(
+                                    onPressed: () => _printSingleGarment(it),
+                                    icon: const Icon(Icons.print, size: 16, color: Colors.white),
+                                    label: Text('Print $cType (Single Slip)',
+                                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2563EB),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
                                   ),
-                                  child: Text(
-                                    'Slip ${idx + 1} of ${itemsToDisplay.length}: $cType (Cut Here ✂️)',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
+                                ],
                               ),
+                            ),
                             Container(
                               width: 320,
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -686,8 +746,12 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                     child: ElevatedButton.icon(
                       onPressed: _printPdf,
                       icon: const Icon(Icons.print, color: Colors.white),
-                      label: const Text('Print Stitching Slip (Karigar)',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      label: Text(
+                        itemsToDisplay.length > 1
+                            ? 'Print All (${itemsToDisplay.length} Slips - Continuous Strip)'
+                            : 'Print Stitching Slip (Karigar)',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0F172A),
                         padding: const EdgeInsets.symmetric(vertical: 16),
