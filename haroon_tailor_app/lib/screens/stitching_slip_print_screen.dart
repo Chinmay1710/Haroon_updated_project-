@@ -408,20 +408,16 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                         final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
                         final val = _getBoxValue(meas, boxNum);
                         return pw.Container(
-                          constraints: const pw.BoxConstraints(minHeight: 28),
-                          padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 1),
+                          height: 28,
                           alignment: pw.Alignment.center,
                           child: val.isNotEmpty
                               ? pw.Transform.rotateBox(
                                   angle: -1.5707963267948966, // -90 deg (Clockwise in PDF, matching screen RotatedBox)
-                                  child: pw.FittedBox(
-                                    fit: pw.BoxFit.scaleDown,
-                                    child: pw.Text(
-                                      val,
-                                      style: pw.TextStyle(
-                                        fontWeight: pw.FontWeight.bold,
-                                        fontSize: val.length > 5 ? 8.5 : 9.5,
-                                      ),
+                                  child: pw.Text(
+                                    val,
+                                    style: pw.TextStyle(
+                                      fontWeight: pw.FontWeight.bold,
+                                      fontSize: val.length > 5 ? 7.5 : (val.length > 3 ? 8.5 : 9.5),
                                     ),
                                   ),
                                 )
@@ -454,8 +450,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                   ),
                 ),
 
-                // Generous feed padding (~4cm) so the printer feeds past the print head to the auto-cutter blade
-                pw.SizedBox(height: 110),
+                // Safe feed spacing for cutter blade (~1.5cm) without exceeding roll bounds
+                pw.SizedBox(height: 30),
               ],
             );
           },
