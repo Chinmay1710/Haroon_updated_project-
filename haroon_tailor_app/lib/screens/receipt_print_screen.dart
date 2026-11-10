@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/local_storage_service.dart';
 import '../utils/phone_utils.dart';
@@ -264,7 +265,10 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
     final items = _extractItems();
     final payments = _extractPayments();
 
-    final pageFormat = PdfPageFormat.roll57;
+    final prefs = await SharedPreferences.getInstance();
+    final paperSize = prefs.getString('pref_thermal_paper_size') ?? '80mm';
+    final bool is80mm = paperSize == '80mm' || format.width >= 190;
+    final pageFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
 
     doc.addPage(
       pw.Page(
