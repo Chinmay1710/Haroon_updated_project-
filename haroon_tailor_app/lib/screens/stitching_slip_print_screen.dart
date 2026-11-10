@@ -26,6 +26,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
   bool _isLoading = true;
   Map<String, dynamic> _order = {};
   String _shopName = 'Haroon Tailor';
+  String _paperSize = '80mm';
 
   @override
   void initState() {
@@ -129,10 +130,12 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       }
 
       final settings = await ApiService.getShopSettings();
+      final savedPaperSize = await LocalStorageService.getThermalPaperSize();
       if (mounted) {
         setState(() {
           _order = o;
           _shopName = settings['shop_name'] ?? 'Haroon Tailor';
+          _paperSize = savedPaperSize;
           _isLoading = false;
         });
       }
@@ -255,9 +258,13 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
 
   Future<void> _printPdf() async {
     try {
+      final is80mm = _paperSize == '80mm';
+      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
       await Printing.layoutPdf(
         name: 'Stitching_Slip_${_order['order_number'] ?? widget.orderId}.pdf',
-        onLayout: (PdfPageFormat format) async => _generatePdfSlip(format),
+        format: targetFormat,
+        usePrinterSettings: true,
+        onLayout: (PdfPageFormat format) async => _generatePdfSlip(targetFormat),
       );
     } catch (e) {
       if (mounted) {
@@ -271,9 +278,13 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
   Future<void> _printSingleGarment(Map<String, dynamic> item) async {
     final cType = item['clothing_type'] ?? 'Item';
     try {
+      final is80mm = _paperSize == '80mm';
+      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
       await Printing.layoutPdf(
         name: 'Stitching_Slip_${_order['order_number'] ?? widget.orderId}_$cType.pdf',
-        onLayout: (PdfPageFormat format) async => _generatePdfSlip(format, singleItem: item),
+        format: targetFormat,
+        usePrinterSettings: true,
+        onLayout: (PdfPageFormat format) async => _generatePdfSlip(targetFormat, singleItem: item),
       );
     } catch (e) {
       if (mounted) {
@@ -286,7 +297,9 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
 
   Future<void> _sharePdf() async {
     try {
-      final pdfBytes = await _generatePdfSlip(PdfPageFormat.roll57);
+      final is80mm = _paperSize == '80mm';
+      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+      final pdfBytes = await _generatePdfSlip(targetFormat);
       await Printing.sharePdf(
         bytes: pdfBytes,
         filename: 'Stitching_Slip_${_order['order_number'] ?? widget.orderId}.pdf',
@@ -304,8 +317,9 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     Map<String, dynamic> it,
     String billNo,
     String delivDate,
-    String nowStr,
-  ) {
+    String nowStr, {
+    bool is80mm = true,
+  }) {
     final cType = it['clothing_type'] ?? 'Custom Item';
     final qty = (it['quantity'] as num?)?.toInt() ?? 1;
     final notes = (it['notes'] ?? '').toString().trim();
@@ -316,14 +330,14 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.Center(
         child: pw.Text(
           'STITCHING SLIP',
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13),
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 14 : 13),
           textAlign: pw.TextAlign.center,
         ),
       ),
       pw.Center(
         child: pw.Text(
           _shopName,
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 11 : 10),
           textAlign: pw.TextAlign.center,
         ),
       ),
@@ -335,15 +349,15 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-          pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+          pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10 : 9)),
+          pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10 : 9)),
         ],
       ),
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text('Due:', style: const pw.TextStyle(fontSize: 8.5)),
-          pw.Text(delivDate, style: const pw.TextStyle(fontSize: 8.5)),
+          pw.Text('Due:', style: pw.TextStyle(fontSize: is80mm ? 9.5 : 8.5)),
+          pw.Text(delivDate, style: pw.TextStyle(fontSize: is80mm ? 9.5 : 8.5)),
         ],
       ),
       pw.SizedBox(height: 3),
@@ -351,11 +365,11 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.SizedBox(height: 2),
 
       // 3. Garments
-      pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
-      pw.Text('$cType (x$qty)', style: const pw.TextStyle(fontSize: 8.5)),
+      pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 9.5 : 8.5)),
+      pw.Text('$cType (x$qty)', style: pw.TextStyle(fontSize: is80mm ? 9.5 : 8.5)),
       if (notes.isNotEmpty) ...[
         pw.SizedBox(height: 2),
-        pw.Text('Item Note: $notes', style: const pw.TextStyle(fontSize: 8)),
+        pw.Text('Item Note: $notes', style: pw.TextStyle(fontSize: is80mm ? 9 : 8)),
       ],
       pw.SizedBox(height: 3),
       pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
@@ -365,7 +379,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.Center(
         child: pw.Text(
           'MEASUREMENTS',
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10 : 9),
         ),
       ),
       pw.SizedBox(height: 1),
@@ -373,7 +387,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
         '$cType - $billNo',
         style: pw.TextStyle(
           fontWeight: pw.FontWeight.bold,
-          fontSize: 8.5,
+          fontSize: is80mm ? 9.5 : 8.5,
           decoration: pw.TextDecoration.underline,
         ),
       ),
@@ -397,7 +411,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
               final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
               final val = _getBoxValue(meas, boxNum);
               return pw.Container(
-                height: 28,
+                height: is80mm ? 32 : 28,
                 alignment: pw.Alignment.center,
                 child: val.isNotEmpty
                     ? pw.Transform.rotateBox(
@@ -406,7 +420,9 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                           val,
                           style: pw.TextStyle(
                             fontWeight: pw.FontWeight.bold,
-                            fontSize: val.length > 5 ? 7.5 : (val.length > 3 ? 8.5 : 9.5),
+                            fontSize: is80mm
+                                ? (val.length > 5 ? 8.5 : (val.length > 3 ? 9.5 : 11.0))
+                                : (val.length > 5 ? 7.5 : (val.length > 3 ? 8.5 : 9.5)),
                           ),
                         ),
                       )
@@ -424,8 +440,8 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text('Cut By: _____', style: const pw.TextStyle(fontSize: 8)),
-          pw.Text('Sewn By: _____', style: const pw.TextStyle(fontSize: 8)),
+          pw.Text('Cut By: _____', style: pw.TextStyle(fontSize: is80mm ? 9 : 8)),
+          pw.Text('Sewn By: _____', style: pw.TextStyle(fontSize: is80mm ? 9 : 8)),
         ],
       ),
       pw.SizedBox(height: 4),
@@ -434,7 +450,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.Center(
         child: pw.Text(
           'Generated: $nowStr',
-          style: const pw.TextStyle(fontSize: 6.5),
+          style: pw.TextStyle(fontSize: is80mm ? 7.5 : 6.5),
           textAlign: pw.TextAlign.center,
         ),
       ),
@@ -465,13 +481,15 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
           : [{'clothing_type': 'Custom Item', 'quantity': 1, 'notes': '', 'measurements': {}}];
     }
 
-    final pageFormat = PdfPageFormat.roll57;
+    final bool is80mm = _paperSize == '80mm';
+    final pageFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+    final double hMargin = is80mm ? 6.0 : 4.0;
 
     // Single continuous page on thermal roll eliminates driver multi-page buffer dropped issues!
     doc.addPage(
       pw.Page(
         pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        margin: pw.EdgeInsets.symmetric(horizontal: hMargin, vertical: 4),
         build: (pw.Context context) {
           final widgets = <pw.Widget>[];
           for (int i = 0; i < itemsToPrint.length; i++) {
@@ -481,13 +499,19 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                 pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
                 pw.Center(
                   child: pw.Text('- - - - - - ✂️ CUT HERE ✂️ - - - - - -',
-                      style: const pw.TextStyle(fontSize: 7.5)),
+                      style: pw.TextStyle(fontSize: is80mm ? 8.5 : 7.5)),
                 ),
                 pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
                 pw.SizedBox(height: 10),
               ]);
             }
-            widgets.addAll(_buildGarmentSlipWidgets(itemsToPrint[i], billNo, delivDate, nowStr));
+            widgets.addAll(_buildGarmentSlipWidgets(
+              itemsToPrint[i],
+              billNo,
+              delivDate,
+              nowStr,
+              is80mm: is80mm,
+            ));
           }
           // Safe feed spacing for cutter blade (~1.5cm) without exceeding roll bounds
           widgets.add(pw.SizedBox(height: 28));
@@ -544,6 +568,30 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  // Paper Size Selector Toggle (80mm vs 58mm)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: '80mm',
+                          icon: Icon(Icons.print, size: 18),
+                          label: Text('80mm (3-Inch Bada Roll)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                        ButtonSegment<String>(
+                          value: '58mm',
+                          icon: Icon(Icons.receipt, size: 18),
+                          label: Text('58mm (2-Inch)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ],
+                      selected: {_paperSize},
+                      onSelectionChanged: (Set<String> newSelection) async {
+                        final chosen = newSelection.first;
+                        setState(() => _paperSize = chosen);
+                        await LocalStorageService.saveThermalPaperSize(chosen);
+                      },
+                    ),
+                  ),
                   ...itemsToDisplay.asMap().entries.map((entry) {
                     final idx = entry.key;
                     final it = entry.value;
@@ -592,7 +640,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
                               ),
                             ),
                             Container(
-                              width: 320,
+                              width: _paperSize == '80mm' ? 380 : 300,
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                               decoration: BoxDecoration(
                                 color: Colors.white,

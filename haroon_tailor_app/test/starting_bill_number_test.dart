@@ -68,4 +68,21 @@ void main() {
     final nextBill = await LocalStorageService.getNextBillNumber();
     expect(nextBill, equals('Bill-000101'));
   });
+
+  test('Thermal paper size defaults to 80mm and can be toggled', () async {
+    // Default should be 80mm
+    final defaultSize = await LocalStorageService.getThermalPaperSize();
+    expect(defaultSize, equals('80mm'));
+
+    // Change to 58mm
+    await LocalStorageService.saveThermalPaperSize('58mm');
+    final updated = await LocalStorageService.getThermalPaperSize();
+    expect(updated, equals('58mm'));
+
+    // Switch back to 80mm
+    await LocalStorageService.saveThermalPaperSize('80mm');
+    final restored = await LocalStorageService.getThermalPaperSize();
+    expect(restored, equals('80mm'));
+  });
 }
+

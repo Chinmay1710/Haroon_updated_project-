@@ -15,6 +15,7 @@ class LocalStorageService {
   static const String _keySettings = 'ht_cache_settings';
   static const String _keyLastSync = 'ht_cache_last_sync';
   static const String _keyStartingBillNumber = 'ht_starting_bill_number';
+  static const String _keyThermalPaperSize = 'pref_thermal_paper_size';
 
   static bool _initialized = false;
 
@@ -320,6 +321,17 @@ class LocalStorageService {
   static Future<int?> getCustomStartingBillNumber() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_keyStartingBillNumber);
+  }
+
+  static Future<String> getThermalPaperSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyThermalPaperSize) ?? '80mm';
+  }
+
+  static Future<void> saveThermalPaperSize(String size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyThermalPaperSize, size);
+    notifyDataChanged();
   }
 
   static Future<void> saveCustomStartingBillNumber(int? number) async {

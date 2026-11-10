@@ -29,6 +29,7 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
   String _shopName = 'Haroon Tailor';
   String _shopAddress = '';
   String _shopPhone = '';
+  String _paperSize = '80mm';
   final currency = NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ', decimalDigits: 0);
 
   @override
@@ -48,6 +49,7 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
+      final savedPaperSize = await LocalStorageService.getThermalPaperSize();
       Map<String, dynamic> o = {};
 
       // 1. Check detailed cache
@@ -107,6 +109,7 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
           _shopName = settings['shop_name'] ?? 'Haroon Tailor';
           _shopAddress = settings['shop_address'] ?? settings['address'] ?? '';
           _shopPhone = settings['shop_phone'] ?? settings['phone'] ?? '';
+          _paperSize = savedPaperSize;
           _isLoading = false;
         });
       }
@@ -189,9 +192,13 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
 
   Future<void> _printPdf() async {
     try {
+      final is80mm = _paperSize == '80mm';
+      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
       await Printing.layoutPdf(
         name: 'Bill_${_order['order_number'] ?? widget.orderId}.pdf',
-        onLayout: (PdfPageFormat format) async => _generatePdfReceipt(format),
+        format: targetFormat,
+        usePrinterSettings: true,
+        onLayout: (PdfPageFormat format) async => _generatePdfReceipt(targetFormat),
       );
     } catch (e) {
       if (mounted) {
@@ -204,7 +211,9 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
 
   Future<void> _sharePdf() async {
     try {
-      final pdfBytes = await _generatePdfReceipt(PdfPageFormat.roll57);
+      final is80mm = _paperSize == '80mm';
+      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+      final pdfBytes = await _generatePdfReceipt(targetFormat);
       await Printing.sharePdf(
         bytes: pdfBytes,
         filename: 'Bill_${_order['order_number'] ?? widget.orderId}.pdf',
@@ -264,12 +273,21 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
     final items = _extractItems();
     final payments = _extractPayments();
 
-    final pageFormat = PdfPageFormat.roll57;
+    final bool is80mm = _paperSize == '80mm';
+    final pageFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+    final double hMargin = is80mm ? 6.0 : 4.0;
+    final double titleSize = is80mm ? 13.0 : 11.0;
+    final double subSize = is80mm ? 8.5 : 7.0;
+    final double metaBoldSize = is80mm ? 10.0 : 8.5;
+    final double metaSize = is80mm ? 9.0 : 7.5;
+    final double totalSize = is80mm ? 11.0 : 8.5;
+    final double dueSize = is80mm ? 12.0 : 9.0;
+    final double footerSize = is80mm ? 8.5 : 7.0;
 
     doc.addPage(
       pw.Page(
         pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        margin: pw.EdgeInsets.symmetric(horizontal: hMargin, vertical: 4),
         build: (pw.Context context) {
           final subtitle = [
             if (_shopAddress.isNotEmpty) _shopAddress,
@@ -279,110 +297,112 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              // 1. Compact Shop Info Header
+              // 1. Shop Info Header
               pw.Center(
                 child: pw.Text(
                   _shopName.toUpperCase(),
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: titleSize),
                   textAlign: pw.TextAlign.center,
                 ),
               ),
-              if (subtitle.isNotEmpty)
+              if (subtitle.isNotEmpty) ...[
+                pw.SizedBox(height: 1),
                 pw.Center(
                   child: pw.Text(
                     subtitle,
-                    style: const pw.TextStyle(fontSize: 7),
+                    style: pw.TextStyle(fontSize: subSize),
                     textAlign: pw.TextAlign.center,
                   ),
                 ),
+              ],
+              pw.SizedBox(height: 3),
+              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 1),
 
-              // 2. Compact Order & Customer Meta Rows
+              // 2. Order & Customer Meta Rows
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('RECEIPT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
-                  pw.Text('Bill: $billNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                  pw.Text('RECEIPT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaBoldSize)),
+                  pw.Text('Bill: $billNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaBoldSize)),
                 ],
               ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Date: $orderDate', style: const pw.TextStyle(fontSize: 7.5)),
-                  pw.Text('Due: $delivDate', style: const pw.TextStyle(fontSize: 7.5)),
+                  pw.Text('Date: $orderDate', style: pw.TextStyle(fontSize: metaSize)),
+                  pw.Text('Due: $delivDate', style: pw.TextStyle(fontSize: metaSize)),
                 ],
               ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Cust: $custName', style: const pw.TextStyle(fontSize: 7.5)),
+                  pw.Text('Cust: $custName', style: pw.TextStyle(fontSize: metaSize)),
                   if (custMobile.isNotEmpty)
-                    pw.Text('Ph: $custMobile', style: const pw.TextStyle(fontSize: 7.5)),
+                    pw.Text('Ph: $custMobile', style: pw.TextStyle(fontSize: metaSize)),
                 ],
               ),
+              pw.SizedBox(height: 3),
+              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 1),
 
-              // 3. Compact Items Header (50% / 15% / 35%)
+              // 3. Items Header
               pw.Row(
                 children: [
                   pw.Expanded(
                     flex: 5,
-                    child: pw.Text('Item', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
+                    child: pw.Text('Item', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
                   ),
                   pw.Expanded(
                     flex: 2,
-                    child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
+                    child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
                   ),
                   pw.Expanded(
                     flex: 3,
-                    child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.5)),
+                    child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
                   ),
                 ],
               ),
-              pw.SizedBox(height: 1),
+              pw.SizedBox(height: 2),
               pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 1),
+              pw.SizedBox(height: 2),
 
-              // 4. Compact Items Body
+              // 4. Items Body
               ...items.map((it) {
                 final cType = it['clothing_type'] ?? 'Custom';
                 final qty = (it['quantity'] as num?)?.toInt() ?? 1;
                 final price = (it['price'] as num?)?.toDouble() ?? 0.0;
                 final lineTotal = qty * price;
                 return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 0.8),
+                  padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
                   child: pw.Row(
                     children: [
                       pw.Expanded(
                         flex: 5,
-                        child: pw.Text(cType, style: const pw.TextStyle(fontSize: 7.5)),
+                        child: pw.Text(cType, style: pw.TextStyle(fontSize: metaSize)),
                       ),
                       pw.Expanded(
                         flex: 2,
-                        child: pw.Text('$qty', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 7.5)),
+                        child: pw.Text('$qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: metaSize)),
                       ),
                       pw.Expanded(
                         flex: 3,
-                        child: pw.Text('Rs. ${lineTotal.toStringAsFixed(0)}', textAlign: pw.TextAlign.right, style: const pw.TextStyle(fontSize: 7.5)),
+                        child: pw.Text('Rs. ${lineTotal.toStringAsFixed(0)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: metaSize)),
                       ),
                     ],
                   ),
                 );
               }),
+              pw.SizedBox(height: 3),
+              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 1),
 
-              // 5. Compact TOTAL & Payments
+              // 5. TOTAL & Payments
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
-                  pw.Text('Rs. ${total.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                  pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: totalSize)),
+                  pw.Text('Rs. ${total.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: totalSize)),
                 ],
               ),
 
@@ -393,8 +413,8 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
                   return pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('Paid ($pDate):', style: const pw.TextStyle(fontSize: 7)),
-                      pw.Text('-Rs. ${pAmt.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 7)),
+                      pw.Text('Paid ($pDate):', style: pw.TextStyle(fontSize: subSize)),
+                      pw.Text('-Rs. ${pAmt.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: subSize)),
                     ],
                   );
                 }),
@@ -402,32 +422,34 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Paid (Advance):', style: const pw.TextStyle(fontSize: 7)),
-                    pw.Text('-Rs. ${advance.toStringAsFixed(0)}', style: const pw.TextStyle(fontSize: 7)),
+                    pw.Text('Paid (Advance):', style: pw.TextStyle(fontSize: subSize)),
+                    pw.Text('-Rs. ${advance.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: subSize)),
                   ],
                 ),
               ],
 
-              // 6. Compact DUE Balance
+              // 6. DUE Balance
+              pw.SizedBox(height: 2),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('DUE BALANCE:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                  pw.Text('Rs. ${remaining.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                  pw.Text('DUE BALANCE:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: dueSize)),
+                  pw.Text('Rs. ${remaining.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: dueSize)),
                 ],
               ),
-              pw.SizedBox(height: 2),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-              pw.SizedBox(height: 2),
+              pw.SizedBox(height: 3),
+              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
+              pw.SizedBox(height: 3),
 
-              // 7. Compact Footer
+              // 7. Footer
               pw.Center(
                 child: pw.Text(
                   'Thank you for your business!',
-                  style: const pw.TextStyle(fontSize: 7),
+                  style: pw.TextStyle(fontSize: footerSize),
                   textAlign: pw.TextAlign.center,
                 ),
               ),
+              pw.SizedBox(height: 20),
             ],
           );
         },
@@ -479,10 +501,35 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  // Paper Size Selector Toggle (80mm vs 58mm)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: '80mm',
+                          icon: Icon(Icons.print, size: 18),
+                          label: Text('80mm (3-Inch Bada Roll)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                        ButtonSegment<String>(
+                          value: '58mm',
+                          icon: Icon(Icons.receipt, size: 18),
+                          label: Text('58mm (2-Inch)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ],
+                      selected: {_paperSize},
+                      onSelectionChanged: (Set<String> newSelection) async {
+                        final chosen = newSelection.first;
+                        setState(() => _paperSize = chosen);
+                        await LocalStorageService.saveThermalPaperSize(chosen);
+                      },
+                    ),
+                  ),
+
                   // Exact Thermal Receipt Paper Preview matching Website
                   Center(
                     child: Container(
-                      width: 320,
+                      width: _paperSize == '80mm' ? 380 : 300,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
                         color: Colors.white,

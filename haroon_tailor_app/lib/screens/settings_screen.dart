@@ -60,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   final TextEditingController _addressCtrl = TextEditingController();
   final TextEditingController _startingBillCtrl = TextEditingController();
   String _currentNextBillPreview = '';
+  String _thermalPaperSize = '80mm';
   String _measurementUnit = 'Inches (in)';
   int _defaultDeliveryDays = 7;
   Map<String, double> _defaultRates = {};
@@ -138,6 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
       final customStartingBill = await LocalStorageService.getCustomStartingBillNumber();
       final nextBillPreview = await LocalStorageService.getNextBillNumber();
+      final thermalPaperSize = await LocalStorageService.getThermalPaperSize();
 
       if (!mounted) return;
       setState(() {
@@ -147,6 +149,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _currentTheme = theme;
         _currentLanguage = lang;
         _measurementUnit = unit;
+        _thermalPaperSize = thermalPaperSize;
         _defaultDeliveryDays = days;
         _defaultRates = rates;
         _lastSyncTime = syncTime;
@@ -2817,6 +2820,81 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                         ),
                       ],
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ─── THERMAL PRINTER ROLL SIZE CARD ───
+          const Text('Thermal Printer Roll Size (Paper Width)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 6),
+          const Text('Aapke thermal printer ka roll size chuniye (80mm ya 58mm).', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+          const SizedBox(height: 12),
+
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.print, color: Color(0xFF2563EB), size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Thermal Printer Width',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            Text(
+                              'Receipt aur stitching slip is size me print honge',
+                              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  RadioListTile<String>(
+                    value: '80mm',
+                    groupValue: _thermalPaperSize,
+                    title: const Text('80mm (3-Inch Bada Roll) - Recommended', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: const Text('PeriPeri, TVS, Epson, Xprinter desktop 80mm roll (full width bina blank margin ke)'),
+                    onChanged: (val) async {
+                      if (val != null) {
+                        setState(() => _thermalPaperSize = val);
+                        await LocalStorageService.saveThermalPaperSize(val);
+                      }
+                    },
+                  ),
+                  const Divider(height: 1),
+                  RadioListTile<String>(
+                    value: '58mm',
+                    groupValue: _thermalPaperSize,
+                    title: const Text('58mm (2-Inch Chhota Roll)', style: TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: const Text('Small portable pocket thermal printers (58mm/2-inch wide)'),
+                    onChanged: (val) async {
+                      if (val != null) {
+                        setState(() => _thermalPaperSize = val);
+                        await LocalStorageService.saveThermalPaperSize(val);
+                      }
+                    },
                   ),
                 ],
               ),
