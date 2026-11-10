@@ -12,6 +12,10 @@ Future<Uint8List?> pickZipFileFromDevice() async {
   throw UnsupportedError('Platform not supported for file picking.');
 }
 
+Future<String?> pickZipFilePathFromDevice() async {
+  throw UnsupportedError('Platform not supported for file picking.');
+}
+
 Future<String?> pickJsonFileFromDevice() async {
   throw UnsupportedError('Platform not supported for file picking.');
 }
@@ -29,6 +33,14 @@ Future<String?> saveBackupViaSystemPickerPlatform({
 
 Future<String?> saveStableBackupZipPlatform({
   required Uint8List zipBytes,
+  String fileName = 'HaroonTailor_Backup.zip',
+  String? targetDirectoryPath,
+}) async {
+  throw UnsupportedError('Platform not supported for stable backup.');
+}
+
+Future<String?> saveStableBackupZipFromPathPlatform({
+  required String sourceFilePath,
   String fileName = 'HaroonTailor_Backup.zip',
   String? targetDirectoryPath,
 }) async {

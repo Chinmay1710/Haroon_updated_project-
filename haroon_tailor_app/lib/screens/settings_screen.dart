@@ -451,7 +451,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
 
     try {
-      final zipBytes = await ZipBackupService.createZipBackup(
+      final finalPath = await ZipBackupService.createZipBackupFile(
         onProgress: (status, progress) {
           progressStatusNotifier.value = status;
           progressValueNotifier.value = progress;
@@ -461,16 +461,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       // Close progress dialog
       if (mounted) Navigator.of(context).pop();
 
-      // Save/update the single stable backup ZIP file (HaroonTailor_Backup.zip)
-      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
-      if (savedPath == null || savedPath.isEmpty) {
-        throw Exception('The backup archive could not be saved to this device.');
-      }
-      final finalPath = savedPath;
+      final backupInfo = await FileHelper.getLastBackupInfo();
+      final backupSize = (backupInfo['sizeBytes'] as num?)?.toInt() ?? 0;
 
       await LocalStorageService.recordBackupSuccess(
         path: finalPath,
-        sizeBytes: zipBytes.length,
+        sizeBytes: backupSize,
       );
 
       await _loadAllSettings();
@@ -478,7 +474,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Single Backup updated! (${_formatFileSize(zipBytes.length)})\nSaved: $finalPath'),
+            content: Text('✅ Single Backup updated! (${_formatFileSize(backupSize)})\nSaved: $finalPath'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -552,7 +548,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
 
     try {
-      final zipBytes = await ZipBackupService.createZipBackup(
+      final finalPath = await ZipBackupService.createZipBackupFile(
         onProgress: (status, progress) {
           progressStatusNotifier.value = status;
           progressValueNotifier.value = progress;
@@ -561,33 +557,32 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
       if (mounted) Navigator.of(context).pop();
 
-      // Ensure stable backup is also saved locally
-      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
-      final finalPath = savedPath ?? 'HaroonTailor_Backup.zip';
+      final backupInfo = await FileHelper.getLastBackupInfo();
+      final backupSize = (backupInfo['sizeBytes'] as num?)?.toInt() ?? 0;
 
       await LocalStorageService.recordBackupSuccess(
         path: finalPath,
-        sizeBytes: zipBytes.length,
+        sizeBytes: backupSize,
       );
 
       await _loadAllSettings();
 
-      final xFile = XFile.fromData(
-        zipBytes,
+      final xFile = XFile(
+        finalPath,
         name: 'HaroonTailor_Backup.zip',
         mimeType: 'application/zip',
       );
 
       await Share.shareXFiles(
         [xFile],
-        text: 'Haroon Tailor Shop Backup (${_formatFileSize(zipBytes.length)}) - ${DateTime.now().toLocal().toString().split('.').first}',
+        text: 'Haroon Tailor Shop Backup (${_formatFileSize(backupSize)}) - ${DateTime.now().toLocal().toString().split('.').first}',
         subject: 'Haroon Tailor Backup',
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Compressed Backup ready (${_formatFileSize(zipBytes.length)})! WhatsApp/Drive me share karein.'),
+            content: Text('✅ Compressed Backup ready (${_formatFileSize(backupSize)})! WhatsApp/Drive me share karein.'),
             backgroundColor: const Color(0xFF16A34A),
             duration: const Duration(seconds: 4),
           ),
@@ -684,10 +679,14 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       if (source == null) return;
 
       Uint8List? zipBytes;
+      String? localZipPath;
 
       if (source == 'local') {
-        zipBytes = await FileHelper.pickBackupZipFile();
-        if (zipBytes == null) return; // User cancelled
+        localZipPath = await FileHelper.pickBackupZipFilePath();
+        if (localZipPath == null || localZipPath.isEmpty) {
+          zipBytes = await FileHelper.pickBackupZipFile();
+          if (zipBytes == null) return; // User cancelled
+        }
       } else if (source == 'drive') {
         if (!_gDriveConnected) {
           if (mounted) {
@@ -767,7 +766,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       }
 
       // 2. Validate & Conflict Check
-      final meta = await ZipBackupService.peekBackupMetadata(zipBytes!);
+      Map<String, dynamic>? meta;
+      if (localZipPath != null) {
+        meta = await ZipBackupService.peekBackupMetadataFromFile(localZipPath);
+      } else if (zipBytes != null) {
+        meta = await ZipBackupService.peekBackupMetadata(zipBytes);
+      }
       if (meta != null && meta['timestamp'] != null) {
         final backupTs = meta['timestamp'].toString();
         final isLocalNewer = await LocalStorageService.isLocalDataNewerThan(backupTs);
@@ -870,13 +874,24 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         ),
       );
 
-      final res = await ZipBackupService.restoreFromZip(
-        zipBytes: zipBytes,
-        onProgress: (status, progress) {
-          progressStatusNotifier.value = status;
-          progressValueNotifier.value = progress;
-        },
-      );
+      final Map<String, dynamic> res;
+      if (localZipPath != null) {
+        res = await ZipBackupService.restoreFromZipFile(
+          zipFilePath: localZipPath,
+          onProgress: (status, progress) {
+            progressStatusNotifier.value = status;
+            progressValueNotifier.value = progress;
+          },
+        );
+      } else {
+        res = await ZipBackupService.restoreFromZip(
+          zipBytes: zipBytes!,
+          onProgress: (status, progress) {
+            progressStatusNotifier.value = status;
+            progressValueNotifier.value = progress;
+          },
+        );
+      }
 
       // Close progress dialog
       if (mounted) Navigator.of(context).pop();
@@ -1248,26 +1263,23 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
 
     try {
-      // 1. Generate local backup ZIP
+      // 1. Generate local backup ZIP on disk via streaming
       progressStatusNotifier.value = 'Preparing local backup archive...';
       progressValueNotifier.value = 0.2;
-      final zipBytes = await ZipBackupService.createZipBackup(
+      final savedPath = await ZipBackupService.createZipBackupFile(
         onProgress: (status, p) {
           progressStatusNotifier.value = status;
           progressValueNotifier.value = 0.2 + (p * 0.4);
         },
       );
 
-      // 2. Save locally first
-      final savedPath = await FileHelper.saveStableBackupZip(zipBytes: zipBytes);
-      if (savedPath == null || savedPath.isEmpty) {
-        throw Exception('The backup archive could not be saved to this device.');
-      }
-      await LocalStorageService.recordBackupSuccess(path: savedPath, sizeBytes: zipBytes.length);
+      final backupInfo = await FileHelper.getLastBackupInfo();
+      final backupSize = (backupInfo['sizeBytes'] as num?)?.toInt() ?? 0;
+      await LocalStorageService.recordBackupSuccess(path: savedPath, sizeBytes: backupSize);
 
-      // 3. Upload to Google Drive
+      // 2. Upload to Google Drive via file stream
       final uploadRes = await GoogleDriveService.uploadBackupZip(
-        zipBytes: zipBytes,
+        filePath: savedPath,
         onProgress: (status, p) {
           progressStatusNotifier.value = status;
           progressValueNotifier.value = 0.6 + (p * 0.4);
@@ -1282,7 +1294,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         if (uploadRes['success'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Synced to Google Drive successfully! (${_formatFileSize(zipBytes.length)})'),
+              content: Text('✅ Synced to Google Drive successfully! (${_formatFileSize(backupSize)})'),
               backgroundColor: Colors.green,
             ),
           );

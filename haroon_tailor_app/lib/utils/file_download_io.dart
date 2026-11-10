@@ -96,6 +96,16 @@ Future<Uint8List?> pickZipFileFromDevice() async {
   return await pickedFiles.first.xFile.readAsBytes();
 }
 
+Future<String?> pickZipFilePathFromDevice() async {
+  final pickedFiles = await FilePicker.pickFiles(
+    dialogTitle: 'Select Haroon Tailor Backup ZIP File',
+    type: FileType.custom,
+    allowedExtensions: ['zip'],
+  );
+  if (pickedFiles.isEmpty) return null;
+  return pickedFiles.first.path;
+}
+
 Future<String?> pickJsonFileFromDevice() async {
   final pickedFiles = await FilePicker.pickFiles(
     dialogTitle: 'Select Haroon Tailor Backup JSON File',
@@ -133,11 +143,13 @@ Future<String?> saveStableBackupZipPlatform({
   String fileName = 'HaroonTailor_Backup.zip',
   String? targetDirectoryPath,
 }) async {
-  // 1. Validate archive integrity and ensure backup.json exists
-  final archive = ZipDecoder().decodeBytes(zipBytes, verify: true);
-  final hasBackupJson = archive.files.any((f) => f.name == 'backup.json');
-  if (!hasBackupJson) {
-    throw Exception('Backup validation failed: backup.json is missing in archive');
+  // 1. Validate archive integrity if payload is reasonably small
+  if (zipBytes.length < 20 * 1024 * 1024) {
+    final archive = ZipDecoder().decodeBytes(zipBytes, verify: false);
+    final hasBackupJson = archive.files.any((f) => f.name == 'backup.json');
+    if (!hasBackupJson) {
+      throw Exception('Backup validation failed: backup.json is missing in archive');
+    }
   }
 
   // 2. Primary safe save: App Documents Directory (Atomic replacement)
@@ -172,6 +184,48 @@ Future<String?> saveStableBackupZipPlatform({
           await publicTmp.writeAsBytes(zipBytes, flush: true);
           await _replaceBackupFile(publicTmp, publicFile);
         }
+      }
+    } catch (_) {}
+  }
+
+  return primaryFile.path;
+}
+
+Future<String?> saveStableBackupZipFromPathPlatform({
+  required String sourceFilePath,
+  String fileName = 'HaroonTailor_Backup.zip',
+  String? targetDirectoryPath,
+}) async {
+  final dir = await getBackupDirectory();
+  final primaryFile = File('${dir.path}/$fileName');
+  final sourceFile = File(sourceFilePath);
+
+  if (sourceFile.path != primaryFile.path) {
+    if (await primaryFile.exists()) {
+      try {
+        await primaryFile.delete();
+      } catch (_) {}
+    }
+    await sourceFile.copy(primaryFile.path);
+  }
+
+  // Custom directory
+  if (targetDirectoryPath != null && targetDirectoryPath.trim().isNotEmpty) {
+    try {
+      final customDir = Directory(targetDirectoryPath.trim());
+      if (!await customDir.exists()) {
+        await customDir.create(recursive: true);
+      }
+      final customFile = File('${customDir.path}/$fileName');
+      await primaryFile.copy(customFile.path);
+      return customFile.path;
+    } catch (_) {}
+  } else if (Platform.isAndroid) {
+    try {
+      final downloadDir = Directory('/storage/emulated/0/Download');
+      if (await downloadDir.exists()) {
+        final publicFile = File('${downloadDir.path}/$fileName');
+        await primaryFile.copy(publicFile.path);
       }
     } catch (_) {}
   }

@@ -66,6 +66,11 @@ Future<Uint8List?> pickZipFileFromDevice() async {
   return completer.future;
 }
 
+Future<String?> pickZipFilePathFromDevice() async {
+  // Not supported on web, web uses bytes
+  return null;
+}
+
 Future<String?> pickJsonFileFromDevice() async {
   final completer = Completer<String?>();
   final uploadInput = html.FileUploadInputElement()..accept = '.json,application/json';
@@ -129,6 +134,14 @@ Future<String?> saveStableBackupZipPlatform({
     ..click();
   html.Url.revokeObjectUrl(url);
 
+  return fileName;
+}
+
+Future<String?> saveStableBackupZipFromPathPlatform({
+  required String sourceFilePath,
+  String fileName = 'HaroonTailor_Backup.zip',
+  String? targetDirectoryPath,
+}) async {
   return fileName;
 }
 

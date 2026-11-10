@@ -38,6 +38,19 @@ class FileHelper {
     );
   }
 
+  /// Atomically save or copy backup from an existing file path directly without RAM overhead
+  static Future<String?> saveStableBackupZipFromPath({
+    required String sourceFilePath,
+    String fileName = 'HaroonTailor_Backup.zip',
+    String? targetDirectoryPath,
+  }) async {
+    return await saveStableBackupZipFromPathPlatform(
+      sourceFilePath: sourceFilePath,
+      fileName: fileName,
+      targetDirectoryPath: targetDirectoryPath,
+    );
+  }
+
   /// Let user choose a folder/location to save backups
   static Future<String?> pickFolderLocation() async {
     return await pickFolderLocationPlatform();
@@ -76,5 +89,10 @@ class FileHelper {
   /// Open native file picker dialog to let user select their backup ZIP file
   static Future<Uint8List?> pickBackupZipFile() async {
     return await pickZipFileFromDevice();
+  }
+
+  /// Open native file picker dialog to let user select their backup ZIP file by path (Zero RAM)
+  static Future<String?> pickBackupZipFilePath() async {
+    return await pickZipFilePathFromDevice();
   }
 }

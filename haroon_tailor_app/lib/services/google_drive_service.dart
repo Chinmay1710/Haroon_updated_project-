@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../utils/zip_stream_helper_stub.dart'
+    if (dart.library.html) '../utils/zip_stream_helper_web.dart'
+    if (dart.library.io) '../utils/zip_stream_helper_io.dart';
 
 /// Service for Google Drive OAuth 2.0 and Cloud Auto-Backup/Sync.
 /// Uses the official Google Drive API v3 with the narrowest scope:
@@ -448,7 +451,8 @@ class GoogleDriveService {
 
   /// Uploads or atomically updates the backup ZIP file in Google Drive
   static Future<Map<String, dynamic>> uploadBackupZip({
-    required Uint8List zipBytes,
+    Uint8List? zipBytes,
+    String? filePath,
     Function(String status, double progress)? onProgress,
   }) async {
     if (_isSyncing) {
@@ -474,53 +478,108 @@ class GoogleDriveService {
       final existingFileId = existingFile?['id'] as String?;
 
       http.Response response;
+      int uploadSize = zipBytes?.length ?? 0;
 
-      if (existingFileId != null && existingFileId.isNotEmpty) {
-        // Atomic update of existing file
-        onProgress?.call('Updating HaroonTailor_Backup.zip in Google Drive...', 0.6);
-        final updateUri = Uri.parse(
-          'https://www.googleapis.com/upload/drive/v3/files/$existingFileId?uploadType=media',
-        );
+      if (filePath != null && filePath.isNotEmpty) {
+        uploadSize = await getFileSize(filePath);
+        if (existingFileId != null && existingFileId.isNotEmpty) {
+          onProgress?.call('Updating HaroonTailor_Backup.zip in Google Drive...', 0.6);
+          final updateUri = 'https://www.googleapis.com/upload/drive/v3/files/$existingFileId?uploadType=media';
+          final streamedRes = await sendDriveUploadStream(
+            uploadUrl: updateUri,
+            method: 'PATCH',
+            token: token,
+            filePath: filePath,
+          );
+          if (streamedRes != null) {
+            response = await http.Response.fromStream(streamedRes);
+          } else {
+            throw Exception('Could not stream backup file from $filePath');
+          }
+        } else {
+          onProgress?.call('Creating HaroonTailor_Backup.zip in Google Drive...', 0.6);
+          final metaUri = Uri.parse('https://www.googleapis.com/drive/v3/files');
+          final metaRes = await http.post(
+            metaUri,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: jsonEncode({
+              'name': backupFileName,
+              'mimeType': 'application/zip',
+              'description': 'Automated complete backup of Haroon Tailor shop data and measurements',
+            }),
+          ).timeout(const Duration(seconds: 30));
 
-        response = await http.patch(
-          updateUri,
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'application/zip',
-          },
-          body: zipBytes,
-        ).timeout(const Duration(seconds: 60));
+          if (metaRes.statusCode == 200 || metaRes.statusCode == 201) {
+            final newId = (jsonDecode(metaRes.body) as Map)['id']?.toString();
+            final uploadUri = 'https://www.googleapis.com/upload/drive/v3/files/$newId?uploadType=media';
+            final streamedRes = await sendDriveUploadStream(
+              uploadUrl: uploadUri,
+              method: 'PATCH',
+              token: token,
+              filePath: filePath,
+            );
+            if (streamedRes != null) {
+              response = await http.Response.fromStream(streamedRes);
+            } else {
+              response = metaRes;
+            }
+          } else {
+            response = metaRes;
+          }
+        }
+      } else if (zipBytes != null) {
+        if (existingFileId != null && existingFileId.isNotEmpty) {
+          // Atomic update of existing file
+          onProgress?.call('Updating HaroonTailor_Backup.zip in Google Drive...', 0.6);
+          final updateUri = Uri.parse(
+            'https://www.googleapis.com/upload/drive/v3/files/$existingFileId?uploadType=media',
+          );
+
+          response = await http.patch(
+            updateUri,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/zip',
+            },
+            body: zipBytes,
+          ).timeout(const Duration(seconds: 60));
+        } else {
+          // Multipart upload to create new file
+          onProgress?.call('Creating HaroonTailor_Backup.zip in Google Drive...', 0.6);
+          const boundary = '-------HaroonTailorBoundaryXYZ';
+          final metadata = jsonEncode({
+            'name': backupFileName,
+            'mimeType': 'application/zip',
+            'description': 'Automated complete backup of Haroon Tailor shop data and measurements',
+          });
+
+          final List<int> body = [];
+          body.addAll(utf8.encode('--$boundary\r\n'));
+          body.addAll(utf8.encode('Content-Type: application/json; charset=UTF-8\r\n\r\n'));
+          body.addAll(utf8.encode('$metadata\r\n'));
+          body.addAll(utf8.encode('--$boundary\r\n'));
+          body.addAll(utf8.encode('Content-Type: application/zip\r\n\r\n'));
+          body.addAll(zipBytes);
+          body.addAll(utf8.encode('\r\n--$boundary--\r\n'));
+
+          final uploadUri = Uri.parse(
+            'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+          );
+
+          response = await http.post(
+            uploadUri,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'multipart/related; boundary=$boundary',
+            },
+            body: body,
+          ).timeout(const Duration(seconds: 60));
+        }
       } else {
-        // Multipart upload to create new file
-        onProgress?.call('Creating HaroonTailor_Backup.zip in Google Drive...', 0.6);
-        const boundary = '-------HaroonTailorBoundaryXYZ';
-        final metadata = jsonEncode({
-          'name': backupFileName,
-          'mimeType': 'application/zip',
-          'description': 'Automated complete backup of Haroon Tailor shop data and measurements',
-        });
-
-        final List<int> body = [];
-        body.addAll(utf8.encode('--$boundary\r\n'));
-        body.addAll(utf8.encode('Content-Type: application/json; charset=UTF-8\r\n\r\n'));
-        body.addAll(utf8.encode('$metadata\r\n'));
-        body.addAll(utf8.encode('--$boundary\r\n'));
-        body.addAll(utf8.encode('Content-Type: application/zip\r\n\r\n'));
-        body.addAll(zipBytes);
-        body.addAll(utf8.encode('\r\n--$boundary--\r\n'));
-
-        final uploadUri = Uri.parse(
-          'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-        );
-
-        response = await http.post(
-          uploadUri,
-          headers: {
-            'Authorization': 'Bearer $token',
-            'Content-Type': 'multipart/related; boundary=$boundary',
-          },
-          body: body,
-        ).timeout(const Duration(seconds: 60));
+        throw Exception('Neither zipBytes nor filePath was provided for upload.');
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -540,7 +599,7 @@ class GoogleDriveService {
           'success': true,
           'file_id': fileId,
           'sync_time': nowStr,
-          'size': zipBytes.length,
+          'size': uploadSize,
         };
       } else {
         final err = 'Drive upload failed (${response.statusCode}): ${response.body}';
