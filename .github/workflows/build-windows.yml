@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - 'haroon_tailor_app/**'
       - 'mobile_app/**'
+      - '.github/**'
   workflow_dispatch:
 
 jobs:
