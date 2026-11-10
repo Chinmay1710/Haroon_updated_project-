@@ -1334,6 +1334,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           'remaining_amount': _remainingBalance < 0 ? 0.0 : _remainingBalance,
           'notes': _orderNotesCtrl.text.trim(),
           'special_instructions': _orderNotesCtrl.text.trim(),
+          if (_nextBillNo.isNotEmpty) 'order_number': _nextBillNo,
           'items_summary': itemsStr,
           'cloth_photos': cleanAllPhotos,
           'image_path': cleanAllPhotos.where((p) => !p.startsWith('data:')).isNotEmpty
@@ -1385,6 +1386,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           'discount': _discount,
           'notes': _orderNotesCtrl.text.trim(),
           'special_instructions': _orderNotesCtrl.text.trim(),
+          if (_nextBillNo.isNotEmpty) 'order_number': _nextBillNo,
           'items_summary': itemsStr,
           'send_whatsapp': _sendWhatsapp,
           'cloth_photos': cleanAllPhotos,

@@ -58,6 +58,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   final TextEditingController _ownerNameCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
   final TextEditingController _addressCtrl = TextEditingController();
+  final TextEditingController _startingBillCtrl = TextEditingController();
+  String _currentNextBillPreview = '';
   String _measurementUnit = 'Inches (in)';
   int _defaultDeliveryDays = 7;
   Map<String, double> _defaultRates = {};
@@ -97,6 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     _ownerNameCtrl.dispose();
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
+    _startingBillCtrl.dispose();
     super.dispose();
   }
 
@@ -133,6 +136,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       final gDriveSyncStatus = await GoogleDriveService.getCloudSyncStatus();
       final gDriveAutoSync = await GoogleDriveService.isAutoSyncEnabled();
 
+      final customStartingBill = await LocalStorageService.getCustomStartingBillNumber();
+      final nextBillPreview = await LocalStorageService.getNextBillNumber();
+
       if (!mounted) return;
       setState(() {
         _clothingTypes = types;
@@ -160,6 +166,9 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         _gDriveLastSyncTime = gDriveLastSync;
         _gDriveSyncStatus = gDriveSyncStatus;
         _gDriveAutoSync = gDriveAutoSync;
+
+        _startingBillCtrl.text = customStartingBill != null ? customStartingBill.toString() : '';
+        _currentNextBillPreview = nextBillPreview;
 
         _shopNameCtrl.text = shop['shop_name']?.toString() ?? 'Haroon Tailor';
         _ownerNameCtrl.text = shop['owner_name']?.toString() ?? '';
@@ -1418,6 +1427,41 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     }
   }
 
+  Future<void> _saveStartingBillNumber() async {
+    final text = _startingBillCtrl.text.trim();
+    int? parsed;
+    if (text.isNotEmpty) {
+      parsed = int.tryParse(text);
+      if (parsed == null || parsed <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Kripya valid positive number dalein (Jaise: 1, 101, 1001)'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    await LocalStorageService.saveCustomStartingBillNumber(parsed);
+    final nextBill = await LocalStorageService.getNextBillNumber();
+    if (mounted) {
+      setState(() {
+        _currentNextBillPreview = nextBill;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(parsed != null
+              ? 'Starting Bill Number $parsed set ho gaya! Agla bill: $nextBill'
+              : 'Starting Bill Number reset ho gaya. Agla bill: $nextBill'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // BUILD METHOD
   // ──────────────────────────────────────────────────────────────────────────
@@ -1442,7 +1486,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             Tab(icon: Icon(Icons.mark_chat_unread, size: 20), text: '2. Messages'),
             Tab(icon: Icon(Icons.cloud_sync, size: 20), text: '3. Backup & Sync'),
             Tab(icon: Icon(Icons.translate, size: 20), text: '4. Language'),
-            Tab(icon: Icon(Icons.palette, size: 20), text: '5. Theme'),
+            Tab(icon: Icon(Icons.receipt_long, size: 20), text: '5. Dukaan & Bill No'),
             Tab(icon: Icon(Icons.edit_note, size: 20), text: '6. Notes Suggestions'),
           ],
         ),
@@ -2660,6 +2704,119 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                       ),
                       onPressed: _saveShopProfile,
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ─── BILL NUMBERING CARD ───
+          const Text('Bill & Order Number Settings', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 6),
+          const Text('Naye orders aur bills kis number se shuru karne hain yahan set karein.', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+          const SizedBox(height: 12),
+
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            elevation: 0,
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.receipt_long, color: Color(0xFF2563EB), size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Starting Bill Number (Sequence)',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            Text(
+                              'Apni pasand ke number se bill generation shuru karein',
+                              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 20, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Agla banne wala bill: ${_currentNextBillPreview.isNotEmpty ? _currentNextBillPreview : "Loading..."}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _startingBillCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Starting Bill Number (Jaise: 1, 101, 1001)',
+                      hintText: 'Number daalein jisse naye bill shuru karne hon',
+                      prefixIcon: const Icon(Icons.tag),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.check, color: Colors.white, size: 18),
+                          label: const Text('Save Starting Number', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: _saveStartingBillNumber,
+                        ),
+                      ),
+                      if (_startingBillCtrl.text.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () {
+                            _startingBillCtrl.clear();
+                            _saveStartingBillNumber();
+                          },
+                          child: const Text('Reset'),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

@@ -14,6 +14,7 @@ class LocalStorageService {
   static const String _keyPendingOrders = 'ht_cache_pending_orders';
   static const String _keySettings = 'ht_cache_settings';
   static const String _keyLastSync = 'ht_cache_last_sync';
+  static const String _keyStartingBillNumber = 'ht_starting_bill_number';
 
   static bool _initialized = false;
 
@@ -316,8 +317,33 @@ class LocalStorageService {
     return newCust;
   }
 
+  static Future<int?> getCustomStartingBillNumber() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyStartingBillNumber);
+  }
+
+  static Future<void> saveCustomStartingBillNumber(int? number) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (number != null && number > 0) {
+      await prefs.setInt(_keyStartingBillNumber, number);
+    } else {
+      await prefs.remove(_keyStartingBillNumber);
+    }
+
+    final settings = await getCachedShopSettings() ?? {};
+    if (number != null && number > 0) {
+      settings['starting_bill_number'] = number;
+    } else {
+      settings.remove('starting_bill_number');
+    }
+    await saveShopSettings(settings);
+    notifyDataChanged();
+  }
+
   static Future<String> getNextBillNumber() async {
     final cached = (await getCachedOrders()) ?? [];
+    final customStart = await getCustomStartingBillNumber();
+
     int maxBill = 0;
     for (var o in cached) {
       if (o is Map) {
@@ -326,13 +352,29 @@ class LocalStorageService {
         if (match.isNotEmpty) {
           final lastDigits = match.last.group(0);
           final bNum = int.tryParse(lastDigits ?? '');
-          if (bNum != null && bNum > maxBill) {
-            maxBill = bNum;
+          if (bNum != null) {
+            if (customStart != null) {
+              if (bNum >= customStart && bNum > maxBill) {
+                maxBill = bNum;
+              }
+            } else {
+              if (bNum > maxBill) {
+                maxBill = bNum;
+              }
+            }
           }
         }
       }
     }
-    final nextBill = maxBill + 1;
+
+    int nextBill;
+    if (customStart != null && maxBill == 0) {
+      nextBill = customStart;
+    } else if (customStart != null && maxBill >= customStart) {
+      nextBill = maxBill + 1;
+    } else {
+      nextBill = maxBill + 1;
+    }
     return 'Bill-${nextBill.toString().padLeft(6, '0')}';
   }
 
@@ -345,6 +387,8 @@ class LocalStorageService {
 
     int maxId = 0;
     int maxBill = 0;
+    final customStart = await getCustomStartingBillNumber();
+
     for (var o in orders) {
       if (o is Map) {
         final idVal = o['id'];
@@ -363,15 +407,30 @@ class LocalStorageService {
         if (match.isNotEmpty) {
           final lastDigits = match.last.group(0);
           final bNum = int.tryParse(lastDigits ?? '');
-          if (bNum != null && bNum > maxBill) {
-            maxBill = bNum;
+          if (bNum != null) {
+            if (customStart != null) {
+              if (bNum >= customStart && bNum > maxBill) {
+                maxBill = bNum;
+              }
+            } else {
+              if (bNum > maxBill) {
+                maxBill = bNum;
+              }
+            }
           }
         }
       }
     }
 
     if (billNo.isEmpty || !billNo.startsWith('Bill-')) {
-      final nextBill = maxBill + 1;
+      int nextBill;
+      if (customStart != null && maxBill == 0) {
+        nextBill = customStart;
+      } else if (customStart != null && maxBill >= customStart) {
+        nextBill = maxBill + 1;
+      } else {
+        nextBill = maxBill + 1;
+      }
       billNo = 'Bill-${nextBill.toString().padLeft(6, '0')}';
     }
     if (finalId <= 0) {

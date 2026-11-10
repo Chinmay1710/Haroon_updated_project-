@@ -21,6 +21,8 @@ uploads/
 backups/
 *.log
 *Master_Backup*.json
+*.apk
+*Backup*.zip
 
 # OS generated files
 .DS_Store

@@ -350,6 +350,7 @@ class ZipBackupService {
       'clothing_notes_suggestions': clothingNotesSuggestions,
       'auto_backup_enabled': isAutoBackup,
       'auto_backup_frequency': autoBackupFreq,
+      'starting_bill_number': await LocalStorageService.getCustomStartingBillNumber(),
       // Database entities
       'customers': customers ?? [],
       'customer_measurements': customerMeasurementsMap,
@@ -441,6 +442,7 @@ class ZipBackupService {
         'clothing_notes_suggestions': clothingNotesSuggestions,
         'auto_backup_enabled': isAutoBackup,
         'auto_backup_frequency': autoBackupFreq,
+        'starting_bill_number': await LocalStorageService.getCustomStartingBillNumber(),
         'customers': customers ?? [],
         'customer_measurements': customerMeasurementsMap,
         'orders': orders ?? [],
@@ -637,6 +639,11 @@ class ZipBackupService {
       }
       if (data['auto_backup_frequency'] is String && (data['auto_backup_frequency'] as String).isNotEmpty) {
         await LocalStorageService.setAutoBackupFrequency(data['auto_backup_frequency'] as String);
+      }
+      if (data['starting_bill_number'] is int) {
+        await LocalStorageService.saveCustomStartingBillNumber(data['starting_bill_number'] as int);
+      } else if (data['settings'] is Map && data['settings']['starting_bill_number'] is int) {
+        await LocalStorageService.saveCustomStartingBillNumber(data['settings']['starting_bill_number'] as int);
       }
     } catch (settingsErr) {
       debugPrint('Settings restore non-fatal warning: $settingsErr');
