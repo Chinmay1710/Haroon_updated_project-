@@ -193,7 +193,11 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
   Future<void> _printPdf() async {
     try {
       final is80mm = _paperSize == '80mm';
-      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+      final targetFormat = PdfPageFormat(
+        (is80mm ? 80.0 : 58.0) * PdfPageFormat.mm,
+        double.infinity,
+        marginAll: 0,
+      );
       await Printing.layoutPdf(
         name: 'Bill_${_order['order_number'] ?? widget.orderId}.pdf',
         format: targetFormat,
@@ -212,7 +216,11 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
   Future<void> _sharePdf() async {
     try {
       final is80mm = _paperSize == '80mm';
-      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+      final targetFormat = PdfPageFormat(
+        (is80mm ? 80.0 : 58.0) * PdfPageFormat.mm,
+        double.infinity,
+        marginAll: 0,
+      );
       final pdfBytes = await _generatePdfReceipt(targetFormat);
       await Printing.sharePdf(
         bytes: pdfBytes,
@@ -274,15 +282,19 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
     final payments = _extractPayments();
 
     final bool is80mm = _paperSize == '80mm';
-    final pageFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
-    final double hMargin = is80mm ? 6.0 : 4.0;
-    final double titleSize = is80mm ? 13.0 : 11.0;
-    final double subSize = is80mm ? 8.5 : 7.0;
-    final double metaBoldSize = is80mm ? 10.0 : 8.5;
-    final double metaSize = is80mm ? 9.0 : 7.5;
-    final double totalSize = is80mm ? 11.0 : 8.5;
-    final double dueSize = is80mm ? 12.0 : 9.0;
-    final double footerSize = is80mm ? 8.5 : 7.0;
+    final pageFormat = PdfPageFormat(
+      (is80mm ? 80.0 : 58.0) * PdfPageFormat.mm,
+      double.infinity,
+      marginAll: 0,
+    );
+    final double hMargin = (is80mm ? 2.5 : 1.5) * PdfPageFormat.mm;
+    final double titleSize = is80mm ? 14.0 : 11.5;
+    final double subSize = is80mm ? 9.0 : 7.5;
+    final double metaBoldSize = is80mm ? 11.0 : 9.0;
+    final double metaSize = is80mm ? 10.0 : 8.0;
+    final double totalSize = is80mm ? 12.0 : 9.5;
+    final double dueSize = is80mm ? 13.0 : 10.0;
+    final double footerSize = is80mm ? 9.0 : 7.5;
 
     doc.addPage(
       pw.Page(
@@ -316,55 +328,67 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
                 ),
               ],
               pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
+              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
 
               // 2. Order & Customer Meta Rows
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('RECEIPT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaBoldSize)),
-                  pw.Text('Bill: $billNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaBoldSize)),
-                ],
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('RECEIPT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaBoldSize)),
+                    pw.Text('Bill: $billNo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaBoldSize)),
+                  ],
+                ),
               ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Date: $orderDate', style: pw.TextStyle(fontSize: metaSize)),
-                  pw.Text('Due: $delivDate', style: pw.TextStyle(fontSize: metaSize)),
-                ],
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Date: $orderDate', style: pw.TextStyle(fontSize: metaSize)),
+                    pw.Text('Due: $delivDate', style: pw.TextStyle(fontSize: metaSize)),
+                  ],
+                ),
               ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Cust: $custName', style: pw.TextStyle(fontSize: metaSize)),
-                  if (custMobile.isNotEmpty)
-                    pw.Text('Ph: $custMobile', style: pw.TextStyle(fontSize: metaSize)),
-                ],
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Cust: $custName', style: pw.TextStyle(fontSize: metaSize)),
+                    if (custMobile.isNotEmpty)
+                      pw.Text('Ph: $custMobile', style: pw.TextStyle(fontSize: metaSize)),
+                  ],
+                ),
               ),
               pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
+              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
 
               // 3. Items Header
-              pw.Row(
-                children: [
-                  pw.Expanded(
-                    flex: 5,
-                    child: pw.Text('Item', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
-                  ),
-                  pw.Expanded(
-                    flex: 2,
-                    child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
-                  ),
-                  pw.Expanded(
-                    flex: 3,
-                    child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
-                  ),
-                ],
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Row(
+                  children: [
+                    pw.Expanded(
+                      flex: 5,
+                      child: pw.Text('Item', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
+                    ),
+                    pw.Expanded(
+                      flex: 3,
+                      child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: metaSize)),
+                    ),
+                  ],
+                ),
               ),
               pw.SizedBox(height: 2),
-              pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
 
               // 4. Items Body
@@ -375,70 +399,85 @@ class _ReceiptPrintScreenState extends State<ReceiptPrintScreen> {
                 final lineTotal = qty * price;
                 return pw.Padding(
                   padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
-                  child: pw.Row(
-                    children: [
-                      pw.Expanded(
-                        flex: 5,
-                        child: pw.Text(cType, style: pw.TextStyle(fontSize: metaSize)),
-                      ),
-                      pw.Expanded(
-                        flex: 2,
-                        child: pw.Text('$qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: metaSize)),
-                      ),
-                      pw.Expanded(
-                        flex: 3,
-                        child: pw.Text('Rs. ${lineTotal.toStringAsFixed(0)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: metaSize)),
-                      ),
-                    ],
+                  child: pw.SizedBox(
+                    width: double.infinity,
+                    child: pw.Row(
+                      children: [
+                        pw.Expanded(
+                          flex: 5,
+                          child: pw.Text(cType, style: pw.TextStyle(fontSize: metaSize)),
+                        ),
+                        pw.Expanded(
+                          flex: 2,
+                          child: pw.Text('$qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: metaSize)),
+                        ),
+                        pw.Expanded(
+                          flex: 3,
+                          child: pw.Text('Rs. ${lineTotal.toStringAsFixed(0)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: metaSize)),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }),
               pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
+              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 2),
 
               // 5. TOTAL & Payments
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: totalSize)),
-                  pw.Text('Rs. ${total.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: totalSize)),
-                ],
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('TOTAL:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: totalSize)),
+                    pw.Text('Rs. ${total.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: totalSize)),
+                  ],
+                ),
               ),
 
               if (payments.isNotEmpty) ...[
                 ...payments.map((p) {
                   final pDate = p['payment_date'] != null ? p['payment_date'].toString().split('T')[0] : '';
                   final pAmt = (p['amount'] as num?)?.toDouble() ?? 0.0;
-                  return pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('Paid ($pDate):', style: pw.TextStyle(fontSize: subSize)),
-                      pw.Text('-Rs. ${pAmt.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: subSize)),
-                    ],
+                  return pw.SizedBox(
+                    width: double.infinity,
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Paid ($pDate):', style: pw.TextStyle(fontSize: subSize)),
+                        pw.Text('-Rs. ${pAmt.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: subSize)),
+                      ],
+                    ),
                   );
                 }),
               ] else if (advance > 0) ...[
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Paid (Advance):', style: pw.TextStyle(fontSize: subSize)),
-                    pw.Text('-Rs. ${advance.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: subSize)),
-                  ],
+                pw.SizedBox(
+                  width: double.infinity,
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Paid (Advance):', style: pw.TextStyle(fontSize: subSize)),
+                      pw.Text('-Rs. ${advance.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: subSize)),
+                    ],
+                  ),
                 ),
               ],
 
               // 6. DUE Balance
               pw.SizedBox(height: 2),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('DUE BALANCE:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: dueSize)),
-                  pw.Text('Rs. ${remaining.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: dueSize)),
-                ],
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('DUE BALANCE:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: dueSize)),
+                    pw.Text('Rs. ${remaining.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: dueSize)),
+                  ],
+                ),
               ),
               pw.SizedBox(height: 3),
-              pw.Divider(thickness: 0.6, borderStyle: pw.BorderStyle.dashed),
+              pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
               pw.SizedBox(height: 3),
 
               // 7. Footer

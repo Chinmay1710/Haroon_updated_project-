@@ -259,7 +259,11 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
   Future<void> _printPdf() async {
     try {
       final is80mm = _paperSize == '80mm';
-      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+      final targetFormat = PdfPageFormat(
+        (is80mm ? 80.0 : 58.0) * PdfPageFormat.mm,
+        double.infinity,
+        marginAll: 0,
+      );
       await Printing.layoutPdf(
         name: 'Stitching_Slip_${_order['order_number'] ?? widget.orderId}.pdf',
         format: targetFormat,
@@ -279,7 +283,11 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     final cType = item['clothing_type'] ?? 'Item';
     try {
       final is80mm = _paperSize == '80mm';
-      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+      final targetFormat = PdfPageFormat(
+        (is80mm ? 80.0 : 58.0) * PdfPageFormat.mm,
+        double.infinity,
+        marginAll: 0,
+      );
       await Printing.layoutPdf(
         name: 'Stitching_Slip_${_order['order_number'] ?? widget.orderId}_$cType.pdf',
         format: targetFormat,
@@ -298,7 +306,11 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
   Future<void> _sharePdf() async {
     try {
       final is80mm = _paperSize == '80mm';
-      final targetFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
+      final targetFormat = PdfPageFormat(
+        (is80mm ? 80.0 : 58.0) * PdfPageFormat.mm,
+        double.infinity,
+        marginAll: 0,
+      );
       final pdfBytes = await _generatePdfSlip(targetFormat);
       await Printing.sharePdf(
         bytes: pdfBytes,
@@ -330,56 +342,62 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.Center(
         child: pw.Text(
           'STITCHING SLIP',
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 14 : 13),
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 15.0 : 13.0),
           textAlign: pw.TextAlign.center,
         ),
       ),
       pw.Center(
         child: pw.Text(
           _shopName,
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 11 : 10),
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 12.0 : 10.0),
           textAlign: pw.TextAlign.center,
         ),
       ),
       pw.SizedBox(height: 3),
-      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+      pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
       pw.SizedBox(height: 2),
 
       // 2. Order Details (NO CUSTOMER NAME as required)
-      pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10 : 9)),
-          pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10 : 9)),
-        ],
+      pw.SizedBox(
+        width: double.infinity,
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Bill No:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 11.0 : 9.5)),
+            pw.Text(billNo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 11.0 : 9.5)),
+          ],
+        ),
       ),
-      pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text('Due:', style: pw.TextStyle(fontSize: is80mm ? 9.5 : 8.5)),
-          pw.Text(delivDate, style: pw.TextStyle(fontSize: is80mm ? 9.5 : 8.5)),
-        ],
+      pw.SizedBox(
+        width: double.infinity,
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Due:', style: pw.TextStyle(fontSize: is80mm ? 10.5 : 9.0)),
+            pw.Text(delivDate, style: pw.TextStyle(fontSize: is80mm ? 10.5 : 9.0)),
+          ],
+        ),
       ),
       pw.SizedBox(height: 3),
-      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+      pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
       pw.SizedBox(height: 2),
 
       // 3. Garments
-      pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 9.5 : 8.5)),
-      pw.Text('$cType (x$qty)', style: pw.TextStyle(fontSize: is80mm ? 9.5 : 8.5)),
+      pw.Text('Garments:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 11.0 : 9.5)),
+      pw.Text('$cType (x$qty)', style: pw.TextStyle(fontSize: is80mm ? 11.0 : 9.5)),
       if (notes.isNotEmpty) ...[
         pw.SizedBox(height: 2),
-        pw.Text('Item Note: $notes', style: pw.TextStyle(fontSize: is80mm ? 9 : 8)),
+        pw.Text('Item Note: $notes', style: pw.TextStyle(fontSize: is80mm ? 10.0 : 8.5)),
       ],
       pw.SizedBox(height: 3),
-      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+      pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
       pw.SizedBox(height: 2),
 
       // 4. Measurements Header
       pw.Center(
         child: pw.Text(
           'MEASUREMENTS',
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10 : 9),
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 11.5 : 10.0),
         ),
       ),
       pw.SizedBox(height: 1),
@@ -387,62 +405,70 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
         '$cType - $billNo',
         style: pw.TextStyle(
           fontWeight: pw.FontWeight.bold,
-          fontSize: is80mm ? 9.5 : 8.5,
+          fontSize: is80mm ? 11.0 : 9.5,
           decoration: pw.TextDecoration.underline,
         ),
       ),
-      pw.SizedBox(height: 3),
-
-      // 5. Measurements Grid: 4 columns x 6 rows
-      pw.Table(
-        border: pw.TableBorder.all(width: 0.8, color: PdfColors.black),
-        defaultColumnWidth: const pw.FlexColumnWidth(1),
-        columnWidths: const {
-          0: pw.FlexColumnWidth(1),
-          1: pw.FlexColumnWidth(1),
-          2: pw.FlexColumnWidth(1),
-          3: pw.FlexColumnWidth(1),
-        },
-        children: List.generate(6, (r) {
-          return pw.TableRow(
-            children: List.generate(4, (c) {
-              final sidewaysRow = 3 - c;
-              final sidewaysCol = r;
-              final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
-              final val = _getBoxValue(meas, boxNum);
-              return pw.Container(
-                height: is80mm ? 32 : 28,
-                alignment: pw.Alignment.center,
-                child: val.isNotEmpty
-                    ? pw.Transform.rotateBox(
-                        angle: -1.5707963267948966, // -90 deg
-                        child: pw.Text(
-                          val,
-                          style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold,
-                            fontSize: is80mm
-                                ? (val.length > 5 ? 8.5 : (val.length > 3 ? 9.5 : 11.0))
-                                : (val.length > 5 ? 7.5 : (val.length > 3 ? 8.5 : 9.5)),
-                          ),
-                        ),
-                      )
-                    : pw.SizedBox(),
-              );
-            }),
-          );
-        }),
-      ),
       pw.SizedBox(height: 4),
-      pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+
+      // 5. Measurements Grid: 4 columns x 6 rows (Full Width & Clean Bold Values)
+      pw.SizedBox(
+        width: double.infinity,
+        child: pw.Table(
+          border: pw.TableBorder.all(width: 1.2, color: PdfColors.black),
+          tableWidth: pw.TableWidth.max,
+          defaultColumnWidth: const pw.FlexColumnWidth(1),
+          columnWidths: const {
+            0: pw.FlexColumnWidth(1),
+            1: pw.FlexColumnWidth(1),
+            2: pw.FlexColumnWidth(1),
+            3: pw.FlexColumnWidth(1),
+          },
+          children: List.generate(6, (r) {
+            return pw.TableRow(
+              children: List.generate(4, (c) {
+                final sidewaysRow = 3 - c;
+                final sidewaysCol = r;
+                final boxNum = sidewaysRow * 6 + sidewaysCol + 1;
+                final val = _getBoxValue(meas, boxNum);
+                return pw.Container(
+                  height: is80mm ? 38.0 : 28.0,
+                  alignment: pw.Alignment.center,
+                  child: val.isNotEmpty
+                      ? pw.Transform.rotateBox(
+                          angle: -1.5707963267948966, // -90 deg
+                          child: pw.Text(
+                            val,
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: is80mm
+                                  ? (val.length > 5 ? 11.0 : (val.length > 3 ? 13.0 : 15.0))
+                                  : (val.length > 5 ? 8.5 : (val.length > 3 ? 10.0 : 11.5)),
+                              color: PdfColors.black,
+                            ),
+                          ),
+                        )
+                      : pw.SizedBox(),
+                );
+              }),
+            );
+          }),
+        ),
+      ),
+      pw.SizedBox(height: 5),
+      pw.Divider(thickness: 0.8, borderStyle: pw.BorderStyle.dashed),
       pw.SizedBox(height: 3),
 
       // 6. Sign-offs
-      pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text('Cut By: _____', style: pw.TextStyle(fontSize: is80mm ? 9 : 8)),
-          pw.Text('Sewn By: _____', style: pw.TextStyle(fontSize: is80mm ? 9 : 8)),
-        ],
+      pw.SizedBox(
+        width: double.infinity,
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Cut By: _____', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10.0 : 8.5)),
+            pw.Text('Sewn By: _____', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: is80mm ? 10.0 : 8.5)),
+          ],
+        ),
       ),
       pw.SizedBox(height: 4),
 
@@ -450,7 +476,7 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
       pw.Center(
         child: pw.Text(
           'Generated: $nowStr',
-          style: pw.TextStyle(fontSize: is80mm ? 7.5 : 6.5),
+          style: pw.TextStyle(fontSize: is80mm ? 8.5 : 7.0),
           textAlign: pw.TextAlign.center,
         ),
       ),
@@ -482,8 +508,12 @@ class _StitchingSlipPrintScreenState extends State<StitchingSlipPrintScreen> {
     }
 
     final bool is80mm = _paperSize == '80mm';
-    final pageFormat = is80mm ? PdfPageFormat.roll80 : PdfPageFormat.roll57;
-    final double hMargin = is80mm ? 6.0 : 4.0;
+    final pageFormat = PdfPageFormat(
+      (is80mm ? 80.0 : 58.0) * PdfPageFormat.mm,
+      double.infinity,
+      marginAll: 0,
+    );
+    final double hMargin = (is80mm ? 2.5 : 1.5) * PdfPageFormat.mm;
 
     // Single continuous page on thermal roll eliminates driver multi-page buffer dropped issues!
     doc.addPage(
