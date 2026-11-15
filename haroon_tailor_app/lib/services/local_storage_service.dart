@@ -40,11 +40,35 @@ class LocalStorageService {
   static Future<void> initStorage() async {
     if (_initialized) return;
     _initialized = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Purge bloated legacy keys from SharedPreferences to keep memory minimal
+      final keysToRemove = [
+        _keyOrders,
+        _keyCustomers,
+        _keyDashboard,
+        _keyDeliveries,
+        _keyPendingOrders,
+      ];
+      for (final key in keysToRemove) {
+        if (prefs.containsKey(key)) {
+          await prefs.remove(key);
+        }
+      }
+      final allKeys = prefs.getKeys();
+      for (final k in allKeys) {
+        if (k.startsWith('ht_cache_customer_') ||
+            k.startsWith('ht_cache_measurements_') ||
+            k.startsWith('ht_cache_order_')) {
+          await prefs.remove(k);
+        }
+      }
+    } catch (_) {}
     // Keep app completely fresh on install (do not auto-inject bundled dummy/seed data)
   }
 
   // -------------------------------------------------------------
-  // ORDERS CACHE (Dual-Layer: Permanent Disk File + SharedPreferences)
+  // ORDERS CACHE (Direct Disk Storage - Zero SharedPreferences OOM)
   // -------------------------------------------------------------
   static Future<void> saveOrders(List<dynamic> orders) async {
     try {
@@ -52,9 +76,11 @@ class LocalStorageService {
       final jsonStr = jsonEncode(orders);
       // 1. Permanent file write directly to disk (never lost!)
       await saveJsonToFile('haroon_orders_data.json', jsonStr);
-      // 2. Also keep SharedPreferences in sync
+      // Clean up legacy bloated SharedPreferences key so it never causes Android OOM
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyOrders, jsonStr);
+      if (prefs.containsKey(_keyOrders)) {
+        await prefs.remove(_keyOrders);
+      }
       await _recordSyncTime();
       notifyDataChanged();
     } catch (_) {}
@@ -72,16 +98,19 @@ class LocalStorageService {
           return decoded;
         }
       }
-      // 2. Fallback to SharedPreferences
+      // 2. Legacy fallback from SharedPreferences (one-time migration)
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_keyOrders);
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          // Sync back to disk for durability
-          _memoryOrdersCache = decoded;
-          await saveJsonToFile('haroon_orders_data.json', raw);
-          return decoded;
+      if (prefs.containsKey(_keyOrders)) {
+        final raw = prefs.getString(_keyOrders);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) {
+            // Sync to disk for permanent durability and clean SharedPreferences
+            _memoryOrdersCache = decoded;
+            await saveJsonToFile('haroon_orders_data.json', raw);
+            await prefs.remove(_keyOrders);
+            return decoded;
+          }
         }
       }
     } catch (_) {}
@@ -234,7 +263,7 @@ class LocalStorageService {
   }
 
   // -------------------------------------------------------------
-  // CUSTOMERS CACHE
+  // CUSTOMERS CACHE (Direct Disk Storage - Zero SharedPreferences OOM)
   // -------------------------------------------------------------
   static Future<void> saveCustomers(List<dynamic> customers) async {
     try {
@@ -242,7 +271,9 @@ class LocalStorageService {
       final jsonStr = jsonEncode(customers);
       await saveJsonToFile('haroon_customers_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyCustomers, jsonStr);
+      if (prefs.containsKey(_keyCustomers)) {
+        await prefs.remove(_keyCustomers);
+      }
       await _recordSyncTime();
       notifyDataChanged();
     } catch (_) {}
@@ -260,13 +291,16 @@ class LocalStorageService {
         }
       }
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_keyCustomers);
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          _memoryCustomersCache = decoded;
-          await saveJsonToFile('haroon_customers_data.json', raw);
-          return decoded;
+      if (prefs.containsKey(_keyCustomers)) {
+        final raw = prefs.getString(_keyCustomers);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) {
+            _memoryCustomersCache = decoded;
+            await saveJsonToFile('haroon_customers_data.json', raw);
+            await prefs.remove(_keyCustomers);
+            return decoded;
+          }
         }
       }
     } catch (_) {}
@@ -902,22 +936,39 @@ class LocalStorageService {
   }
 
   // -------------------------------------------------------------
-  // CUSTOMER DETAILS & MEASUREMENTS CACHE
+  // CUSTOMER DETAILS & MEASUREMENTS CACHE (Direct Disk Storage)
   // -------------------------------------------------------------
   static Future<void> saveCustomerDetails(int customerId, Map<String, dynamic> details) async {
     try {
+      final jsonStr = jsonEncode(details);
+      await saveJsonToFile('haroon_customer_$customerId.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ht_cache_customer_$customerId', jsonEncode(details));
+      final key = 'ht_cache_customer_$customerId';
+      if (prefs.containsKey(key)) {
+        await prefs.remove(key);
+      }
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>?> getCachedCustomerDetails(int customerId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('ht_cache_customer_$customerId');
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
+      final fromDisk = await readJsonFromFile('haroon_customer_$customerId.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
         if (decoded is Map<String, dynamic>) return decoded;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'ht_cache_customer_$customerId';
+      if (prefs.containsKey(key)) {
+        final raw = prefs.getString(key);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) {
+            await saveJsonToFile('haroon_customer_$customerId.json', raw);
+            await prefs.remove(key);
+            return decoded;
+          }
+        }
       }
     } catch (_) {}
     return null;
@@ -928,7 +979,10 @@ class LocalStorageService {
       final jsonStr = jsonEncode(measurements);
       await saveJsonToFile('haroon_measurements_$customerId.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('ht_cache_measurements_$customerId', jsonStr);
+      final key = 'ht_cache_measurements_$customerId';
+      if (prefs.containsKey(key)) {
+        await prefs.remove(key);
+      }
     } catch (_) {}
   }
 
@@ -945,6 +999,7 @@ class LocalStorageService {
         final decoded = jsonDecode(raw);
         if (decoded is List) {
           await saveJsonToFile('haroon_measurements_$customerId.json', raw);
+          await prefs.remove('ht_cache_measurements_$customerId');
           return decoded;
         }
       }
@@ -1205,26 +1260,44 @@ class LocalStorageService {
   }
 
   // -------------------------------------------------------------
-  // DASHBOARD STATS CACHE
+  // DASHBOARD STATS CACHE (Direct Disk Storage)
   // -------------------------------------------------------------
   static Future<void> saveDashboardStats(Map<String, dynamic> stats) async {
     try {
+      final jsonStr = jsonEncode(stats);
+      await saveJsonToFile('haroon_dashboard_stats.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyDashboard, jsonEncode(stats));
+      if (prefs.containsKey(_keyDashboard)) {
+        await prefs.remove(_keyDashboard);
+      }
       await _recordSyncTime();
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>?> getCachedDashboardStats() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_keyDashboard);
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
+      final fromDisk = await readJsonFromFile('haroon_dashboard_stats.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
         if (decoded is Map<String, dynamic>) {
           if (decoded['recent_orders'] is List &&
               decoded['pending_payments'] != null) {
             return decoded;
+          }
+        }
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey(_keyDashboard)) {
+        final raw = prefs.getString(_keyDashboard);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) {
+            await saveJsonToFile('haroon_dashboard_stats.json', raw);
+            await prefs.remove(_keyDashboard);
+            if (decoded['recent_orders'] is List &&
+                decoded['pending_payments'] != null) {
+              return decoded;
+            }
           }
         }
       }
@@ -1333,44 +1406,74 @@ class LocalStorageService {
   }
 
   // -------------------------------------------------------------
-  // DELIVERIES CACHE
+  // DELIVERIES CACHE (Direct Disk Storage)
   // -------------------------------------------------------------
   static Future<void> saveDeliveries(Map<String, dynamic> deliveries) async {
     try {
+      final jsonStr = jsonEncode(deliveries);
+      await saveJsonToFile('haroon_deliveries_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyDeliveries, jsonEncode(deliveries));
+      if (prefs.containsKey(_keyDeliveries)) {
+        await prefs.remove(_keyDeliveries);
+      }
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>?> getCachedDeliveries() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_keyDeliveries);
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
+      final fromDisk = await readJsonFromFile('haroon_deliveries_data.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
         if (decoded is Map<String, dynamic>) return decoded;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey(_keyDeliveries)) {
+        final raw = prefs.getString(_keyDeliveries);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) {
+            await saveJsonToFile('haroon_deliveries_data.json', raw);
+            await prefs.remove(_keyDeliveries);
+            return decoded;
+          }
+        }
       }
     } catch (_) {}
     return null;
   }
 
   // -------------------------------------------------------------
-  // PENDING PAYMENTS CACHE
+  // PENDING PAYMENTS CACHE (Direct Disk Storage)
   // -------------------------------------------------------------
   static Future<void> savePendingOrders(List<dynamic> orders) async {
     try {
+      final jsonStr = jsonEncode(orders);
+      await saveJsonToFile('haroon_pending_orders_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyPendingOrders, jsonEncode(orders));
+      if (prefs.containsKey(_keyPendingOrders)) {
+        await prefs.remove(_keyPendingOrders);
+      }
     } catch (_) {}
   }
 
   static Future<List<dynamic>?> getCachedPendingOrders() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_keyPendingOrders);
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
+      final fromDisk = await readJsonFromFile('haroon_pending_orders_data.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
         if (decoded is List && decoded.isNotEmpty) return decoded;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey(_keyPendingOrders)) {
+        final raw = prefs.getString(_keyPendingOrders);
+        if (raw != null && raw.isNotEmpty) {
+          final decoded = jsonDecode(raw);
+          if (decoded is List && decoded.isNotEmpty) {
+            await saveJsonToFile('haroon_pending_orders_data.json', raw);
+            await prefs.remove(_keyPendingOrders);
+            return decoded;
+          }
+        }
       }
     } catch (_) {}
     return await computePendingOrdersFromOrders();

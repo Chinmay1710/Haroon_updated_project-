@@ -713,9 +713,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                             onPressed: () async {
                                               final picked = await _picker.pickImage(
                                                 source: ImageSource.camera,
-                                                maxWidth: 1600,
-                                                maxHeight: 1600,
-                                                imageQuality: 82,
+                                                maxWidth: 1024,
+                                                maxHeight: 1024,
+                                                imageQuality: 70,
                                               );
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
@@ -732,9 +732,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                             onPressed: () async {
                                               final picked = await _picker.pickImage(
                                                 source: ImageSource.gallery,
-                                                maxWidth: 1600,
-                                                maxHeight: 1600,
-                                                imageQuality: 82,
+                                                maxWidth: 1024,
+                                                maxHeight: 1024,
+                                                imageQuality: 70,
                                               );
                                               if (picked != null) {
                                                 final bytes = await picked.readAsBytes();
@@ -1067,7 +1067,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                           for (var p in tempPhotos) {
                             if (p is Uint8List) {
                               finalBytes.add(p);
-                              finalB64.add('data:image/jpeg;base64,${base64Encode(p)}');
+                              // Save photo directly to disk so memory & JSON remain tiny
+                              final photoRelPath = 'photos/order_${DateTime.now().millisecondsSinceEpoch}_${finalB64.length}.jpg';
+                              savePhotoToLocal(filePath: photoRelPath, bytes: p);
+                              finalB64.add(photoRelPath);
                             } else if (p is String && p.trim().isNotEmpty) {
                               finalB64.add(p.trim());
                             }

@@ -84,5 +84,31 @@ void main() {
     final restored = await LocalStorageService.getThermalPaperSize();
     expect(restored, equals('80mm'));
   });
+
+  test('Large collections (orders, customers) do not pollute SharedPreferences', () async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await LocalStorageService.saveOrders([
+      {'id': 1, 'order_number': 'Bill-000001', 'total_amount': 500}
+    ]);
+    await LocalStorageService.saveCustomers([
+      {'id': 1, 'name': 'Haroon Customer', 'mobile': '9881432195'}
+    ]);
+
+    // SharedPreferences should NOT contain the massive cache keys
+    expect(prefs.containsKey('ht_cache_orders'), isFalse);
+    expect(prefs.containsKey('ht_cache_customers'), isFalse);
+
+    // But data is still fully accessible via LocalStorageService
+    final orders = await LocalStorageService.getCachedOrders();
+    expect(orders, isNotNull);
+    expect(orders!.length, equals(1));
+    expect(orders[0]['order_number'], equals('Bill-000001'));
+
+    final customers = await LocalStorageService.getCachedCustomers();
+    expect(customers, isNotNull);
+    expect(customers!.length, equals(1));
+    expect(customers[0]['name'], equals('Haroon Customer'));
+  });
 }
 
