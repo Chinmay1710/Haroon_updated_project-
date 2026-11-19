@@ -2019,12 +2019,21 @@ class LocalStorageService {
 
   static Future<Map<String, double>> getDefaultRates() async {
     try {
+      final fromDisk = await readJsonFromFile('haroon_rates_data.json');
+      if (fromDisk != null && fromDisk.isNotEmpty) {
+        final decoded = jsonDecode(fromDisk);
+        if (decoded is Map) {
+          return decoded.map((k, v) => MapEntry(k.toString(), (v as num).toDouble()));
+        }
+      }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_keyDefaultRates);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw);
         if (decoded is Map) {
-          return decoded.map((k, v) => MapEntry(k.toString(), (v as num).toDouble()));
+          final mapped = decoded.map((k, v) => MapEntry(k.toString(), (v as num).toDouble()));
+          await saveJsonToFile('haroon_rates_data.json', raw);
+          return mapped;
         }
       }
     } catch (_) {}
@@ -2042,8 +2051,10 @@ class LocalStorageService {
 
   static Future<void> saveDefaultRates(Map<String, double> rates) async {
     try {
+      final jsonStr = jsonEncode(rates);
+      await saveJsonToFile('haroon_rates_data.json', jsonStr);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_keyDefaultRates, jsonEncode(rates));
+      await prefs.setString(_keyDefaultRates, jsonStr);
     } catch (_) {}
   }
 

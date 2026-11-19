@@ -110,5 +110,23 @@ void main() {
     expect(customers!.length, equals(1));
     expect(customers[0]['name'], equals('Haroon Customer'));
   });
+
+  test('Custom clothing rates are saved and loaded correctly', () async {
+    final defaultRates = await LocalStorageService.getDefaultRates();
+    expect(defaultRates['Shirt'], equals(400.0));
+    expect(defaultRates['Pant'], equals(500.0));
+
+    // Update rates in settings
+    final updated = Map<String, double>.from(defaultRates);
+    updated['Shirt'] = 350.0;
+    updated['Pant'] = 450.0;
+    updated['Sadri'] = 900.0;
+    await LocalStorageService.saveDefaultRates(updated);
+
+    final reloaded = await LocalStorageService.getDefaultRates();
+    expect(reloaded['Shirt'], equals(350.0));
+    expect(reloaded['Pant'], equals(450.0));
+    expect(reloaded['Sadri'], equals(900.0));
+  });
 }
 

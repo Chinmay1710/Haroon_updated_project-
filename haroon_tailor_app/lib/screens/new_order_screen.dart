@@ -134,12 +134,22 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             m[k.toString().trim()] = v.toString().trim();
           }
         });
-        _items.add(OrderItemDraft(
-          clothingType: widget.initialClothingType ?? 'Shirt',
+        final cType = widget.initialClothingType ?? 'Shirt';
+        final initialDraft = OrderItemDraft(
+          clothingType: cType,
           quantity: 1,
           price: 0.0,
           measurements: m,
-        ));
+        );
+        _items.add(initialDraft);
+        LocalStorageService.getDefaultRates().then((rates) {
+          if (mounted && _items.contains(initialDraft) && initialDraft.price <= 0) {
+            final rate = _getRateForGarment(cType, rates);
+            if (rate > 0) {
+              setState(() => initialDraft.price = rate);
+            }
+          }
+        });
       }
 
       if (widget.preSelectedCustomer != null) {
@@ -395,6 +405,36 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   double get _advance => double.tryParse(_advanceCtrl.text.trim()) ?? 0.0;
   double get _remainingBalance => (_totalAmount - _advance);
 
+  static double _getRateForGarment(String type, Map<String, double> rates) {
+    final clean = type.trim();
+    if (rates.containsKey(clean)) {
+      return rates[clean] ?? 0.0;
+    }
+    final lower = clean.toLowerCase();
+    for (final entry in rates.entries) {
+      if (entry.key.trim().toLowerCase() == lower) {
+        return entry.value;
+      }
+    }
+    final fallbacks = {
+      'shirt': 400.0,
+      'pant': 500.0,
+      'kurta': 450.0,
+      'pajama': 250.0,
+      'safari suit': 1200.0,
+      'safari': 1200.0,
+      'blazer / coat': 2500.0,
+      'coat / blazer': 2500.0,
+      'blazer': 2500.0,
+      'coat': 2500.0,
+      'sherwani': 3500.0,
+      'sadri / waistcoat': 800.0,
+      'sadri': 800.0,
+      'waistcoat': 800.0,
+    };
+    return fallbacks[lower] ?? 0.0;
+  }
+
   // ─── ADD / EDIT GARMENT MODAL (Full 24-box Measurement Grid + Details) ─────
   Future<void> _openGarmentEditor({OrderItemDraft? existingItem, int? index}) async {
     final bool isEditing = existingItem != null;
@@ -409,12 +449,12 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       _garmentTypes.add(tempType);
     }
 
-    final double initialRate = !isEditing && defaultRates.containsKey(tempType) ? (defaultRates[tempType] ?? 0.0) : 0.0;
+    final double configuredRate = _getRateForGarment(tempType, defaultRates);
     final qtyCtrl = TextEditingController(text: (existingItem?.quantity ?? 1).toString());
     final priceCtrl = TextEditingController(
       text: existingItem != null && existingItem.price > 0
           ? existingItem.price.toStringAsFixed(0)
-          : (initialRate > 0 ? initialRate.toStringAsFixed(0) : ''),
+          : (configuredRate > 0 ? configuredRate.toStringAsFixed(0) : ''),
     );
     final notesCtrl = TextEditingController(text: existingItem?.notes ?? '');
 
@@ -526,11 +566,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                                       if (val != null) {
                                         setEditorState(() {
                                           tempType = val;
-                                          if (!isEditing && (priceCtrl.text.isEmpty || priceCtrl.text == '0')) {
-                                            final defPrice = defaultRates[val] ?? 0.0;
-                                            if (defPrice > 0) {
-                                              priceCtrl.text = defPrice.toStringAsFixed(0);
-                                            }
+                                          final defPrice = _getRateForGarment(val, defaultRates);
+                                          if (defPrice > 0) {
+                                            priceCtrl.text = defPrice.toStringAsFixed(0);
+                                          } else {
+                                            priceCtrl.text = '';
                                           }
                                         });
                                       }
